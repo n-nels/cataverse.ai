@@ -1,0 +1,4 @@
+pyzmq
+pyqt5
+pyusb
+pyserial

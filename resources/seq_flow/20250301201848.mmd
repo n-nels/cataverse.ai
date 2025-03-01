@@ -1,0 +1,20 @@
+
+sequenceDiagram
+    participant M as Main
+    participant UC as USBControl
+    participant NM as NetworkMessaging
+    participant G as GUI
+    participant SE as ScriptExecutor
+    participant DI as DeviceInterface
+    M->>G: start_interface()
+    G->>M: load_script(file_path)
+    M->>SE: execute_script(script)
+    SE->>UC: initialize_device(device_id)
+    UC->>DI: control_mks_pdr2000()
+    UC->>DI: control_watlow()
+    M->>NM: send_message(ip, message)
+    NM-->>M: receive_message()
+    G->>M: manual_control()
+    M->>UC: read_analog_input(channel)
+    UC-->>M: return value
+    M->>UC: write_analog_output(channel, value)

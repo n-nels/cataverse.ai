@@ -1,0 +1,33 @@
+
+classDiagram
+    class Main {
+        +run() void
+    }
+    class USBControl {
+        +initialize_device(device_id: str) bool
+        +read_analog_input(channel: int) float
+        +write_analog_output(channel: int, value: float) bool
+    }
+    class NetworkMessaging {
+        +send_message(ip: str, message: str) bool
+        +receive_message() str
+    }
+    class GUI {
+        +start_interface() void
+        +load_script(file_path: str) void
+        +manual_control() void
+    }
+    class ScriptExecutor {
+        +execute_script(script: str) void
+    }
+    class DeviceInterface {
+        +control_mks_pdr2000() void
+        +control_watlow() void
+    }
+    Main --> USBControl
+    Main --> NetworkMessaging
+    Main --> GUI
+    Main --> ScriptExecutor
+    Main --> DeviceInterface
+    USBControl --> DeviceInterface
+    GUI --> ScriptExecutor
