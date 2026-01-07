@@ -4,8 +4,8 @@
 import os, time, threading, shutil, csv, re, glob
 from datetime import datetime, timedelta
 from typing import Optional, List
-from data_logging import log_experiment_parameters, materParams, create_directory, expID, copy_to_share_drive
-from config import (R, t_mfld, v_cell, v_m1m2, v_m1m2m3, v_50tube, v_m3, v_tot, chiller_id, variac_id, variac_id_vsl)
+from ...utils.data_logging import log_experiment_parameters, materParams, create_directory, expID, copy_to_share_drive
+from ...core.config import (R, t_mfld, v_cell, v_m1m2, v_m1m2m3, v_50tube, v_m3, v_tot, chiller_id, variac_id, variac_id_vsl)
 
 
 class experiment_parameters:

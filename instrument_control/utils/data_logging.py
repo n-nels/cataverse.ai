@@ -8,7 +8,7 @@ import shutil
 import time
 from datetime import datetime
 from typing import List, Any, Dict
-from config import (notebook, metal, support)
+from ..core.config import (notebook, metal, support)
 
 def create_directory(directory_path: str) -> None:
     if not os.path.exists(directory_path):

@@ -77,7 +77,7 @@ class SerialDevices:
             print("Modbus client not connected.")
             return None
         
-        result = self.modbus_client.read_holding_registers(address=address, count=2, slave=slave_id)
+        result = self.modbus_client.read_holding_registers(address=address, count=2)#, slave=slave_id)
         if result.isError():
             print("Error reading the temperature registers")
             return None
@@ -88,7 +88,7 @@ class SerialDevices:
         temperature_c = round(self.f2c(int(temperature[0])), 1)
 
         if not (0 < temperature_c < 1000):
-            result = self.modbus_client.read_holding_registers(address=362, count=2, slave=slave_id)
+            result = self.modbus_client.read_holding_registers(address=362, count=2)#, slave=slave_id)
             if result.isError():
                 print("Error reading the temperature registers")
                 return None
@@ -97,7 +97,7 @@ class SerialDevices:
 
             self.setTemp_ir(25)  # Reset to a default temperature
 
-            result = self.modbus_client.read_holding_registers(address=2172, count=2, slave=slave_id)
+            result = self.modbus_client.read_holding_registers(address=2172, count=2)#, slave=slave_id)
             if result.isError():
                 print("Error reading the temperature registers")
                 return None
@@ -118,7 +118,7 @@ class SerialDevices:
             return False
         data_bytes = struct.pack('>f', self.c2f(set_point))
         reg_hi, reg_lo = struct.unpack('>HH', data_bytes)
-        result = self.modbus_client.write_registers(address=address, values=[reg_lo, reg_hi], slave=slave_id)
+        result = self.modbus_client.write_registers(address=address, values=[reg_lo, reg_hi])#, slave=slave_id)
         # print('data bytes:', data_bytes, 'reg_hi:', reg_hi, 'reg_lo:', reg_lo)
         # print('result:', result)
         if result.isError():
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     device = SerialDevices()
 
     device.connect_watlow_ir()
-    device.setTemp_ir(25)
+    device.setTemp_ir(45)
     current_temp = device.readTemp_ir()
     print(f"Current Temperature: {current_temp}°C")
 

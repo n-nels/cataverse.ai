@@ -2,9 +2,12 @@
 
 ## Build/Test Commands
 - **Run main experiment**: `python main.py`
+- **Run new package experiment**: `python main_new.py`
 - **Run test script**: `python test.py`
 - **Install dependencies**: `pip install -r requirements.txt`
-- **No formal test framework** - use test.py for manual testing
+- **Install package dependencies**: `pip install pymodbus nidaqmx zmq pyserial`
+- **Activate package environment**: `instrument_control_venv\Scripts\activate`
+- **Run tests in venv**: `instrument_control_venv\Scripts\activate && python -m pytest tests/`
 
 ## Code Style Guidelines
 

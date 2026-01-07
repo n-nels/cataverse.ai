@@ -1,36 +1,47 @@
+"""
+New main entry point using package structure.
 
+This file demonstrates how to use the refactored instrument control system
+with the new package structure. Replace main.py with this file once
+the migration is complete.
 
-from ni_usb6009_devices import ActuatorManager, device_map
-from serial_devices import SerialDevices
-from network_messaging import NetworkMessaging
-from actuator_control import ActuatorControl
-from instrument_operations import InstrumentOperations
-from experiment_protocols import experiment_parameters, isotopic_exchange_calibration, adsorption_experiment
-from config import (v_tot, notebook, metal, support, mass, metal_load, support_sa, metal_density)
+Usage:
+    python main_new.py
+"""
+
+from instrument_control import *
 from typing import List
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import numpy as np
 
+
+# Initialize devices using package imports
 actuators = ActuatorManager(device_map)
 serial = SerialDevices()
 actuator_control = ActuatorControl(actuators, serial)
 opus = NetworkMessaging()
 instrument_operations = InstrumentOperations(serial, actuator_control, opus)
-exp_params = experiment_parameters(notebook=notebook, 
-                            mass=mass, 
-                            metal=metal, 
-                            metal_load=metal_load, 
-                            metal_density=metal_density,
-                            support=support,
-                            support_sa=support_sa,
-                            v_tot=v_tot
-                            )
+
+# Setup experiment parameters
+exp_params = experiment_parameters(
+    notebook=notebook, 
+    mass=mass, 
+    metal=metal, 
+    metal_load=metal_load, 
+    metal_density=metal_density,
+    support=support,
+    support_sa=support_sa,
+    v_tot=v_tot
+)
+
+# Initialize experiment
 adsExp = adsorption_experiment(exp_params, serial, actuator_control, instrument_operations)
 
-opus.connect(ip="130.20.216.127", port=5555) # spectrometer
-serial.connect_mks() # pressure gauge
-serial.connect_watlow_ir() # temperature controller for IR cell
+# Connect to devices
+opus.connect(ip="130.20.216.127", port=5555)  # spectrometer
+serial.connect_mks()  # pressure gauge
+serial.connect_watlow_ir()  # temperature controller for IR cell
 
 
 def run_isotopic_exchange_calibration():
@@ -272,7 +283,7 @@ def measure_leak_rate(temp: int, duration: float) -> None:
     exp_params.material_parameters()
 
     clean_surface(evac_temp=450, evac_time=1.0)
-    oxidize_surface(pressure=5, temp=450, time=2.0, evac_temp=450, evac_time=0.5)
+    oxidize_surface(pressure=5, temp=450, time=1.0, evac_temp=450, evac_time=0.5)
     adsExp.cool_cell(targetTemp=temp, holdTime=0, variac_cmd=False)
     adsExp.chiller_variac_state(chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False)
 
@@ -280,12 +291,17 @@ def measure_leak_rate(temp: int, duration: float) -> None:
     pressure_thread, stop_pressure_log = adsExp.start_pressure_log()
     temperature_thread, stop_temperature_log = adsExp.start_temperature_log()
 
+    wait = datetime.now() + timedelta(hours=duration)
+    print(f"Measuring leak rate for {duration} hours at {temp} C.\n"
+          f"Finished at {datetime.now() + timedelta(hours=duration)}")
+
     time.sleep(duration * 3600)
 
     stop_pressure_log.set()
     stop_temperature_log.set()
     pressure_thread.join()
     temperature_thread.join()
+
 
 if __name__ == "__main__":
     
@@ -296,31 +312,31 @@ if __name__ == "__main__":
         exp_params.is_reference_experiment(False)
 
         # sequence of operations
-        clean_surface(evac_temp=450,
+        clean_surface(evac_temp=650,
                       evac_time=1,
-                      chiller=False)
+                      chiller=True)
 
         oxidize_surface(pressure=5, 
-                        temp=450, 
+                        temp=650, 
                         time=1,
-                        evac_temp=450,
+                        evac_temp=650,
                         evac_time=0.5)
 
-        # pretreat_adsorbate(adsorbate='H2O',
-        #                    pressure=5,
-        #                    temp=450,
-        #                    time=1,
-        #                    evac_temp=450,
-        #                    evac_time=0.5)
+        pretreat_adsorbate(adsorbate='H2O',
+                           pressure=5,
+                           temp=650,
+                           time=1,
+                           evac_temp=650,
+                           evac_time=0.5)
 
-        pretreat_coadsorbates(adsorbates=['O2', 'H2O'],
-                              pressures=[0.5, 5.0], # max of [1.6, 6.7] Torr, respectively. Need to error handle in function
-                              temp=450,
-                              time=1,
-                              evac_temp=450,
-                              evac_time=0.5)
+        # pretreat_coadsorbates(adsorbates=['H2O', 'O2'],
+        #                       pressures=[1.2, 5.0], # max of [1.6, 6.7] Torr, respectively. Need to error handle in function
+        #                       temp=650,
+        #                       time=1,
+        #                       evac_temp=650,
+        #                       evac_time=0.5)
         
-        monitor_adsorption(adsorbate='13CO', pressure=0.84, temp=45)
+        monitor_adsorption(adsorbate='13CO', pressure=0.84, temp=45) # arg for ir params
 
     def run_adsorption_experiment_autonomous(selected_experiment):
 
@@ -379,6 +395,7 @@ if __name__ == "__main__":
         monitor_adsorption(adsorbate='13CO', pressure=0.84, temp=45)
 
     def troubleshooting():
+
         """A procedure for troubleshooting the system."""
 
         # actuator_control.actuator_open('irCell')
@@ -397,46 +414,7 @@ if __name__ == "__main__":
         # repeat = [10, 5, 15, 110] # number of times to repeat
         # delay = [60, 300, 600, 1800] # delay (s) between repeats
 
+    # run_reference_experiment()
+    run_adsorption_experiment_manual()
+    run_reference_experiment()
 
-
-"""scripts for running experiments"""
-# run_isotopic_exchange_calibration()
-run_adsorption_experiment_manual()
-# run_reference_experiment()
-# run_adsorption_experiment_autonomous("selected_experiments_20250731.csv")
-# measure_leak_rate(temp=45, duration=24)
-
-"""manual physical control of the system"""
-# actuator_control.actuator_close_all(device_map=device_map)
-# actuator_control.actuator_open('v16')
-# time.sleep(5)
-# actuator_control.actuator_close('irCell')
-# time.sleep(5)
-# actuator_control.actuator_open('RoughPump')
-# troubleshooting()
-
-
-"""manual data logging"""
-# exp_params.experiment_id('20251020_144255_pd_ceo2_003-045')
-# pressure_thread, stop_pressure_log = adsExp.start_pressure_log()
-# time.sleep(24*3600)
-# stop_pressure_log.set()
-# pressure_thread.join()
-
-# expParams = exp_params.import_experimental_parameters("selected_experiments_20250731.csv")
-# print(expParams)
-
-"""To Do List
-- Use Ar to determine effective temperature when cell is 45 C and manifold is at room temperature. This can
-be done by measuring the pressure when cell is at 45 C and 25 C. The difference in pressure can be used to
-determine the effective temperature of the manifold. This can be done by using the ideal gas law
-- Use Ar to determine leak rate of the system. This can be done by measuring the pressure increase over time
-- From the leak rate experiment, the rate of water adsorption can be determined. This can be done by doing
-TPD as a function of leak test time. The amount of water adsorbed can be determined by integrating the TPD.
-It is probably better to do this with the empty cell and then compare to the sample. This will help determine
-the temeperature needed to remove all water from the material.
-- The same method can be used to count the number of hydroxyls following water adsorption and evacuation.
-- Need to add the chiller on/off functionality when heating above reference temperature.
-- Need to add the second variac control to the script.
-- Need to add argument to check line to make more robust.
-"""

@@ -6,8 +6,8 @@ It is designed to work with the ActuatorManager, SerialDevices, and NetworkMessa
 """
 
 import time, csv, subprocess, json, threading, os
-from config import v_tot, v_m1m2m3, v_50tube, v_cell, chiller_id, variac_id, variac_id_vsl, R, t_mfld, mass, metal_load
-from data_logging import create_directory,log_actuator_state, log_temperature
+from ..core.config import v_tot, v_m1m2m3, v_50tube, v_cell, chiller_id, variac_id, variac_id_vsl, R, t_mfld, mass, metal_load
+from ..utils.data_logging import create_directory,log_actuator_state, log_temperature
 from datetime import datetime, timedelta
 
 
@@ -977,16 +977,16 @@ class InstrumentOperations:
 
     def chiller_state(self, cmd):
         """use 'True' for on, 'False' for off"""
-        self.run_script('devicesEnv', 'kasa_smartPlug.py', chiller_id, cmd)
+        self.run_script('cataverse_venv', 'kasa_smartPlug.py', chiller_id, cmd)
 
     def variac_state(self, cmd):
         """use 'True' for on, 'False' for off"""
-        self.run_script('devicesEnv', 'kasa_smartPlug.py', variac_id, cmd)
-        # self.run_script('devicesEnv', 'kasa_smartPlug.py', variac_2_id, cmd)
+        self.run_script('cataverse_venv', 'kasa_smartPlug.py', variac_id, cmd)
+        # self.run_script('cataverse_venv', 'kasa_smartPlug.py', variac_2_id, cmd)
 
     def kasaPlug_state(self, plug_id, cmd):
         """use 'True' for on, 'False' for off"""
-        self.run_script('devicesEnv', 'kasa_smartPlug.py', plug_id, cmd)
+        self.run_script('cataverse_venv', 'kasa_smartPlug.py', plug_id, cmd)
 
     def pressure_log(self, filename: str, stop_event: threading.Event, p_mfld_initial: float, p_cell_initial: float, read_interval: int=5) -> None:
         """Log pressure data to a CSV file.
@@ -1087,7 +1087,7 @@ class InstrumentOperations:
         if msg: 
             print('Collecting spectrum...')
             try:
-                reply = self.opus.receive_message()
+                reply = self.opus.receive_message() # need timeout handling
             except KeyboardInterrupt:
                 print("Program interrupted. Exiting.")
             print(f"fileid: {reply}")
@@ -1150,12 +1150,12 @@ class InstrumentOperations:
         def log(message):
             print("{}: {}".format(datetime.now(), message))
 
-        if env == 'devicesEnv':
-            python_path = "C:\\Users\\labuser\\instrument_control\\devicesEnv\\Scripts\\python.exe"
+        if env == 'cataverse_venv':
+            python_path = "C:\\Users\\labuser\\CataVerse\\cataverse_venv\\Scripts\\python.exe"
         else:
             python_path = "C:\\Program Files\\Python312\\python.exe" # this is not a path
 
-        script_path = f"C:\\Users\\labuser\\instrument_control\\{script}"
+        script_path = f"C:\\Users\\labuser\\CataVerse\\{script}"
         serialized_args = [json.dumps(arg) if isinstance(arg, list) else str(arg) for arg in args]
         arguments = " ".join(f'"{arg}"' for arg in serialized_args)
 

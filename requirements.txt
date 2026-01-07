@@ -1,4 +1,11 @@
+# Core communication
 pyzmq
-pyqt5
-pyusb
 pyserial
+pymodbus
+
+# GUI and hardware interfaces  
+pyusb
+
+# Data processing and analysis
+numpy
+pandas
