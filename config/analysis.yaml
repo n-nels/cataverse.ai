@@ -1,0 +1,443 @@
+voight_fit:
+  isotope_default: "13CO"
+  param_rules_base_isotope: "13CO"
+  monomer_peaks_base_isotope: "13CO"
+  isotope_shift_cm1:
+    "12CO": 0
+    "13CO": -50
+  peak_list_base: # 12CO
+    - 2246
+    - 2226
+    - 2206
+    - 2196
+    - 2186
+    - 2175
+    - 2163
+    - 2153
+    - 2143
+    - 2123
+    - 2112
+    - 2100
+    - 2090
+    - 2080
+    - 2065
+    - 2050
+    - 2038
+    - 2025
+  monomer_peaks_base: # 13CO
+    - 2093
+    - 2103
+    - 2113
+    - 2125
+  find_peaks:
+    subifg:
+      prominence: 0.0003
+      height_multiplier: 3
+    fsd:
+      prominence: 0.0001
+      height: 0.003
+  baseline:
+    half_window: 10
+    interp_half_window: 5
+    fill_half_window: 6
+    num_std: 1.1
+  param_rules:
+    - range_cm1: [2191, 2201]
+      upper_inclusive: true
+      center:
+        min_offset: -2
+        max_offset: 2
+      amplitude:
+        value: 0.01
+        min: 0
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2171, 2181]
+      center:
+        min_offset: -2
+        max_offset: 2
+      amplitude:
+        value: 0.01
+        min: 0
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2151, 2161]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+        min: 0
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2141, 2151]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2130, 2141]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2120, 2130]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2108, 2120]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2098, 2108]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2088, 2098]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: -0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2078, 2088]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2068, 2078]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2057, 2067]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2045, 2055]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2035, 2045]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2025, 2035]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [2010, 2020]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [1995, 2005]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [1983, 1993]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [1970, 1980]
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [1790, 1800]
+      center:
+        min_offset: -5
+        max_offset: 5
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 26
+      gamma:
+        value: 2
+        min: 0
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [1770, 1780]
+      center:
+        min_offset: -5
+        max_offset: 5
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 26
+      gamma:
+        value: 2
+        min: 0
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [0, 0]
+      default: true
+      center:
+        min_offset: -1
+        max_offset: 1
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false

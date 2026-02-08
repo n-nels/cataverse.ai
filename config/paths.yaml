@@ -1,0 +1,59 @@
+# config/paths.yaml
+#
+# Centralized configuration for all file paths, server endpoints, and constants.
+# Use this file to manage environment-specific settings without changing code.
+
+# -------------------
+# Data Paths
+# -------------------
+# Paths related to input/output data files generated during experiments.
+data:
+  # Base directory for raw data files collected from the OPUS instrument.
+  opus_files: "C:\\Data\\OpusFiles"
+  
+  # Base directory for OPUS calibration files.
+  opus_calibrations: "C:\\Data\\OpusCalibrations"
+
+  # Directory for storing results from peak fitting analysis.
+  peak_fit: "C:\\Data\\peakFit"
+
+# -------------------
+# Calibration Paths
+# -------------------
+# Paths for instrument calibration files.
+calibration:
+  # Root directory for mass spectrometry calibration data.
+  # Note: This is on a network drive.
+  root: "X:/ms_calibrations"
+
+# -------------------
+# OPUS Server & Communication
+# -------------------
+# Configuration for connecting to the OPUS automation server and our ZMQ wrapper.
+opus:
+  # Named pipe for communicating with the Bruker OPUS software.
+  pipe: "\\\\.\\pipe\\OPUS"
+
+  # ZMQ server settings for the opusWrapper.
+  server:
+    host: "130.20.216.127"
+    port: 5555
+  
+  # Path to the OPUS executable
+  executable_path: "C:\\Program Files\\Bruker\\OPUS_8.7.10\\Opus.exe /LANGUAGE=ENGLISH /OPUSPIPE=ON /DIRECTLOGINPASSWORD=Admin@OPUS"
+
+# -------------------
+# Legacy & Utility Paths
+# -------------------
+# Paths used by older scripts or for specific utilities.
+utility:
+  # Path for the 'subtract_ifg' utility's temporary files.
+  subtract_ifg:
+    sub_ifg_output: "C:\\Data\\OpusConvert_subIFG_lgRfl"
+    read_params_output: "C:\\Data\\OpusReadParams"
+    lg_refl_output: "C:\\Data\\OpusConvert_lgRfl"
+    fsd_output: "C:\\Data\\OpusConvert_fsd"
+    ssc_output: "C:\\Data\\OpusConvert_SSC"
+  
+  # Path for the cloud copy batch script
+  cloud_copy_script: "C:\\sftp\\copybutton.bat"
