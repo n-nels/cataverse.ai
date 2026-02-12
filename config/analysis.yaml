@@ -1,4 +1,4 @@
-voight_fit:
+voigt_fit:
   isotope_default: "13CO"
   param_rules_base_isotope: "13CO"
   monomer_peaks_base_isotope: "13CO"

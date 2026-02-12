@@ -1,15 +1,13 @@
 # IR Spectroscopy Node - Directory Structure
 
-This document outlines the current and planned directory structure of the refactored project.
+This document outlines the current directory structure of the project.
 
-Last updated: 2026-02-08 (Phase 5.3.A modularization complete)
+Last updated: 2026-02-11 (Phase 7.1 documentation refresh)
 
 ## Current Structure
 
 ```
-Note: Phase 5.3.A modularization complete. All 7 modules created and tested.
-
-ir-spectro-node-refactor/
+ir-spectro-node/
 │
 ├── .opencode/
 │   ├── agent/
@@ -20,17 +18,15 @@ ir-spectro-node-refactor/
 │   │   ├── reviewer.md
 │   │   └── validator.md
 │   ├── .gitignore
-│   ├── bun.lock
 │   ├── conventions.md
 │   ├── environment.md
 │   ├── foundations.md
 │   ├── instructions.md
-│   ├── memory.md
-│   ├── node_modules/
-│   └── package.json
+│   └── memory.md
 │
 ├── AGENTS.md
 ├── DIRECTORY_STRUCTURE.md
+├── README.md
 ├── REFACTORING_PLAN.md
 ├── opencode.json
 ├── pyproject.toml
@@ -42,6 +38,7 @@ ir-spectro-node-refactor/
 │   └── persona.md.bak
 │
 ├── config/
+│   ├── analysis.yaml
 │   └── paths.yaml
 │
 ├── docs/
@@ -49,6 +46,7 @@ ir-spectro-node-refactor/
 │
 ├── scripts/
 │   ├── __init__.py
+│   ├── run_norhoff.py
 │   ├── run_peak_fit.py
 │   └── run_server.py
 │
@@ -85,7 +83,7 @@ ir-spectro-node-refactor/
 │   └── utils/
 │       ├── __init__.py
 │       ├── delete_files.py
-│       ├── norhoff.py
+│       ├── norhof.py
 │       ├── rename_files.py
 │       └── subtract_ifg.py
 │
@@ -95,28 +93,3 @@ ir-spectro-node-refactor/
         ├── __init__.py
         └── test_server_import.py
 ```
-
-## Phase 5.3.A Structure (✓ COMPLETED)
-
-Phase 5.3.A modularization is complete. `src/instrument/` now contains the following 7 focused modules:
-
-```
-src/instrument/
-├── .agent.md
-├── .spec.md
-├── __init__.py
-├── client.py            (OPUS pipe adapter: low-level commands)
-├── paths.py             (Path and config assembly)
-├── state.py             (Runtime state container: OpusState, OpusPaths, queues)
-├── dispatch.py          (Analysis queue management and dispatch)
-├── acquisition.py       (Measurement workflow: acquire, subtract_ifg, background)
-├── server.py            (ZMQ message handling and polling loop)
-└── main.py              (Entry point and bootstrap)
-```
-
-**Changes:**
-- Removed: `opus_wrapper.py` (replaced by 7 focused modules)
-- Removed: `main_tpd.py` (legacy-only)
-- Updated: `scripts/run_server.py` (imports from `src.instrument.main` instead of `src.instrument.opus_wrapper`)
-- Updated: `src/instrument/__init__.py` (exports `main` and `run_server_main`)
-- Updated: `tests/test_instrument/test_server_import.py` (new import test for modular entry point)

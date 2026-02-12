@@ -11,10 +11,7 @@ from typing import Optional
 
 import zmq
 
-try:
-    from ..analysis import peak_fitting as fit  # type: ignore
-except ImportError:  # pragma: no cover - legacy module may be absent
-    fit = None
+from ..utils.readme import readme_to_csv
 from ..core import config
 
 from .acquisition import opus_acquire
@@ -40,12 +37,10 @@ def handle_background(do_bckg: bool, reset_fileids: bool) -> Optional[str]:
 
 
 def handle_readme() -> str:
-    if fit is None:
-        raise RuntimeError("Legacy peak_fitting module is unavailable.")
     state = get_state()
     if not state.all_fileids:
         raise RuntimeError("No file IDs available to build readme.")
-    root_dir = config.get_path("data.peak_fit")
+    root_dir = config.get_path("data.readme") # need new config path
     fileid = state.all_fileids[-1]
     fileid = fileid[:-1]
     foldername = fileid.split("\\")[-2]
@@ -53,7 +48,7 @@ def handle_readme() -> str:
     sample_name = filename.rsplit(".", 1)[0]
     path = os.path.join(root_dir, foldername, sample_name)
     file_name = path + "_README.md"
-    fit.readme_to_csv(file_name)
+    readme_to_csv(file_name)
     print("readme converted to .csv")
     return "readme converted to .csv"
 

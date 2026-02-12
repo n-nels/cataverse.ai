@@ -1,5 +1,7 @@
 # Migration Notes
 
-Phase 1 created the foundational `src/`, `scripts/`, `config/`, and `docs/` layout.
-Only six active modules were moved into the new structure; archived files remain
-under `arxiv/` for later phases.
+Phase 6 completed the production swap. The refactored layout is now live and
+the OPUS ZMQ server runs from `scripts/run_server.py` with configuration loaded
+from `config/`.
+
+Archived legacy scripts remain under `arxiv/` for reference only.

@@ -80,4 +80,3 @@ def dispatch_analysis(file_path: str) -> None:
     else:
         queues.spectral_fit.enqueue(file_path)
         queues.peak_heights.enqueue(file_path)
-    print("\npeak fitting file:\n", file_path, "\n")

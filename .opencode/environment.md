@@ -16,13 +16,16 @@ uv sync
 # Linux/Mac: source .venv/bin/activate
 ```
 
-### Running the Application (Refactor Workspace)
+### Running the Application (Production)
 ```bash
-# Ensure you are in the refactor directory
-cd C:\Users\labuser\CataVerse\ir-spectro-node-refactor
+# Ensure you are in the production repository
+cd C:\Users\labuser\CataVerse\ir-spectro-node
 
 # OPUS instrument control server (ZMQ)
 python scripts\run_server.py
+
+# Norhof LN2 pump control loop
+python scripts\run_norhoff.py
 
 # Peak fitting entry point
 python scripts\run_peak_fit.py <path_to_input_file>
@@ -30,8 +33,8 @@ python scripts\run_peak_fit.py <path_to_input_file>
 
 ### Testing
 ```bash
-# From the refactor directory
-cd C:\Users\labuser\CataVerse\ir-spectro-node-refactor
+# From the repository root
+cd C:\Users\labuser\CataVerse\ir-spectro-node
 
 # Basic import smoke tests (example)
 python -m pytest tests -q  # if/when pytest tests are added
@@ -61,7 +64,7 @@ ruff format .
 
 ### OPUS Integration
 - Controls Bruker OPUS instrument via named pipe: `\\.\pipe\OPUS`
-- Functions in `opusWrapper.py`
+- Entry point in `scripts/run_server.py` (imports `src.instrument.main`)
 - Commands sent via `PipeCommand()` function
 - Experiment files (`.xpm`) stored in specific paths
 

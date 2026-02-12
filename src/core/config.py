@@ -73,7 +73,7 @@ def get_analysis_setting(key_path: str):
     """
     Retrieves a configuration value from analysis.yaml using a dot-separated key.
 
-    Example: get_analysis_setting("analysis.voight_fit") -> {...}
+    Example: get_analysis_setting("analysis.voigt_fit") -> {...}
     """
     _load_analysis_config()
     normalized_key = key_path

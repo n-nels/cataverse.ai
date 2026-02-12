@@ -79,7 +79,7 @@ class DataAnalysisRunner:
     def __init__(
         self,
         config_module: Any = config,
-        analysis_key: str = "analysis.voight_fit",
+        analysis_key: str = "analysis.voigt_fit",
     ) -> None:
         """Initialize the runner with analysis configuration."""
         self.config = config_module
@@ -205,9 +205,6 @@ class DataAnalysisRunner:
             self.voigt_settings.get("baseline", {}),
             self.voigt_settings.get("find_peaks", {}).get("fsd", {}),
         )
-        if len(fsd_peak_indices) == 0:
-            print(f"No FSD peaks found for {file_path}")
-            return None
 
         wavenumbers = inputs.arr_subifg_roi[:, 0]
         intensity = inputs.arr_subifg_roi[:, 1]
@@ -255,11 +252,6 @@ class DataAnalysisRunner:
             calibration.peak_area_mole_carbonyl_slope,
             calibration.see,
         )
-        df_cumulative_areas = compute_cumulative_peak_area_df(
-            df_fit_peaks,
-            [f"Peak_{peak}" for peak in get_shifted_monomer_peaks(self.voigt_settings)],
-        )
-        df_peak_area_output = compute_peak_area_with_kinetics_df(df_cumulative_areas)
         df_residual = compute_residual_df(
             file_path, inputs.arr_subifg_roi, analysis_result.residual
         )
@@ -273,6 +265,14 @@ class DataAnalysisRunner:
             paths.file_name,
             paths.save_dir,
         )
+        df_fit_peaks_history = load_peak_parameters(params_path)
+        if df_fit_peaks_history is None:
+            df_fit_peaks_history = df_fit_peaks
+        df_cumulative_areas = compute_cumulative_peak_area_df(
+            df_fit_peaks_history,
+            [f"Peak_{peak}" for peak in get_shifted_monomer_peaks(self.voigt_settings)],
+        )
+        df_peak_area_output = compute_peak_area_with_kinetics_df(df_cumulative_areas)
         peak_area_path = save_peak_area_versus_time_df(
             df_peak_area_output,
             paths.file_name,

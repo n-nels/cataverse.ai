@@ -40,7 +40,7 @@ def subtract_ifg_files(files: list[str]) -> None:
 
                 spectrum_from_interferogram(file_ids[0], file_ids[1])
                 name = (
-                    f"{file_ids[0].split('\\\\')[-1][:-8]}_delta{step}."
+                    f"{file_ids[0].split('\\')[-1][:-8]}_delta{step}."
                     f"{file_ids[0].split('.')[-1][:-3]}"
                 )
                 sub_ifg_list.append((name, file_ids[0], file_ids[1]))

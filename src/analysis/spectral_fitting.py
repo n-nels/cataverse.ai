@@ -495,7 +495,7 @@ def peak_analysis(
 
         integral_pos = -np.trapezoid(baseline_corrected_pos, wavenumbers_pos)
         integral_neg = -np.trapezoid(baseline_corrected_neg, wavenumbers_neg)
-        subifg_integral = integral_pos + integral_neg
+        subifg_integral = float(integral_pos + integral_neg)
 
         for i, peak in enumerate(peak_list_core):
             peak_fit_records.append(
@@ -506,6 +506,12 @@ def peak_analysis(
                     peak_value=peak_list[i],
                     data_integral=subifg_integral,
                     time_delta_s=time_delta,
+                    center=np.nan,
+                    amplitude=np.nan,
+                    sigma=np.nan,
+                    gamma=np.nan,
+                    y0=np.nan,
+                    fwhm=np.nan,
                     peak_area=0,
                 )
             )
@@ -549,7 +555,7 @@ def peak_analysis(
 
         integral_pos = -np.trapezoid(baseline_corrected_pos, wavenumbers_pos)
         integral_neg = -np.trapezoid(baseline_corrected_neg, wavenumbers_neg)
-        subifg_integral = integral_pos + integral_neg
+        subifg_integral = float(integral_pos + integral_neg)
 
         fwhm_gaussian = 2 * sigma * np.sqrt(2 * np.log(2))
         fwhm_lorentz = 2 * gamma

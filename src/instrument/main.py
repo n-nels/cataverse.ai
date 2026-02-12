@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import cast
 
 from ..core import config
-
 from .client import get_experiment_path
 from .server import run_server
 from .state import OpusState, set_state
@@ -28,3 +27,6 @@ def main() -> None:
 
 def run_server_main() -> None:
     main()
+
+if __name__ == "__main__":
+    run_server_main()

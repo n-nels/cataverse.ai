@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Entry point for launching the OPUS ZMQ server."""
+"""Entry point for running the Norhof LN2 pump script."""
+
+from __future__ import annotations
 
 from pathlib import Path
+import runpy
 import sys
+
 
 SRC_PATH = Path(__file__).resolve().parent.parent
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from src.instrument.main import main as run_opus_server  # type: ignore
-
 
 def main() -> None:
-    """Start the OPUS server using the refactored layout."""
-    run_opus_server()
+    """Run the Norhof LN2 pump control loop."""
+    runpy.run_module("src.utils.norhof", run_name="__main__")
 
 
 if __name__ == "__main__":

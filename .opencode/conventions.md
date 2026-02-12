@@ -22,7 +22,7 @@ from scipy.signal import find_peaks
 ```
 
 ### Naming Conventions
-- **Functions**: snake_case (e.g., `voight_fit()`)
+- **Functions**: snake_case (e.g., `voigt_fit()`)
 - **Variables**: snake_case (e.g., `peak_area`, `file_name`)
 - **Constants**: UPPER_SNAKE_CASE 
 - **Classes**: PascalCase (rarely used in this codebase)

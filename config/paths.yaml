@@ -17,6 +17,9 @@ data:
   # Directory for storing results from peak fitting analysis.
   peak_fit: "C:\\Data\\peakFit"
 
+  # Directory for storing experimental parameters
+  readme: "X:\\peakFit"
+
 # -------------------
 # Calibration Paths
 # -------------------
