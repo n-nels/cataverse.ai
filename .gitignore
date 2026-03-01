@@ -22,3 +22,6 @@ null
 arxiv/
 docs/
 sandbox/
+
+# Personal terminal history
+.lesshst
