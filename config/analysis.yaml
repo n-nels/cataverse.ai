@@ -1,7 +1,7 @@
 voigt_fit:
   isotope_default: "13CO"
   param_rules_base_isotope: "13CO"
-  monomer_peaks_base_isotope: "13CO"
+  monomer_peaks_base_isotope: "12CO"
   isotope_shift_cm1:
     "12CO": 0
     "13CO": -50
@@ -24,11 +24,27 @@ voigt_fit:
     - 2050
     - 2038
     - 2025
-  monomer_peaks_base: # 13CO
-    - 2093
-    - 2103
-    - 2113
-    - 2125
+  monomer_peaks_base: # 12CO
+    - 2175
+    - 2163
+    - 2153
+    - 2143
+  cluster_peaks_base: # 12CO
+    - 2123
+    - 2112
+    - 2100
+    - 2090
+    - 2080
+    - 2065
+    - 2050
+    - 2038
+    - 2025
+  unknown_peaks_base: # 12CO
+    - 2246
+    - 2226
+    - 2206
+    - 2196
+    - 2186
   find_peaks:
     subifg:
       prominence: 0.0003
@@ -441,3 +457,10 @@ voigt_fit:
         value: 0
         min: 0
         vary: false
+
+kinetics_classification:
+  flat_window_s: 20000.0
+  min_flat_start_s: 10000.0
+  smoothing_window: 4
+  eps_flat: 1.0e-6
+  rise_delta: 1.1e-1

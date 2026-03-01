@@ -11,7 +11,7 @@ This project uses OpenCode's native agent system. Agents are defined in `opencod
 ### Primary Agents (Tab to switch)
 | Agent | Purpose | Can Edit Files? |
 |-------|---------|-----------------|
-| `coder` | Safely refactors legacy code following `REFACTORING_PLAN.md` | ✅ Yes |
+| `coder` | Refactors and introduces new functionality | ✅ Yes |
 | `architect` | Designs systems and plans major features | ❌ No (read-only) |
 
 ### Subagents (Invoke with @mention)
@@ -27,17 +27,15 @@ This project uses OpenCode's native agent system. Agents are defined in `opencod
 ## Agent Operational Protocol
 
 ### On Session Start
-1. Read `REFACTORING_PLAN.md` to understand the current phase and its limitations.
+1. Read `*.md` file in root (if any) to understand the current project and its limitations.
 2. Read `.opencode/memory.md` to load short-term memory from the previous session.
-3. Identify which **primary agent** is appropriate for the current task.
 
 ### Before Any Action
 - Adhere to the rules in `.opencode/instructions.md`.
-- Follow the conventions in `.opencode/conventions.md`.
+- Follow the coding style, naming, fand formatting conventions in `.opencode/conventions.md`.
 - Respect the `tools` restrictions defined in `opencode.json` for your current agent.
 
 ### For Specific Information
-- **Coding style, naming, formatting**: `.opencode/conventions.md`
 - **Build commands, environment, data paths**: `.opencode/environment.md`
 
 ---
@@ -46,23 +44,18 @@ This project uses OpenCode's native agent system. Agents are defined in `opencod
 
 | Situation | Action |
 |-----------|--------|
-| **Planning/Designing** | Switch to `architect` agent (Tab) |
-| **Writing/Refactoring Code** | Switch to `coder` agent (Tab) |
 | **After Code Changes** | Invoke `@reviewer` for review |
 | **Encountering Errors** | Invoke `@debugger` for root cause analysis |
 | **Modifying Scientific Code** | Invoke `@validator` before and after changes |
-| **End of Phase** | Invoke `@historian` to update `.opencode/memory.md` |
 
 ---
 
 ## Workflow Guidelines
 
 1. **Modify existing code**: Follow best practices and conventions.
-2. **Add new features**: Create new files with descriptive names.
+2. **Add new features**: Create new files with descriptive names that integrate with existing code.
 3. **Refactor**: Maintain backward compatibility where possible.
-4. **Test changes**: Run the relevant script with sample data.
-5. **Document**: Add comments only for non-obvious logic.
-6. **Archive**: Move old versions to `arxiv/` before major changes.
+4. **Document**: Add comments only for non-obvious logic.
 
 ---
 
@@ -71,10 +64,10 @@ This project uses OpenCode's native agent system. Agents are defined in `opencod
 Before ending a work session, ensure the following documentation is updated:
 
 1. **Required updates**
-   - `REFACTORING_PLAN.md`
+   - `*.md` in root. Ignore AGENTS.md manifest file
    - `.opencode/memory.md`
 2. **If impacted by the session**
-   - `DIRECTORY_STRUCTURE.md`
+   - `directory_structure.md`
    - `.opencode/foundations.md`
    - The `.spec.md` and `.agent.md` files in the subdirectory that was the focus of the session
    - Other relevant `.opencode/*.md` files

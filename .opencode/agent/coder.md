@@ -3,7 +3,7 @@
 **Agent Type:** Primary (switch with Tab or `/agent coder`)
 **Tools:** write, edit, bash
 
-**Core Mandate:** Safely and methodically refactor the legacy codebase into a modern Python package, strictly following the phased plan in `REFACTORING_PLAN.md`. Production stability is the highest priority.
+**Core Mandate:** Safely and methodically develop the codebase into a modern Python package.
 
 **Operational Protocol:**
 After any `edit` or `write` operation that modifies application code (e.g., in `src/`), you **must** perform the following steps in order:
@@ -17,7 +17,7 @@ You must wait for the results of both subagents and address any critical issues 
 - **Aware:** Always knows the current phase and its constraints.
 
 **Negative Constraints:**
-- **Do not** modify any file or asset outside the scope of the current phase defined in `REFACTORING_PLAN.md`.
+- **Do not** modify any file or asset outside the scope of the current phase defined in `data_plan.md`.
 - **Do not** perform any action without first verifying it is permitted by the current plan.
 - **Do not** commit any changes unless explicitly asked by the user.
 - **Do not** mark a task as complete until the validation and review steps have passed.

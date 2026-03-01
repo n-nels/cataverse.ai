@@ -17,8 +17,35 @@ data:
   # Directory for storing results from peak fitting analysis.
   peak_fit: "C:\\Data\\peakFit"
 
-  # Directory for storing experimental parameters
+  # Directory for saving visualization outputs.
+  figures: "C:\\Figures"
+
+  # Directory for saving experiment-parameter outputs.
+  exp_params: "X:\\peakFit"
+
+  # Directory for README-derived outputs.
   readme: "X:\\peakFit"
+
+  # Visualization subfolders (used with data.figures).
+  plot_kinetics_fit: "plot_kinetics_fit"
+  plot_area_vs_time: "plot_area_vs_time"
+  plot_spectrum_fit: "plot_spectrum_fit"
+  plot_params: "plot_params"
+  plot_params_all: "plot_params_all"
+  plot_monomer_max: "plot_monomer_max"
+  plot_monomer_max_all: "plot_monomer_max_all"
+
+# -------------------
+# Filename Patterns
+# -------------------
+filenames:
+  carbonyl_fit:
+    params_suffix: "_CarbonylPeakFitParams.csv"
+    baseline_suffix: "_CarbonylFitBaseline.csv"
+    residual_suffix: "_CarbonylFitResidual.csv"
+    area_suffix: "_CarbonylPeakArea.csv"
+
+
 
 # -------------------
 # Calibration Paths
@@ -46,9 +73,9 @@ opus:
   executable_path: "C:\\Program Files\\Bruker\\OPUS_8.7.10\\Opus.exe /LANGUAGE=ENGLISH /OPUSPIPE=ON /DIRECTLOGINPASSWORD=Admin@OPUS"
 
 # -------------------
-# Legacy & Utility Paths
+# Utility Paths
 # -------------------
-# Paths used by older scripts or for specific utilities.
+# Paths for specific utilities.
 utility:
   # Path for the 'subtract_ifg' utility's temporary files.
   subtract_ifg:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,7 +14,10 @@ from lmfit import Parameters
 from . import peak_heights
 from ..core import config
 from .io import import_calibration_data, import_data, load_peak_parameters
-from .kinetics_fitting import append_pfo_fit_results, calibration_statistics
+from .kinetics_fitting import (
+    append_pfo_fit_results,
+    calibration_statistics,
+)
 from .output import (
     compute_baseline_df,
     compute_cumulative_peak_area_df,
@@ -21,10 +25,12 @@ from .output import (
     compute_peak_parameters_df,
     compute_residual_df,
     save_baseline_df,
+    save_monomer_max_df,
     save_peak_area_versus_time_df,
     save_peak_parameters_df,
     save_residual_df,
 )
+from .monomer_max import compute_monomer_max_row
 from .spectral_fitting import (
     add_params,
     create_baseline,
@@ -166,7 +172,7 @@ class DataAnalysisRunner:
                 calibration_result.peak_area_mole_carbonyl_slope
             )
             pcov = calibration_result.pcov
-            see, r_squared = calibration_statistics(
+            see, _ = calibration_statistics(
                 calibration_peak_area,
                 calibration_moles,
                 peak_area_mole_carbonyl_slope,
@@ -289,6 +295,22 @@ class DataAnalysisRunner:
             paths.save_dir,
         )
 
+        lg_refl_path = Path(
+            self.config.get_path(
+                "utility.subtract_ifg.lg_refl_output",
+                paths.folder_name,
+                f"{paths.file_name}.{paths.file_index}",
+            )
+        )
+        if lg_refl_path.exists():
+            df_monomer_max = compute_monomer_max_row(file_path=lg_refl_path)
+            if not df_monomer_max.empty:
+                save_monomer_max_df(
+                    df_monomer_max,
+                    paths.file_name,
+                    paths.save_dir,
+                )
+
         return peak_area_path
 
     def run_kinetics_fit(
@@ -304,9 +326,8 @@ class DataAnalysisRunner:
             df_cumulative_peak_area = cumulative_peak_area
         if df_cumulative_peak_area is None or df_cumulative_peak_area.empty:
             return df_cumulative_peak_area
-        if "ka_s-1" in df_cumulative_peak_area.columns:
-            return df_cumulative_peak_area
-        return append_pfo_fit_results(df_cumulative_peak_area)
+        df_with_pfo = append_pfo_fit_results(df_cumulative_peak_area)
+        return df_with_pfo
 
     def run_spectral_peak_heights(self, file_path: str) -> None:
         """Run peak height analysis for a subIFG file."""

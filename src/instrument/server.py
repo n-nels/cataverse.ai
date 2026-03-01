@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import json
 import os
+from pathlib import Path
 import subprocess
 import time
 from typing import Optional
@@ -13,9 +14,13 @@ import zmq
 
 from ..utils.readme import readme_to_csv
 from ..core import config
+from ..visualizations.plot_spectrum_fit import plot_spectrum_fit
+from ..visualizations.plot_monomer_cluster_fit import plot_kinetic_fit
+from ..visualizations.plot_params import plot_params_all, plot_params_folder
+from ..visualizations.plot_monomer_max import plot_monomer_max
 
 from .acquisition import opus_acquire
-from .client import do_background_measurement, unload_file
+from .client import do_background_measurement, unload_file, do_sample_measurement
 from .paths import define_paths
 from .state import ensure_paths, get_state, set_socket
 
@@ -40,7 +45,7 @@ def handle_readme() -> str:
     state = get_state()
     if not state.all_fileids:
         raise RuntimeError("No file IDs available to build readme.")
-    root_dir = config.get_path("data.readme") # need new config path
+    root_dir = config.get_path("data.readme")  # need new config path
     fileid = state.all_fileids[-1]
     fileid = fileid[:-1]
     foldername = fileid.split("\\")[-2]
@@ -64,6 +69,33 @@ def handle_end_experiment() -> str:
     now = datetime.now() + timedelta(minutes=10)
     print(f"Waiting until {now} before copying files to cloud...")
     time.sleep(10 * 60)
+    if state.all_fileids:
+        file_path: str | None = None
+        folder_name: str | None = None
+        base_name: str | None = None
+        try:
+            file_path = state.all_fileids[-1].split('"')[1]
+            folder_name = os.path.basename(os.path.dirname(file_path))
+            base_name = os.path.basename(file_path).split(".")[0]
+            subifg_dir = config.get_path(
+                "utility.subtract_ifg.sub_ifg_output", folder_name
+            )
+            plot_spectrum_fit(os.path.join(subifg_dir, base_name))
+            csv = (
+                Path(config.get_path("data.peak_fit", folder_name))
+                / f"{base_name}_CarbonylPeakArea.csv"
+            )
+            plot_kinetic_fit(str(csv))
+            plot_params_folder(csv)
+            if folder_name:
+                plot_params_all(folder_name)
+                plot_monomer_max(folder_name=folder_name)
+        except Exception as exc:
+            print(
+                "Plot spectrum fit failed for "
+                f"file_path={file_path} folder_name={folder_name} "
+                f"base_name={base_name}: {exc}"
+            )
     subprocess.run([paths.cloud_script], shell=True, check=True)
     return "End of experiment, files copied to cloud"
 
@@ -77,8 +109,10 @@ def handle_message(message: dict) -> Optional[str]:
         if message.get("foldername") and message.get("filename"):
             state = get_state()
             state.foldername = message["foldername"]
-            state.filename = message["filename"]
+            state.filename = message["filename"] + "_evacuation"
             define_paths()
+            fileid = do_sample_measurement(state.nss_value, state.n)
+            unload_file(fileid)
         return handle_end_experiment()
 
     required_keys = ["foldername", "filename", "do_fit", "do_bckg", "reset_fileids"]

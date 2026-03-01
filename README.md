@@ -1,8 +1,7 @@
 # IR Spectroscopy Node
 
-Refactored Python package for the OPUS ZMQ server and analysis workflows.
-The production server now runs from this repository using the scripts in
-`scripts/`.
+Production-ready Python package for the OPUS ZMQ server and analysis workflows.
+This repository hosts the live instrument control and analysis tooling.
 
 ## Quick Start (Production)
 
@@ -19,11 +18,9 @@ python scripts\run_norhoff.py
 ## Project Layout
 
 ```
-src/        # Application code (analysis, instrument, utilities)
+src/        # Application code (analysis, instrument, utilities, visualizations)
 scripts/    # Entry points for server and utilities
 config/     # YAML configuration
-tests/      # Smoke tests
-arxiv/      # Archived legacy scripts (read-only)
 ```
 
 ## Configuration
@@ -35,6 +32,5 @@ arxiv/      # Archived legacy scripts (read-only)
 ## Operations Notes
 
 - The OPUS server communicates over the named pipe `\\.\pipe\OPUS`.
-- Data paths are configured via YAML and documented in
-  `.opencode/environment.md`.
-- The refactor preserves legacy output filenames and schemas.
+- Data paths are configured via YAML
+- The system preserves legacy output filenames and schemas.

@@ -1,6 +1,6 @@
 # Environment and Build
 
-This document contains information on the development environment, build commands, and key project paths.
+ This document contains information on the development environment and build commands.
 
 ---
 
@@ -55,24 +55,6 @@ ruff format .
 ---
 
 ## Project-Specific Notes
-
-### Peak Fitting
-- Primary script: `ir_peakFit_carbonyl_v5.py`
-- Uses Voigt profile fitting for carbonyl peaks
-- Peak lists are hardcoded for 13CO and 12CO isotopes
-- Wavenumber range: 1750-2250 cm^-1
-
-### OPUS Integration
-- Controls Bruker OPUS instrument via named pipe: `\\.\pipe\OPUS`
-- Entry point in `scripts/run_server.py` (imports `src.instrument.main`)
-- Commands sent via `PipeCommand()` function
-- Experiment files (`.xpm`) stored in specific paths
-
-### Data Paths
-- Input data: `C:\Data\OpusFiles\`
-- Processed data: `C:\Data\OpusConvert_*\`
-- Output data: `C:\Data\peakFit\`
-- Calibration data: `X:\peakFit\`
 
 ### Key Dependencies
 - lmfit (peak fitting)

@@ -16,7 +16,9 @@ wheels/
 
 # Windows reserved device names
 nul
+null
 
 # Files
 arxiv/
 docs/
+sandbox/

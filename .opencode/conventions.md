@@ -65,7 +65,7 @@ except Exception as e:
 - Use concatenation for static strings: `"prefix" + suffix`
 
 ### Functions
-- Use docstrings for public functions (not consistently used)
+- Use docstrings for public functions
 - Keep functions focused and single-purpose
 - Use descriptive names that indicate action and object
 
@@ -75,15 +75,10 @@ except Exception as e:
 - If using globals is necessary, document them at module level
 
 ### Comments
-- Minimal inline comments (current style)
+- Minimal inline comments
 - Add comments only for non-obvious logic
 - Comment out unused code with `#` at line start
 - Avoid commenting out large blocks - delete instead
-
-### File Organization
-- Single-purpose files (e.g., `ir_peakFit_carbonyl_v5.py` for peak fitting)
-- Archive old versions in `arxiv/` directory
-- Keep utility functions together (e.g., `readParams.py`, `delete_files.py`)
 
 ### Scientific Computing Patterns
 - Use NumPy arrays for numerical operations

@@ -25,8 +25,5 @@ def main() -> None:
     run_server()
 
 
-def run_server_main() -> None:
-    main()
-
 if __name__ == "__main__":
-    run_server_main()
+    main()

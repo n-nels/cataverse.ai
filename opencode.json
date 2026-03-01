@@ -63,15 +63,6 @@
       "instructions": ".opencode/agent/lint.md",
       "temperature": 0.0,
       "tools": { "write": false, "edit": true, "bash": true }
-    },
-    "strategy": {
-      "description": "Determines the best approach for implementing a change",
-      "mode": "primary",
-      "model": "github-copilot/claude-sonnet-4.5",
-      "variant": "balanced",
-      "instructions": ".opencode/agent/strategy.md",
-      "temperature": 0.3,
-      "tools": { "write": false, "edit": false, "bash": false }
     }
   }
 }

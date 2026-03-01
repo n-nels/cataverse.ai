@@ -13,7 +13,20 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 
-from .kinetics_fitting import append_pfo_fit_results, linfunc_no_intercept
+from .kinetics_fitting import (
+    append_pfo_fit_results,
+    build_cluster_sum,
+    linfunc_no_intercept,
+)
+
+
+def _coerce_df(value: Any) -> pd.DataFrame:
+    """Ensure a DataFrame output for downstream helpers."""
+    if isinstance(value, pd.DataFrame):
+        return value
+    if isinstance(value, pd.Series):
+        return value.to_frame().T
+    return pd.DataFrame(value)
 
 
 def save_data(new_data: pd.DataFrame, file_path: str, axis: int) -> None:
@@ -196,16 +209,37 @@ def compute_cumulative_peak_area_df(
             [df_cumulative_areas, pd.DataFrame(monomer_rows)], ignore_index=True
         )
 
+    if (
+        "Peak_Name" in df_cumulative_areas.columns
+        and (df_cumulative_areas["Peak_Name"] == "cluster_sum").any()
+    ):
+        return df_cumulative_areas
+
+    cluster_sum = build_cluster_sum(df_cumulative_areas)
+    if cluster_sum.empty:
+        return df_cumulative_areas
+
+    template_columns = list(df_cumulative_areas.columns)
+    cluster_sum = cluster_sum.copy()
+    cluster_sum["Peak_Name"] = "cluster_sum"
+    for column in template_columns:
+        if column not in cluster_sum:
+            cluster_sum[column] = ""
+    cluster_sum = cluster_sum[template_columns]
+    df_cumulative_areas = pd.concat(
+        [df_cumulative_areas, cluster_sum], ignore_index=True
+    )
+
     return df_cumulative_areas
 
 
 def compute_peak_area_with_kinetics_df(
     df_cumulative_areas: pd.DataFrame,
-) -> pd.DataFrame:
-    """Compute peak area DataFrame with PFO kinetics fit results (no file I/O)."""
+):
+    """Compute peak area DataFrame with kinetics fit results (no file I/O)."""
     if df_cumulative_areas.empty:
         return df_cumulative_areas
-    return append_pfo_fit_results(df_cumulative_areas)
+    return _coerce_df(append_pfo_fit_results(df_cumulative_areas))
 
 
 def save_peak_area_versus_time_df(
@@ -269,4 +303,16 @@ def save_baseline_df(
     filename = f"{file_name}_CarbonylFitBaseline.csv"
     path = os.path.join(save_dir, filename)
     save_data(new_data=df_baseline, file_path=path, axis=1)
+    return path
+
+
+def save_monomer_max_df(
+    df_monomer_max: pd.DataFrame,
+    file_name: str,
+    save_dir: str,
+) -> str:
+    """Save or append monomer max results to CSV."""
+    filename = f"{file_name}_monomerMax.csv"
+    path = os.path.join(save_dir, filename)
+    save_data(new_data=df_monomer_max, file_path=path, axis=0)
     return path
