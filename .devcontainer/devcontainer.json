@@ -1,0 +1,22 @@
+{
+  "name": "CataVerse Dev Container",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu", 
+  "features": {
+    "ghcr.io/danzilberdan/devcontainers/opencode:0": {}
+  },
+  "postCreateCommand": "pip install --user -e .",
+  "mounts": [
+    {
+      "source": "${localEnv:USERPROFILE}/.local/share/opencode/auth.json",
+      "target": "/home/vscode/.local/share/opencode/auth.json",
+      "type": "bind"
+    }
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "opencode.opencode" 
+      ]
+    }
+  }
+}

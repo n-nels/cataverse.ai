@@ -29,6 +29,7 @@ class ActuatorControl:
             Tuple[str, float]: A tuple containing the actuator ID and the rounded value written.
         """
         if value > 5.0:
+            self.actuators.set_value(id, 1.0)
             sys.exit("Gas bulb empty")
         self.actuators.set_value(id, value)
         return id, round(float(value), 2) # from decimal import Decimal should be used for rounding

@@ -31,6 +31,7 @@ class experiment_parameters:
         self.folder_name = None
         self.path_readme = None
         self.path_pressure_log = None
+        self.path_ms_log = None
 
     def experiment_id(self, file_name: Optional[str]=None, folder_name: Optional[str]=None,
                       new_sample: bool=False, counter: int=0) -> None:
@@ -48,6 +49,7 @@ class experiment_parameters:
         create_directory(f"C://Data//{self.folder_name}")
         self.path_readme = f"C://Data//{self.folder_name}//{self.file_name}_README.md"
         self.path_pressure_log = f"C://Data//{self.folder_name}//{self.file_name}_pressureLog.csv"
+        self.path_ms_log = f"C://Data//{self.folder_name}//{self.file_name}_msLog.csv"
         self.counter=counter
         
     def material_parameters(self) -> None: 
@@ -797,7 +799,7 @@ class adsorption_experiment():
         self.chiller_state = None
     
     def heat_under_evacuation(self, pumpType: str, targetTemp: int, holdTime: float, rampRate: int,
-                              variac_cmd: bool=True, expParams: bool=True) -> None:
+                              enable_ms_stream: bool=False, variac_cmd: bool=True, expParams: bool=True) -> None:
         """
         Heats the cell under evacuation. The pumpType is the type of pump used to evacuate the cell.
         Args:
@@ -814,12 +816,25 @@ class adsorption_experiment():
             self.gas = self.instrument_operations.evacuate_cell(pumpType)
             if holdTime == 0:
                 time.sleep(60)
+
+        if enable_ms_stream:
+            ms_thread, stop_ms = self.acquire_ms_spectra()
+
         t_cell, rate, duration = self.instrument_operations.Watlow(self.expParams.file_name,
                                         self.expParams.folder_name,
                                         targetTemp,
                                         holdTime,
                                         rampRate,
                                         variac_cmd)
+        if enable_ms_stream:
+            time.sleep(60*15)
+            print()
+            stop_ms.set()
+            ms_thread.join()
+            self.instrument_operations.extrel_sequence('stop')
+            self.actuator_control.actuator_close('MassSpec')
+            self.actuator_control.actuator_open('irCell')
+
         self.dt, self.p_mfld, p_cell = self.serial.read_pressure()
         if expParams:
             self.expParams.pretreatment_parameters(gas=self.gas, p_gas_meas=(self.p_mfld, p_cell),
@@ -1058,7 +1073,7 @@ class adsorption_experiment():
             # self.instrument_operations.variac_state(variac_vsl_cmd)
         return None
 
-    def start_pressure_log(self, p_mfld_initial, p_cell_initial):
+    def start_pressure_log(self, p_mfld_initial, p_cell_initial) -> tuple[threading.Thread, threading.Event]:
         """
         Starts the pressure logging thread and returns the thread and stop event.
         Returns:
@@ -1073,7 +1088,7 @@ class adsorption_experiment():
         pressure_thread.start()
         return pressure_thread, stop_pressure_log
     
-    def start_temperature_log(self):
+    def start_temperature_log(self) -> tuple[threading.Thread, threading.Event]:
         """
         Starts the temperature logging thread and returns the thread and stop event.
         Returns:
@@ -1087,3 +1102,25 @@ class adsorption_experiment():
         )
         temp_thread.start()
         return temp_thread, stop_temp_log
+    
+    def acquire_ms_spectra(self) -> tuple[threading.Thread, threading.Event]:
+        """
+        Acquires spectra from the Mass Spectrometer software. The spectra are acquired in a separate thread.
+        Returns:
+            (threading.Thread, threading.Event): The mass spectrometer logging thread and stop event.
+        """
+        self.actuator_control.actuator_close('irCell')
+        self.actuator_control.actuator_open('MassSpec')
+        time.sleep(30)
+        
+        self.instrument_operations.extrel_sequence('start')
+        stop_ms_log = threading.Event()
+        log_path = self.expParams.path_ms_log
+        ms_thread = threading.Thread(
+            target=self.instrument_operations.extrel_stream,
+            args=(log_path, stop_ms_log)
+        )
+        ms_thread.start()
+        time.sleep(60)
+        return ms_thread, stop_ms_log
+        

@@ -1,0 +1,38 @@
+[project]
+name = "cataverse"
+version = "0.1.0"
+description = "Instrument control system for experimental automation"
+requires-python = ">=3.12"
+dependencies = [
+    "pyzmq",
+    "pyserial", 
+    "pymodbus",
+    "pyusb",
+    "numpy",
+    "pandas",
+    "nidaqmx",
+    "matplotlib",
+    "python-kasa",  # Don't forget the Kasa library!
+]
+
+[project.scripts]
+# This assumes you have a file: src/cataverse/main.py 
+# with a function: def main():
+cataverse-run = "cataverse.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+managed = true
+
+[tool.ruff]
+# Match your project's python version
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+# Enable Pyflakes (F) and check (E) codes by default
+select = ["E", "F", "I"] # "I" handles the import sorting (isort)
+fixable = ["ALL"]

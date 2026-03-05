@@ -1,9 +1,8 @@
 ## device_interface.py
 
 import serial, struct, time, sys
-from pymodbus.client import ModbusSerialClient as ModbusClient
 from datetime import datetime
-
+from pymodbus.client import ModbusSerialClient as ModbusClient
 
 class SerialDevices:
     """Class to control specific devices."""
@@ -11,7 +10,8 @@ class SerialDevices:
         """Initializes the DeviceInterface with default settings."""
         self.mks_com = "COM8"
         self.mks_connection = None
-        self.modbus_client = None
+        self.watlow_client = None
+        self.extrel_client = None
 
     def connect_mks(self):
         """Establishes a connection to the MKS PDR2000 device."""
@@ -21,6 +21,22 @@ class SerialDevices:
         except Exception as e:
             print(f"Failed to connect to {self.mks_com}: {e}")
 
+    def connect_extrel(self, port='COM5'):
+        """Connect to the Extrel device."""
+        self.extrel_client = ModbusClient(port=port, baudrate=9600, parity='N', stopbits=1, bytesize=8, timeout=1)
+        print("Connected to Extrel MS on", port)
+        if not self.extrel_client.connect():
+            print("Unable to connect to Extrel Modbus serial device")
+            self.extrel_client = None
+    
+    def connect_watlow_ir(self, port='COM6'):
+            """Connect to a Modbus device."""
+            self.watlow_client = ModbusClient(port=port, baudrate=9600, parity='N', stopbits=1, bytesize=8, timeout=1)
+            print("Connected to Watlow IR on", port)
+            if not self.watlow_client.connect():
+                print("Unable to connect to Watlow IR Modbus serial device")
+                self.watlow_client = None
+    
     def read_pressure(self, command: str = 'p') -> tuple:
         """Reads pressure from the MKS PDR2000 device.
         Args:
@@ -61,23 +77,15 @@ class SerialDevices:
             print("Serial connection not established.")
             self.connect_mks()
 
-    def connect_watlow_ir(self, port='COM6', baudrate=9600):
-            """Connect to a Modbus device."""
-            self.modbus_client = ModbusClient(port=port, baudrate=baudrate, parity='N', stopbits=1, bytesize=8, timeout=1)
-            print("Connected to Watlow IR on", port)
-            if not self.modbus_client.connect():
-                print("Unable to connect to the Modbus serial device")
-                self.modbus_client = None
-
     def readTemp_ir(self, address=360, slave_id=1) -> float:
         """Read temperature from Modbus device.
         address 2172: Read set temperature
         """
-        if not self.modbus_client:
+        if not self.watlow_client:
             print("Modbus client not connected.")
             return None
         
-        result = self.modbus_client.read_holding_registers(address=address, count=2)#, slave=slave_id)
+        result = self.watlow_client.read_holding_registers(address=address, count=2)#, slave=slave_id)
         if result.isError():
             print("Error reading the temperature registers")
             return None
@@ -88,7 +96,7 @@ class SerialDevices:
         temperature_c = round(self.f2c(int(temperature[0])), 1)
 
         if not (0 < temperature_c < 1000):
-            result = self.modbus_client.read_holding_registers(address=362, count=2)#, slave=slave_id)
+            result = self.watlow_client.read_holding_registers(address=362, count=2)#, slave=slave_id)
             if result.isError():
                 print("Error reading the temperature registers")
                 return None
@@ -97,7 +105,7 @@ class SerialDevices:
 
             self.setTemp_ir(25)  # Reset to a default temperature
 
-            result = self.modbus_client.read_holding_registers(address=2172, count=2)#, slave=slave_id)
+            result = self.watlow_client.read_holding_registers(address=2172, count=2)#, slave=slave_id)
             if result.isError():
                 print("Error reading the temperature registers")
                 return None
@@ -113,12 +121,12 @@ class SerialDevices:
 
     def setTemp_ir(self, set_point, address=2160, slave_id=1):
         """Set the target temperature on the Modbus device."""
-        if not self.modbus_client:
+        if not self.watlow_client:
             print("Modbus client not connected.")
             return False
         data_bytes = struct.pack('>f', self.c2f(set_point))
         reg_hi, reg_lo = struct.unpack('>HH', data_bytes)
-        result = self.modbus_client.write_registers(address=address, values=[reg_lo, reg_hi])#, slave=slave_id)
+        result = self.watlow_client.write_registers(address=address, values=[reg_lo, reg_hi])#, slave=slave_id)
         # print('data bytes:', data_bytes, 'reg_hi:', reg_hi, 'reg_lo:', reg_lo)
         # print('result:', result)
         if result.isError():
@@ -138,20 +146,82 @@ class SerialDevices:
             self.mks_connection.close()
             print("Disconnected MKS.")
 
+    def extrel_read(self, address, count=1, unit=1):
+        """Read from Extrel device."""
+        result = self.extrel_client.read_holding_registers(address=address, count=count, device_id=unit)
+        if result.isError():
+            print("Error reading from Extrel device")
+            return None
+        registers = result.registers
+        return registers
+
+    def extrel_write(self, address, value):
+        """Write a value to an Extrel holding register."""
+        result = self.extrel_client.write_register(address=address, value=value)
+        if result.isError():
+            print("Error writing to Extrel device.")
+            print(f"Modbus Exception: {result}")
+            return False       
+        return True
+
+    def decode_ieee754_cdab(self, r0, r1):
+        """Decode two Modbus registers (r0, r1) in CDAB order to a float."""
+        raw = r1.to_bytes(2, "big") + r0.to_bytes(2, "big")
+        return struct.unpack(">f", raw)[0]
+
+    def extrel_stream_test(self, start_address=2, polls=10, poll_interval=1.5, unit=1):
+        """
+        Reads 4 Paired+IEEE754 values in one contiguous block:
+        start_address=2 -> reads registers 2..9 (8 regs) -> tags at 2,4,6,8
+
+        Tag order:
+        V1_I_28, V1_I_29, V1_I_44, V1_I_45
+        """
+        tags = ["V1_I_28", "V1_I_29", "V1_I_44", "V1_I_45"]
+
+        for i in range(polls):
+            rr = self.extrel_client.read_holding_registers(
+                address=start_address, count=8, device_id=unit
+            )
+
+            if rr.isError():
+                print(f"{i}: read error: {rr}")
+            else:
+                regs = rr.registers  # 8 regs total
+                vals = [
+                    self.decode_ieee754_cdab(regs[0], regs[1]),
+                    self.decode_ieee754_cdab(regs[2], regs[3]),
+                    self.decode_ieee754_cdab(regs[4], regs[5]),
+                    self.decode_ieee754_cdab(regs[6], regs[7]),
+                ]
+
+                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # milliseconds
+                print(
+                    f"{ts} | "
+                    f"{tags[0]}={vals[0]:.6g} | {tags[1]}={vals[1]:.6g} | "
+                    f"{tags[2]}={vals[2]:.6g} | {tags[3]}={vals[3]:.6g}"
+                )
+
+            time.sleep(poll_interval)
+
+        return True
+
 if __name__ == "__main__":
 
     device = SerialDevices()
 
-    device.connect_watlow_ir()
-    device.setTemp_ir(45)
-    current_temp = device.readTemp_ir()
-    print(f"Current Temperature: {current_temp}°C")
+    # device.connect_watlow_ir()
+    # # device.setTemp_ir(45)
+    # current_temp = device.readTemp_ir()
+    # print(f"Current Temperature: {current_temp}°C")
 
     # device.connect_mks()
     # dt, p_mfld, p_cell = device.read_pressure()
     # print (dt, '\n', p_mfld, '\n', p_cell)
     # if p_mfld == 'Off':
     #     print(type(p_mfld))
-    # 
-    # 
-    #     # device.disconnect()
+    #     device.disconnect()
+
+    # device.connect_extrel()
+    # device.extrel_write(address=1, value=2)
+    # device.extrel_stream_test()

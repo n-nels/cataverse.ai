@@ -13,7 +13,6 @@ from instrument_control import *
 from typing import List
 from datetime import datetime, timedelta
 import time
-import numpy as np
 
 
 # Initialize devices using package imports
@@ -39,9 +38,10 @@ exp_params = experiment_parameters(
 adsExp = adsorption_experiment(exp_params, serial, actuator_control, instrument_operations)
 
 # Connect to devices
-opus.connect(ip="130.20.216.127", port=5555)  # spectrometer
+opus.connect(ip="130.20.216.127", port=5555)  # ir spectrometer
 serial.connect_mks()  # pressure gauge
 serial.connect_watlow_ir()  # temperature controller for IR cell
+# serial.connect_extrel()  # mass spectrometer
 
 
 def run_isotopic_exchange_calibration():
@@ -129,15 +129,16 @@ def run_isotopic_exchange_calibration():
     # CO calibration for mass spectrometer
     isoX.massSpec_calibration(targets=[2e-10, 4e-10, 6e-10, 1.5e-9, 5e-9])
 
-def clean_surface(evac_temp: int, evac_time: float, chiller: bool = True) -> None:
+def clean_surface(evac_temp: int, evac_time: float, enable_ms: bool = False, chiller: bool = True) -> None:
     """A procedure for removing surface adsorbates under evacuation
     Args:
         evac_temp (int): Temperature of evacuation in C
         evac_time (float): Hold time in hours
+        enable_ms (bool): Whether to enable mass spectrometer streaming during the procedure
         chiller (bool): Whether to use the chiller and variac for cooling
     """
     adsExp.chiller_variac_state(chiller_cmd=chiller, variac_cmd=True, variac_vsl_cmd=True)
-    adsExp.heat_under_evacuation(pumpType='RoughPump', targetTemp=evac_temp, holdTime=0.0, rampRate=20)
+    adsExp.heat_under_evacuation(pumpType='RoughPump', targetTemp=evac_temp, holdTime=0.0, rampRate=20, enable_ms_stream=enable_ms)
     adsExp.heat_under_evacuation(pumpType='TurboPump', targetTemp=evac_temp, holdTime=evac_time, rampRate=0)
 
 def oxidize_surface(pressure: float, temp: int, time: float, evac_temp: int, evac_time: float) -> None:
@@ -230,22 +231,34 @@ def pretreat_coadsorbates(adsorbates: List[str], pressures: List[float], temp: i
     else:
         adsExp.heat_under_evacuation(pumpType='TurboPump', targetTemp=evac_temp, holdTime=evac_time, rampRate=0)
 
-def monitor_adsorption(adsorbate: str, pressure: float, temp: int) -> None:
+def monitor_adsorption(adsorbate: str,
+                       pressure: float,
+                       temp: int,
+                       repeat: List[int] = [10,5,15,60],
+                       delay: List[int] = [60,300,600,1800],
+                       all_fileids: bool = True,
+                       do_bckg: bool = True,
+                       do_fit: bool = True) -> None:
     """A procedure for monitoring the adsorption of a gas in the IR cell. The pressure corresponds to the total volume.
     Args:
         adsorbate (str): The gas introduced
         temp (int): Temperature of adsorption in C
         pressure (float): Pressure of gas in Torr
+        repeat (List[int]): Number of times to repeat acquisition at each delay time. The length of this list should match the length of delay.
+        delay (List[int]): Delay times in seconds between acquisitions. The length of this list should match the length of repeat.
+        all_fileids (bool): Reset file ID counter for each acquisition if True.
+        do_bckg (bool): Whether to acquire a background spectrum before adsorption
+        do_fit (bool): Whether to perform peak fitting after acquisition
     """
     adsExp.cool_cell(targetTemp=temp, holdTime=0, variac_cmd=False)
     adsExp.chiller_variac_state(chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False)
     adsExp.supply_gas_to_mfld(gas=adsorbate, targetPressure=pressure)
-    adsExp.acquire_spectra(repeat=[10,5,15,60], # 115 is about 60 h
-                        delay=[60,300,600,1800],
-                        all_fileids=True,
-                        do_bckg=True,
-                        do_fit=True)
-
+    adsExp.acquire_spectra(repeat=repeat, # 115 is about 60 h
+                        delay=delay,
+                        all_fileids=all_fileids,
+                        do_bckg=do_bckg,
+                        do_fit=do_fit)
+    
 def monitor_coadsorption(adsorbate_1: str, adsorbate_2: str, temp: int, pressure_1: float, pressure_2: float) -> None:
         """A procedure for monitoring the coadsorption of two gases in the IR cell. The pressure corresponds to volume of manifold less IR cell.
         Args:
@@ -279,16 +292,15 @@ def measure_leak_rate(temp: int, duration: float) -> None:
     now = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     exp_params.experiment_id(file_name=f"{now}_leakRate", folder_name="leak_rates")
-    # exp_params.experiment_id('20250713_102624_leakRate', folder_name='leak_rates')
     exp_params.material_parameters()
 
-    clean_surface(evac_temp=450, evac_time=1.0)
-    oxidize_surface(pressure=5, temp=450, time=1.0, evac_temp=450, evac_time=0.5)
-    adsExp.cool_cell(targetTemp=temp, holdTime=0, variac_cmd=False)
-    adsExp.chiller_variac_state(chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False)
+    # clean_surface(evac_temp=450, evac_time=1.0)
+    # oxidize_surface(pressure=5, temp=450, time=1.0, evac_temp=450, evac_time=0.5)
+    # adsExp.cool_cell(targetTemp=temp, holdTime=0, variac_cmd=False)
+    # adsExp.chiller_variac_state(chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False)
 
     adsExp.instrument_operations.actuator_control.actuator_close('TurboPump')
-    pressure_thread, stop_pressure_log = adsExp.start_pressure_log()
+    pressure_thread, stop_pressure_log = adsExp.start_pressure_log(0.0007, 0.002)
     temperature_thread, stop_temperature_log = adsExp.start_temperature_log()
 
     wait = datetime.now() + timedelta(hours=duration)
@@ -312,31 +324,35 @@ if __name__ == "__main__":
         exp_params.is_reference_experiment(False)
 
         # sequence of operations
-        clean_surface(evac_temp=650,
-                      evac_time=1,
-                      chiller=True)
+        # clean_surface(evac_temp=400,
+        #               evac_time=2,
+        #               enable_ms=False,
+        #               chiller=False)
 
-        oxidize_surface(pressure=5, 
-                        temp=650, 
-                        time=1,
-                        evac_temp=650,
-                        evac_time=0.5)
+        # oxidize_surface(pressure=5, 
+        #                 temp=500,
+        #                 time=2,
+        #                 evac_temp=400,
+        #                 evac_time=0.5)
 
-        pretreat_adsorbate(adsorbate='H2O',
-                           pressure=5,
-                           temp=650,
-                           time=1,
-                           evac_temp=650,
-                           evac_time=0.5)
+        # pretreat_adsorbate(adsorbate='H2O',
+        #                    pressure=5,
+        #                    temp=550,
+        #                    time=1,
+        #                    evac_temp=550,
+        #                    evac_time=0.5)
 
         # pretreat_coadsorbates(adsorbates=['H2O', 'O2'],
-        #                       pressures=[1.2, 5.0], # max of [1.6, 6.7] Torr, respectively. Need to error handle in function
+        #                       pressures=[1.2, 4.2], # max of [1.6, 6.7] Torr, respectively. Need to error handle in function
         #                       temp=650,
         #                       time=1,
         #                       evac_temp=650,
         #                       evac_time=0.5)
         
-        monitor_adsorption(adsorbate='13CO', pressure=0.84, temp=45) # arg for ir params
+        monitor_adsorption(adsorbate='13CO',
+                           pressure=0.84,
+                           temp=45)
+                        #    repeat=[10,5,15,135])
 
     def run_adsorption_experiment_autonomous(selected_experiment):
 
@@ -384,6 +400,7 @@ if __name__ == "__main__":
         # sequence of operations
         clean_surface(evac_temp=450,
                     evac_time=2,
+                    enable_ms=False,
                     chiller=False)
 
         oxidize_surface(pressure=5,
@@ -392,16 +409,21 @@ if __name__ == "__main__":
                         evac_temp=450,
                         evac_time=0.5)
 
-        monitor_adsorption(adsorbate='13CO', pressure=0.84, temp=45)
+        monitor_adsorption(adsorbate='13CO',
+                           pressure=0.84,
+                           temp=45)
+                        #    repeat=[10,5,15,135])
 
     def troubleshooting():
 
         """A procedure for troubleshooting the system."""
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        exp_params.experiment_id(file_name=f"{now}_test", folder_name=f"_test")
 
         # actuator_control.actuator_open('irCell')
         # actuator_control.actuator_close('CO2')
         # actuator_control.actuator_write('RoughPump', 1.48)
-        actuator_control.actuator_close_all()
+        # actuator_control.actuator_close_all()
 
         # isoX=isotopic_exchange_calibration()
         # isoX.massSpec_calibration(targets=[1e-9])
@@ -409,12 +431,19 @@ if __name__ == "__main__":
         # opusAcquire(filename='test', foldername='test', repeat=[5], delay=[60],
         #             all_fileids=True, do_bckg=False, do_fit=True)
         # time.sleep(5)
-        # opusAcquire(filename='test', foldername='test', repeat=[2], delay=[60],
-        #             all_fileids=True, do_bckg=False, do_fit=False)
+        adsExp.acquire_spectra(repeat=[10], delay=[60],
+                    all_fileids=True, do_bckg=False, do_fit=True)
         # repeat = [10, 5, 15, 110] # number of times to repeat
         # delay = [60, 300, 600, 1800] # delay (s) between repeats
 
-    # run_reference_experiment()
+
     run_adsorption_experiment_manual()
-    run_reference_experiment()
+    for i in range(10):
+        run_reference_experiment()
+    # run_reference_experiment()
+    # run_adsorption_experiment_manual()
+    # run_reference_experiment()
+    # measure_leak_rate(temp=45, duration=16)
+    # troubleshooting()
+
 

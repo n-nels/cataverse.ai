@@ -5,9 +5,10 @@ It also includes methods for logging actuator states and temperatures, and for m
 It is designed to work with the ActuatorManager, SerialDevices, and NetworkMessaging classes to control the instruments and communicate with the network.
 """
 
+import struct
 import time, csv, subprocess, json, threading, os
 from ..core.config import v_tot, v_m1m2m3, v_50tube, v_cell, chiller_id, variac_id, variac_id_vsl, R, t_mfld, mass, metal_load
-from ..utils.data_logging import create_directory,log_actuator_state, log_temperature
+from ..utils.data_logging import create_directory, log_actuator_state, log_temperature
 from datetime import datetime, timedelta
 
 
@@ -986,7 +987,7 @@ class InstrumentOperations:
 
     def kasaPlug_state(self, plug_id, cmd):
         """use 'True' for on, 'False' for off"""
-        self.run_script('cataverse_venv', 'kasa_smartPlug.py', plug_id, cmd)
+        self.run_script('.venv', 'kasa_smartPlug.py', plug_id, cmd)
 
     def pressure_log(self, filename: str, stop_event: threading.Event, p_mfld_initial: float, p_cell_initial: float, read_interval: int=5) -> None:
         """Log pressure data to a CSV file.
@@ -1081,17 +1082,54 @@ class InstrumentOperations:
             finally:
                 file.close()
 
-    def OpusVertex80(self, message: dict):
-
+    def OpusVertex80(self, message: dict, timeout_ms: int = 120000, retry_on_timeout: bool = True):
+        """Collect spectrum from OPUS Vertex 80 with timeout handling.
+        
+        Args:
+            message: Dictionary containing OPUS command parameters
+            timeout_ms: Timeout in milliseconds (default 120000 = 2 minutes)
+            retry_on_timeout: If True, reconnect and retry once on timeout
+            
+        Returns:
+            Reply string from OPUS or None on failure
+        """
+        # Attempt to send message
         msg = self.opus.send_message(message)
-        if msg: 
-            print('Collecting spectrum...')
-            try:
-                reply = self.opus.receive_message() # need timeout handling
-            except KeyboardInterrupt:
-                print("Program interrupted. Exiting.")
+        if not msg:
+            print("Error: Failed to send message to OPUS")
+            return None
+            
+        print('Collecting spectrum...')
+        reply = self.opus.receive_message(timeout_ms=timeout_ms)
+        
+        # Check if we got a valid response
+        if reply:
             print(f"fileid: {reply}")
             return reply
+        
+        # Timeout or error occurred
+        if not retry_on_timeout:
+            print("Error: No response from OPUS (timeout)")
+            return None
+        
+        # Timeout recovery: reconnect completely and retry once
+        try:
+            self.opus.reconnect()
+            time.sleep(2)  # Wait for server to recover
+            
+            # Retry once with fresh socket
+            print("Retrying message after reconnect...")
+            msg = self.opus.send_message(message)
+            if msg:
+                reply = self.opus.receive_message(timeout_ms=timeout_ms)
+                if reply:
+                    print(f"fileid: {reply}")
+                    return reply
+        except Exception as e:
+            print(f"Reconnection or retry failed: {e}")
+        
+        print("Error: No response from OPUS after timeout and retry")
+        return None
 
     def opusAcquire(self, filename, foldername, repeat, delay, all_fileids, do_bckg, do_fit):
         """To reset all_fileids, do_bckg, or do_fit set equal to True, else False"""
@@ -1127,11 +1165,13 @@ class InstrumentOperations:
                         str(round(float(delay[i])/60, 2)) + ' minute delay')
                 
                 if i == (len(delay) - 1) and k == (repeat[i] - 1):
+                    
                     print('End of OPUS Acquisition')
+                    self.evacuate_cell('RoughPump')
                     message = {
                         'end_experiment': True,
                     }
-                    self.OpusVertex80(message)
+                    self.OpusVertex80(message) # opus waits 10 minutes; need to fix reconnecting socket logic
                     continue
                 delta = datetime.now() - now
                 time_wait = delay[i] - delta.total_seconds()
@@ -1150,8 +1190,8 @@ class InstrumentOperations:
         def log(message):
             print("{}: {}".format(datetime.now(), message))
 
-        if env == 'cataverse_venv':
-            python_path = "C:\\Users\\labuser\\CataVerse\\cataverse_venv\\Scripts\\python.exe"
+        if env == '.venv':
+            python_path = "C:\\Users\\labuser\\CataVerse\\.venv\\Scripts\\python.exe"
         else:
             python_path = "C:\\Program Files\\Python312\\python.exe" # this is not a path
 
@@ -1216,27 +1256,85 @@ class InstrumentOperations:
             finally:
                 file.close()
 
+    def extrel_filament(self, cmd: str):
+        """cmd: 'on' or 'off'"""
+        cmd = 1 if cmd == 'on' else 0
+        success = self.serial.extrel_write(address=0, value=cmd) # put address in config file?
+        if success:
+            print(f"Extrel filament turned {cmd}")
+        else:
+            print("Failed to change Extrel filament state")
+
+    def extrel_sequence(self, cmd: str):
+        """cmd: 'start' or 'stop'"""
+        cmd = 2 if cmd == 'start' else 9
+        success = self.serial.extrel_write(address=1, value=cmd) # put address in config file?
+        if success:
+            print(f"Extrel sequence started" if cmd == 2 else "Extrel sequence stopped")
+        else:
+            print("Failed to set Extrel sequence")
+
+    def extrel_stream(self, filename: str, stop_event: threading.Event, 
+                      start_address=2, poll_interval=1.2, unit=1): # put addresses in config file?
+        """
+        Reads 4 Paired+IEEE754 values in one contiguous block and logs to CSV.
+        
+        Args:
+            filename (str): Base filename for the data log.
+            stop_event (threading.Event): Event to signal when to stop streaming.
+            start_address (int): Starting Modbus register address.
+            poll_interval (float): Time in seconds between readings.
+            unit (int): Modbus unit ID.
+        """
+        def decode_ieee754_cdab(r0, r1):
+            """Decode two Modbus registers (r0, r1) in CDAB order to a float."""
+            raw = r1.to_bytes(2, "big") + r0.to_bytes(2, "big")
+            return struct.unpack(">f", raw)[0]
+
+        tags = ["V1_I_28", "V1_I_29", "V1_I_44", "V1_I_45"] # put in config file?
+        
+        file_exists = os.path.exists(filename)
+        with open(filename, 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            if not file_exists:
+                writer.writerow(['timestamp'] + tags)
+            
+            while not stop_event.is_set():
+                regs = self.serial.extrel_read(address=start_address, count=8, unit=unit) # tie count to config file?
+
+                if regs is None:
+                    print(f"read error: failed to read from Extrel")
+                else:
+                    # regs is a list of 8 registers
+                    vals = [
+                        decode_ieee754_cdab(regs[0], regs[1]),
+                        decode_ieee754_cdab(regs[2], regs[3]),
+                        decode_ieee754_cdab(regs[4], regs[5]),
+                        decode_ieee754_cdab(regs[6], regs[7]),
+                    ]
+
+                    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # milliseconds                   
+                    writer.writerow([ts] + vals)
+                    csvfile.flush()
+
+                time.sleep(poll_interval)
+
+        return True
+
+
 if __name__ == "__main__":
-    from ni_usb6009_devices import ActuatorManager, device_map
-    from serial_devices import SerialDevices
-    from network_messaging import NetworkMessaging
-    from actuator_control import ActuatorControl
+    from instrument_control import *
 
     actuators = ActuatorManager(device_map)
     serial = SerialDevices()
     actuator_control = ActuatorControl(actuators, serial)
     opus = NetworkMessaging()
-
-    opus.connect(ip="130.20.216.127", port=5555)
-    serial.connect_mks() # pressure gauge
-    serial.connect_watlow_ir() # temperature controller for IR cell
-
     iops = InstrumentOperations(serial, actuator_control, opus)
 
-    temp = iops.serial.readTemp_ir()  # Read initial temperature from IR cell
-    print(temp)
+    # temp = iops.serial.readTemp_ir()  # Read initial temperature from IR cell
+    # print(temp)
 
-    iops.opusAcquire(filename='test', foldername='test', repeat=[10], delay=[60],
+    iops.opusAcquire(filename='test', foldername='_test', repeat=[10], delay=[60],
                 all_fileids=True, do_bckg=False, do_fit=False)
 
     # iops.evacuate_cell('TurboPump')

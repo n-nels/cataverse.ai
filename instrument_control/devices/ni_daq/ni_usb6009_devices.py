@@ -99,19 +99,26 @@ device_map = {
 
 if __name__ == "__main__":
     # Example usage
+    # from instrument_control.operations.actuator_control import ActuatorControl
+    # from instrument_control.devices.serial.serial_devices import SerialDevices
+
     actuators = ActuatorManager(device_map)
+    # serial = SerialDevices()  # replace with your serial class
+    # control = ActuatorControl(actuators, serial)
+
+    # success = control.actuator_close_all(device_map)
+    # actuators = ActuatorManager(device_map)
     # time.sleep(3)
-    # success = actuators.set_value('irCell', 1.0)
-    # time.sleep(3)
-    # success = actuators.set_value('13CO', 1.0)
+    success = actuators.set_value('irCell', 5.0)
+    # success = actuators.set_value('MassSpec', 1.0)
+    # success = actuators.set_value('v16', 5.0)
     # success = actuators.set_value('O2', 1.0)
-    # success = actuators.set_value('RoughPump', 1.0)
+    # success = actuators.set_value('TurboPump', 1.0)
     # time.sleep(3)
-    # success = actuators.set_value('O2', 1.0)
+    success = actuators.set_value('RoughPump', 5.0)
     # success = actuators.set_value('irCell', 1.0)
-    success = actuators.actuator_close_all()
     # time.sleep(5)
-    # actuators.set_value('RoughPump', 1.0)
+    # actuators.set_value('TurboPump', 5.0)
     if success:
         print("Value set successfully.")
     else:
