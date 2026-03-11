@@ -1,11 +1,36 @@
 
 """Defines classes for experiment categories"""
 
-import os, time, threading, shutil, csv, re, glob
+import csv
+import glob
+import os
+import re
+import shutil
+import threading
+import time
 from datetime import datetime, timedelta
-from typing import Optional, List
-from ...utils.data_logging import log_experiment_parameters, materParams, create_directory, expID, copy_to_share_drive
-from ...core.config import (R, t_mfld, v_cell, v_m1m2, v_m1m2m3, v_50tube, v_m3, v_tot, chiller_id, variac_id, variac_id_vsl)
+from typing import List, Optional
+
+from ...core.config import (
+    R,
+    chiller_id,
+    t_mfld,
+    v_50tube,
+    v_cell,
+    v_m1m2,
+    v_m1m2m3,
+    v_m3,
+    v_tot,
+    variac_id,
+    variac_id_vsl,
+)
+from ...utils.data_logging import (
+    copy_to_share_drive,
+    create_directory,
+    expID,
+    log_experiment_parameters,
+    materParams,
+)
 
 
 class experiment_parameters:
@@ -87,7 +112,7 @@ class experiment_parameters:
                 for line in file:
                     if line.strip() == f"## pretreatment_{self.counter}":
                         return True
-                    if (line.strip() == f"## exp_gas") and self.counter == 0:
+                    if (line.strip() == "## exp_gas") and self.counter == 0:
                         return True
                     
         return False
@@ -998,6 +1023,16 @@ class adsorption_experiment():
         opus_thread.join()
         stop_pressure_log.set()
         pressure_thread.join()
+
+        self.instrument_operations.evacuate_cell('RoughPump')
+        self.instrument_operations.OpusVertex80(message = {
+                        'end_experiment': True,
+                        'foldername': self.expParams.folder_name,
+                        'filename': self.expParams.file_name + "_evacuation",
+                        'do_bckg': False,
+                        'do_fit': False,
+                        'reset_fileids': False # opus waits 10 minutes; need to fix reconnecting socket logic
+                    })
 
         self.expParams.update_experiment_success(success=True)
         time.sleep(5)

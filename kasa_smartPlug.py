@@ -1,4 +1,7 @@
-import requests, sys
+import sys
+
+import requests
+
 
 class KasaControl:
     def __init__(self, username, password, device_id):

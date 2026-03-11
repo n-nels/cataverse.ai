@@ -29,6 +29,3 @@ metal_density = (metal_load / 100) * (1 / 106.42) * (6.023e23) * (1 / support_sa
 chiller_id = "80068F39DE57BDF8D6EA6F2AB145251E223AF901"
 variac_id = "80068C02EA20EFE6A7149420FAA20DB5223A54AA"
 variac_id_vsl = "8006CF042D478C8A62FE5B07A53B29B8223A2135" # 50 mL tube
-
-# pnnl-devices network password
-# HJ^5%zy5WYXB#CbTv%TFZcJNM

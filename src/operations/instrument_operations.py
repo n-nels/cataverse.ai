@@ -5,11 +5,35 @@ It also includes methods for logging actuator states and temperatures, and for m
 It is designed to work with the ActuatorManager, SerialDevices, and NetworkMessaging classes to control the instruments and communicate with the network.
 """
 
+import csv
+import json
+import os
 import struct
-import time, csv, subprocess, json, threading, os
-from ..core.config import v_tot, v_m1m2m3, v_50tube, v_cell, chiller_id, variac_id, variac_id_vsl, R, t_mfld, mass, metal_load
-from ..utils.data_logging import create_directory, log_actuator_state, log_temperature
+import subprocess
+import threading
+import time
+import sys
+from pathlib import Path
 from datetime import datetime, timedelta
+
+SRC_PATH = Path(__file__).resolve().parent.parent.parent
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from src.core.config import (
+    R,
+    chiller_id,
+    mass,
+    metal_load,
+    t_mfld,
+    v_50tube,
+    v_cell,
+    v_m1m2m3,
+    v_tot,
+    variac_id,
+    variac_id_vsl,
+)
+from src.utils.data_logging import create_directory, log_actuator_state, log_temperature
 
 
 class InstrumentOperations:
@@ -1082,12 +1106,12 @@ class InstrumentOperations:
             finally:
                 file.close()
 
-    def OpusVertex80(self, message: dict, timeout_ms: int = 120000, retry_on_timeout: bool = True):
+    def OpusVertex80(self, message: dict, timeout_ms: int = 300000, retry_on_timeout: bool = True):
         """Collect spectrum from OPUS Vertex 80 with timeout handling.
         
         Args:
             message: Dictionary containing OPUS command parameters
-            timeout_ms: Timeout in milliseconds (default 120000 = 2 minutes)
+            timeout_ms: Timeout in milliseconds (default 300000 = 5 minutes)
             retry_on_timeout: If True, reconnect and retry once on timeout
             
         Returns:
@@ -1167,12 +1191,8 @@ class InstrumentOperations:
                 if i == (len(delay) - 1) and k == (repeat[i] - 1):
                     
                     print('End of OPUS Acquisition')
-                    self.evacuate_cell('RoughPump')
-                    message = {
-                        'end_experiment': True,
-                    }
-                    self.OpusVertex80(message) # opus waits 10 minutes; need to fix reconnecting socket logic
                     continue
+                
                 delta = datetime.now() - now
                 time_wait = delay[i] - delta.total_seconds()
 
@@ -1197,7 +1217,7 @@ class InstrumentOperations:
 
         script_path = f"C:\\Users\\labuser\\CataVerse\\{script}"
         serialized_args = [json.dumps(arg) if isinstance(arg, list) else str(arg) for arg in args]
-        arguments = " ".join(f'"{arg}"' for arg in serialized_args)
+        # arguments = " ".join(f'"{arg}"' for arg in serialized_args)
 
         try:
             process = subprocess.Popen(
@@ -1270,7 +1290,7 @@ class InstrumentOperations:
         cmd = 2 if cmd == 'start' else 9
         success = self.serial.extrel_write(address=1, value=cmd) # put address in config file?
         if success:
-            print(f"Extrel sequence started" if cmd == 2 else "Extrel sequence stopped")
+            print("Extrel sequence started" if cmd == 2 else "Extrel sequence stopped")
         else:
             print("Failed to set Extrel sequence")
 
@@ -1303,7 +1323,7 @@ class InstrumentOperations:
                 regs = self.serial.extrel_read(address=start_address, count=8, unit=unit) # tie count to config file?
 
                 if regs is None:
-                    print(f"read error: failed to read from Extrel")
+                    print("read error: failed to read from Extrel")
                 else:
                     # regs is a list of 8 registers
                     vals = [
@@ -1323,7 +1343,7 @@ class InstrumentOperations:
 
 
 if __name__ == "__main__":
-    from instrument_control import *
+    from src import *
 
     actuators = ActuatorManager(device_map)
     serial = SerialDevices()
@@ -1334,8 +1354,10 @@ if __name__ == "__main__":
     # temp = iops.serial.readTemp_ir()  # Read initial temperature from IR cell
     # print(temp)
 
-    iops.opusAcquire(filename='test', foldername='_test', repeat=[10], delay=[60],
+    iops.opusAcquire(filename='test', foldername='_test', repeat=[0], delay=[0],
                 all_fileids=True, do_bckg=False, do_fit=False)
+    time.sleep(10)
+    iops.OpusVertex80(message={'end_experiment': True})
 
     # iops.evacuate_cell('TurboPump')
     # iops.actuator_control.actuator_close('irCell')

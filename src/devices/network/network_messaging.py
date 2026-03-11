@@ -1,16 +1,20 @@
 ## network_messaging.py
 
-import zmq, json, time
+import json
+import time
+
+import zmq
+
 
 class NetworkMessaging:
     """Class to handle network messaging using ZeroMQ."""
 
-    def __init__(self, context: zmq.Context = None, rcv_timeout: int = 10000):
+    def __init__(self, context: zmq.Context = None, rcv_timeout: int = 300000):
         """Initializes the NetworkMessaging with a ZeroMQ context.
         
         Args:
             context: An optional ZeroMQ context. If not provided, a new context will be created.
-            rcv_timeout: Receive timeout in milliseconds (default 120 seconds)
+            rcv_timeout: Receive timeout in milliseconds (default 300000 milliseconds)
         """
         self.context = context if context is not None else zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
@@ -137,12 +141,20 @@ if __name__ == "__main__":
             print(f"Received reply from server: {reply}")
             messaging.send_message(message)
 
-    message = {'foldername': 'nn1120-3_pd_ceo2_003',
-               'filename': '20260223_215629_pd_ceo2_003-119',
+    message = {'foldername': '_test',
+               'filename': 'test',
                'do_fit': False,
                'do_bckg' : False,
-               'reset_fileids': False,
+               'reset_fileids': True,
+               }
+    run_client(message)
+    time.sleep(30)
+
+    message = {'foldername': '_test',
+               'filename': 'test',
+               'do_fit': False,
+               'do_bckg' : False,
+               'reset_fileids': True,
                'end_experiment': True}
-    # message = {'end_experiment': True}
     run_client(message)
 

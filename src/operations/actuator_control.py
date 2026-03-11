@@ -4,9 +4,10 @@ used in the instrument control system. It includes methods for opening, closing,
 writing values to actuators, as well as safety checks for specific devices like TurboPump
 and MassSpec.
 """
-import time
 import sys
+import time
 from datetime import datetime
+
 
 class ActuatorControl:
     def __init__(self, actuators, serial):

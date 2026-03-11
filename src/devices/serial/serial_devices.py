@@ -1,8 +1,13 @@
 ## device_interface.py
 
-import serial, struct, time, sys
+import struct
+import sys
+import time
 from datetime import datetime
+
+import serial
 from pymodbus.client import ModbusSerialClient as ModbusClient
+
 
 class SerialDevices:
     """Class to control specific devices."""

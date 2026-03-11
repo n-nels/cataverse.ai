@@ -1,10 +1,10 @@
 # Requirements: pip install pandas matplotlib
 
-import os
-import sys
 import glob
-import pandas as pd
+import os
+
 import matplotlib.pyplot as plt
+import pandas as pd
 
 REQUIRED_COLS = ["relative_time_s", "amount_adsorbed_umol/g", "apparent_conversion"]
 
@@ -77,7 +77,7 @@ def process_folder(folder_name):
 
 if __name__ == "__main__":
 
-    folder = r'nn1120-3_pd_ceo2_003'
+    folder = r'nn1120-3_pd_ceo2_004'
     input_dir = f"C:\\Data\\{folder}"
     output_dir = f"C:\\Figures\\{folder}"
 

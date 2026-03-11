@@ -1,93 +1,69 @@
 # Code Conventions
 
-This document outlines the coding style, naming, and formatting guidelines for the IR-Spectro-Node project.
+---
+
+## Naming
+
+- **Functions/methods:** `snake_case` — e.g. `read_pressure()`, `deliver_gas_to_mfld()`
+- **Variables:** `snake_case` — domain abbreviations are fine (`p_mfld`, `v_tot`, `t_cell`).
+- **Constants:** `UPPER_SNAKE_CASE` — e.g. `R`, `V_TOT`
+- **Classes:** `PascalCase` — e.g. `ActuatorControl`, `SerialDevices`
+- **Files:** `snake_case` — e.g. `actuator_control.py`, `serial_devices.py`
 
 ---
 
-## Code Style Guidelines
+## Formatting
 
-### Imports
-- Standard library imports first, then third-party, then local modules
-- Single-line imports preferred: `import numpy as np`, `import pandas as pd`
-- Avoid `from module import *` except for specific cases
-- Group related imports together
+- 4 spaces, no tabs.
+- Line length: ~100 characters, not strictly enforced.
+- 2 blank lines between top-level definitions, 1 blank line between related blocks.
+- Enforced by `ruff format`.
 
-Example:
+---
+
+## Types
+
+Type hints on all new and refactored code. Use Python 3.12+ syntax.
+
 ```python
-import os
-import time
-import numpy as np
-import pandas as pd
-from scipy.signal import find_peaks
+def read_pressure(self, command: str = 'p') -> tuple[datetime, float, float]:
 ```
 
-### Naming Conventions
-- **Functions**: snake_case (e.g., `voigt_fit()`)
-- **Variables**: snake_case (e.g., `peak_area`, `file_name`)
-- **Constants**: UPPER_SNAKE_CASE 
-- **Classes**: PascalCase (rarely used in this codebase)
-- **File names**: snake_case (e.g., `ir_peakFit_carbonyl_v5.py`)
+---
 
-Note: The codebase has mixed conventions (e.g., `PipeCommand` uses PascalCase for functions). Follow snake_case for new code.
+## Error Handling
 
-### Formatting
-- 4 spaces for indentation (no tabs)
-- Maximum line length not strictly enforced but keep reasonable (~100-120 chars)
-- Blank lines between top-level functions (2 lines)
-- One blank line between related code blocks
+Don't add `try/except` blocks unless the failure requires a specific recovery action. This is a single-user system with an established workflow — if something hits an exception, the experiment likely failed and that's useful information. Verbose error handling obscures that signal.
 
-### Types
-- Type hints are encouraged for all new and refactored code to improve clarity and maintainability.
-- Use modern Python 3.12+ syntax for type hints.
+During the refactor: do not introduce new `try/except` blocks without user confirmation.
 
-### Error Handling
-- Use try-except blocks with explicit error messages
-- Print errors with context: `print(f"Error: {e}")`
-- Use specific exceptions when possible
-- Return early on failure conditions
+---
 
-Example:
+## Paths
+
+Use `pathlib.Path` for all path construction — both config-loaded and runtime-built. No hardcoded string paths.
+
 ```python
-try:
-    df = pd.read_csv(file_path)
-except Exception as e:
-    print(f"Error reading {file_path}: {e}")
-    return None
+from pathlib import Path
+
+# From config
+data_dir = Path(config["paths"]["data_directory"])
+
+# Built at runtime
+readme_path = data_dir / folder_name / f"{file_name}_README.md"
 ```
 
-### Path Handling
-- Use raw strings for Windows paths: `r'C:\Data\path'`
-- Use `os.path.join()` for cross-platform compatibility
-- Prefer forward slashes in string literals, convert as needed
+---
 
-### String Formatting
-- Use f-strings for variable interpolation: `f'{variable}'`
-- Use concatenation for static strings: `"prefix" + suffix`
+## Functions
 
-### Functions
-- Use docstrings for public functions
-- Keep functions focused and single-purpose
-- Use descriptive names that indicate action and object
+- Docstrings on all public functions.
+- Keep functions single-purpose.
+- Names should indicate action and object: `deliver_gas_to_mfld`, `set_temperature`.
 
-### Global Variables
-- The codebase uses global variables extensively (e.g., `hPipe`, `XpmPath`)
-- For new code, prefer passing parameters
-- If using globals is necessary, document them at module level
+---
 
-### Comments
-- Minimal inline comments
-- Add comments only for non-obvious logic
-- Comment out unused code with `#` at line start
-- Avoid commenting out large blocks - delete instead
+## Comments
 
-### Scientific Computing Patterns
-- Use NumPy arrays for numerical operations
-- Use pandas DataFrames for tabular data
-- Use scipy.optimize.curve_fit for fitting
-- Use lmfit for complex parameter fitting
-- Use pybaselines for baseline correction
-
-### ZMQ Messaging
-- Uses pyzmq for instrument control via named pipe
-- REP/REQ pattern for server-client communication
-- Handle timeouts and connection errors gracefully
+- Minimal. Only for non-obvious logic.
+- Don't comment out code — delete it. Git has history.

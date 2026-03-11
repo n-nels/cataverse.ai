@@ -9,11 +9,11 @@ Usage:
     python main_new.py
 """
 
-from instrument_control import *
-from typing import List
-from datetime import datetime, timedelta
 import time
+from datetime import datetime, timedelta
+from typing import List
 
+from src import *
 
 # Initialize devices using package imports
 actuators = ActuatorManager(device_map)
@@ -418,7 +418,7 @@ if __name__ == "__main__":
 
         """A procedure for troubleshooting the system."""
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        exp_params.experiment_id(file_name=f"{now}_test", folder_name=f"_test")
+        exp_params.experiment_id(file_name=f"{now}_test", folder_name="_test")
 
         # actuator_control.actuator_open('irCell')
         # actuator_control.actuator_close('CO2')
@@ -436,9 +436,7 @@ if __name__ == "__main__":
         # repeat = [10, 5, 15, 110] # number of times to repeat
         # delay = [60, 300, 600, 1800] # delay (s) between repeats
 
-
-    run_adsorption_experiment_manual()
-    for i in range(10):
+    for i in range(8):
         run_reference_experiment()
     # run_reference_experiment()
     # run_adsorption_experiment_manual()
@@ -447,3 +445,6 @@ if __name__ == "__main__":
     # troubleshooting()
 
 
+    """
+    Start-up procedure needed for new sample.
+    """

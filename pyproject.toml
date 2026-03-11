@@ -35,4 +35,8 @@ line-length = 88
 [tool.ruff.lint]
 # Enable Pyflakes (F) and check (E) codes by default
 select = ["E", "F", "I"] # "I" handles the import sorting (isort)
+ignore = ["E501", "F405", "E711", "E712"]
 fixable = ["ALL"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["instrument_control"]

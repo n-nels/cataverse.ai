@@ -1,14 +1,16 @@
 """
 This script is used to manage data logs by creating directorys and writing to .csv files
 """
-import os
 import csv
 import glob
+import os
 import shutil
 import time
 from datetime import datetime
-from typing import List, Any, Dict
-from ..core.config import (notebook, metal, support)
+from typing import Any, Dict, List
+
+from ..core.config import metal, notebook, support
+
 
 def create_directory(directory_path: str) -> None:
     if not os.path.exists(directory_path):

@@ -1,6 +1,7 @@
+
 import nidaqmx
 from nidaqmx.constants import AcquisitionType
-import time
+
 
 class NI_USB6009:
     """Class to manage USB communication with NI USB-6009 devices using NI-DAQmx."""
