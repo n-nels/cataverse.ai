@@ -1,0 +1,24 @@
+# File system paths used by CataVerse.
+# These mirror currently hardcoded paths and will be wired in during later tasks.
+
+paths:
+  # Primary local data directory for experiment output/logging.
+  data_directory: "C:\\Data"
+
+  # Optional local figures/output directory used by processing scripts.
+  figures_directory: "C:\\Figures"
+
+  # Legacy path for autonomous experiment parameter CSV imports.
+  autonomous_parameters_directory: "C:\\Users\\labuser\\instrument_control\\catalysis_autolab\\data"
+
+  # Share-drive destinations for copied artifacts.
+  share_drive:
+    peak_fit_root: "X:\\peakFit"
+    pressure_data_root: "X:\\pressureData"
+    ms_calibrations_root: "X:\\ms_calibrations"
+
+  # Project/runtime paths used by run_script execution flow.
+  runtime:
+    project_root: "C:\\Users\\labuser\\CataVerse"
+    venv_python: "C:\\Users\\labuser\\CataVerse\\.venv\\Scripts\\python.exe"
+    system_python: "C:\\Program Files\\Python312\\python.exe"

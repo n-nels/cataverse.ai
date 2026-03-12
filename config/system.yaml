@@ -1,0 +1,31 @@
+# Physical constants and system geometry for CataVerse
+
+physical_constants:
+  # Gas constant [L Torr K^-1 mol^-1]
+  R: 62.363577
+
+temperature:
+  # Manifold temperature [K]
+  t_mfld: 298
+
+volumes_l:
+  # Calibrated vessel volume [L]
+  v_vessel: 0.0119913
+
+  # Valve stem volume [L]
+  v_valve: 0.000152
+
+  # IR cell volume excluding valve stem [L]
+  v_cell: 0.03381
+
+  # Combined manifold sections m1 + m2 [L]
+  v_m1m2: 0.078862
+
+  # Combined manifold sections m1 + m2 + m3 [L]
+  v_m1m2m3: 0.11116
+
+  # 50 mL tube volume including valve stem [L]
+  v_50tube: 0.05643
+
+  # Flask volume [L] (not measured as of 09/24/2024)
+  v_flask: 1.004

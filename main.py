@@ -6,7 +6,7 @@ with the new package structure. Replace main.py with this file once
 the migration is complete.
 
 Usage:
-    python main_new.py
+    python main.py
 """
 
 import time

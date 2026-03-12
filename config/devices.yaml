@@ -1,0 +1,56 @@
+# Device communication settings and actuator mappings
+
+serial:
+  mks:
+    port: COM8
+    baudrate: 9600
+    timeout_s: 2
+
+  watlow_ir:
+    port: COM6
+    baudrate: 9600
+    parity: N
+    stopbits: 1
+    bytesize: 8
+    timeout_s: 1
+
+  extrel_ms:
+    port: COM5
+    baudrate: 9600
+    parity: N
+    stopbits: 1
+    bytesize: 8
+    timeout_s: 1
+
+network:
+  opus:
+    ip: 130.20.216.127
+    port: 5555
+  zmq:
+    receive_timeout_ms: 300000
+
+kasa_plugs:
+  chiller_id: "80068F39DE57BDF8D6EA6F2AB145251E223AF901"
+  variac_id: "80068C02EA20EFE6A7149420FAA20DB5223A54AA"
+  variac_id_vsl: "8006CF042D478C8A62FE5B07A53B29B8223A2135"
+
+actuators:
+  device_map:
+    v16: [act1-2, ao0]
+    RoughPump: [act1-2, ao1]
+    H2: [act3-4, ao0]
+    H2O: [act3-4, ao1]
+    MassSpec: [act5-6, ao0]
+    "13CO": [act5-6, ao1]
+    irCell: [act7-8, ao0]
+    O2: [act7-8, ao1]
+    TurboPump: [act9-10, ao0]
+
+  # Unused/placeholder channels currently represented as empty-string keys in code.
+  # Kept here explicitly so channel occupancy is documented without key collisions.
+  reserved_channels:
+    - [act9-10, ao1]
+    - [act11-12, ao0]
+    - [act11-12, ao1]
+    - [act13-14, ao0]
+    - [act13-14, ao1]

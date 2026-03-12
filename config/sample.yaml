@@ -1,0 +1,15 @@
+# Sample and catalyst descriptors passed to experiment_parameters
+
+sample:
+  notebook: nn1120-3
+  metal: pd
+  support: ceo2
+
+  # Catalyst mass [g] (includes quartz wool mass as currently used in code)
+  mass: 0.0164
+
+  # Metal loading [wt.%]
+  metal_load: 0.04983
+
+  # Support surface area [m^2/g]
+  support_sa: 54

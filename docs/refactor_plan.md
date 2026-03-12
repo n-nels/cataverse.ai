@@ -34,11 +34,11 @@ Extract hardcoded values into YAML config files. Make `core/` a loader rather th
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 1.1 | Create `config/system.yaml` for physical constants (R, volumes, temperatures) | `config/system.yaml` | [ ] |
-| 1.2 | Create `config/devices.yaml` for device settings (COM ports, baud rates, IPs, device map, Kasa IDs) | `config/devices.yaml` | [ ] |
-| 1.3 | Create `config/sample.yaml` for sample information (notebook, metal, support, mass, metal_load, metal_density, support_sa). These are values passed to the `experiment_parameters` constructor. Runtime parameters like pretreatment gas, pressure, and temperature stay as method arguments in code. | `config/sample.yaml` | [ ] |
-| 1.4 | Create `config/paths.yaml` for all file paths (data directory, share drive, etc.) | `config/paths.yaml` | [ ] |
-| 1.5 | Rewrite `core/config.py` to load from YAML files and expose the same values | `src/core/config.py` | [ ] |
+| 1.1 | Create `config/system.yaml` for physical constants (R, volumes, temperatures) | `config/system.yaml` | [x] |
+| 1.2 | Create `config/devices.yaml` for device settings (COM ports, baud rates, IPs, device map, Kasa IDs) | `config/devices.yaml` | [x] |
+| 1.3 | Create `config/sample.yaml` for sample information (notebook, metal, support, mass, metal_load, support_sa). These are values passed to the `experiment_parameters` constructor. Runtime parameters like pretreatment gas, pressure, and temperature stay as method arguments in code. Keep `metal_density` as a derived value in `core/config.py`. | `config/sample.yaml` | [x] |
+| 1.4 | Create `config/paths.yaml` for all file paths (data directory, share drive, etc.) | `config/paths.yaml` | [x] |
+| 1.5 | Rewrite `core/config.py` to load from YAML files and expose the same values | `src/core/config.py` | [x] |
 | 1.6 | In `core/config.py`, clearly separate raw values (loaded from YAML) from derived values (computed from raw). Document each derived value with its formula and units. | `src/core/config.py` | [ ] |
 | 1.7 | Move the network password out of `config.py` into `.env` (and ensure `.env` is in `.gitignore`). Load via `os.environ` or `python-dotenv`. | `src/core/config.py`, `.env`, `.gitignore` | [ ] |
 | 1.8 | Replace `print()` with `logging` in `core/config.py` | `src/core/config.py` | [ ] |
@@ -140,4 +140,3 @@ Final pass on the top-level package.
 | 6.2 | Update `main.py` if any interfaces changed | `main.py` | [ ] |
 | 6.3 | Update `docs/directory_structure.md` to reflect final structure | `docs/directory_structure.md` | [ ] |
 | 6.4 | Final review of all module-level `AGENTS.md` files for accuracy | all `AGENTS.md` files | [ ] |
-

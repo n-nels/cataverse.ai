@@ -1,31 +1,79 @@
-
 """Configuration and constants for the instrument control system."""
 
+import os
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+
+def _load_yaml(file_path: Path) -> dict[str, Any]:
+    with file_path.open("r", encoding="utf-8") as file:
+        data = yaml.safe_load(file)
+    return data if data is not None else {}
+
+
+def _resolve_config_dir() -> Path:
+    env_config_dir = os.getenv("CATAVERSE_CONFIG_DIR")
+    if env_config_dir:
+        config_dir = Path(env_config_dir)
+    else:
+        repo_root = Path(__file__).resolve().parents[2]
+        config_dir = repo_root / "config"
+
+    if not config_dir.exists():
+        raise FileNotFoundError(f"Configuration directory not found: {config_dir}")
+
+    return config_dir
+
+
+def _require(data: dict[str, Any], key: str, file_name: str) -> Any:
+    if key not in data:
+        raise KeyError(f"Missing required key '{key}' in {file_name}")
+    return data[key]
+
+
+CONFIG_DIR = _resolve_config_dir()
+
+_system_config = _load_yaml(CONFIG_DIR / "system.yaml")
+_sample_config = _load_yaml(CONFIG_DIR / "sample.yaml")
+_devices_config = _load_yaml(CONFIG_DIR / "devices.yaml")
+_paths_config = _load_yaml(CONFIG_DIR / "paths.yaml")
+
+_system_physical_constants = _require(_system_config, "physical_constants", "system.yaml")
+_system_temperature = _require(_system_config, "temperature", "system.yaml")
+_system_volumes_l = _require(_system_config, "volumes_l", "system.yaml")
+
+_sample = _require(_sample_config, "sample", "sample.yaml")
+_kasa_plugs = _require(_devices_config, "kasa_plugs", "devices.yaml")
+
 # Physical constants
-R = 62.363577  # L Torr K-1 mol-1
-t_mfld = 298  # K, manifold temperature
+R = _system_physical_constants["R"]  # L Torr K-1 mol-1
+t_mfld = _system_temperature["t_mfld"]  # K, manifold temperature
 
 # Manifold volumes (in liters)
-v_vessel = 0.0119913  # Calibrated vessel
-v_valve = 0.000152    # Valve stem volume
-v_cell = 0.03381      # Excludes valve stem
-v_m1m2 = 0.078862     # m1+m2
-v_m1m2m3 = 0.11116    # m1+m2+m3
-v_50tube = 0.05643    # 50 mL tube (includes valve stem)
-v_flask = 1.004       # Flask (not measured as of 09/24/2024)
+v_vessel = _system_volumes_l["v_vessel"]  # Calibrated vessel
+v_valve = _system_volumes_l["v_valve"]  # Valve stem volume
+v_cell = _system_volumes_l["v_cell"]  # Excludes valve stem
+v_m1m2 = _system_volumes_l["v_m1m2"]  # m1+m2
+v_m1m2m3 = _system_volumes_l["v_m1m2m3"]  # m1+m2+m3
+v_50tube = _system_volumes_l["v_50tube"]  # 50 mL tube (includes valve stem)
+v_flask = _system_volumes_l["v_flask"]  # Flask (not measured as of 09/24/2024)
 v_m3 = v_m1m2m3 - v_m1m2 - v_valve
 v_tot = v_m1m2m3 + v_cell + v_valve + v_50tube
 
 # Experiment parameters
-notebook = 'nn1120-3'
-metal = "pd"
-support = "ceo2"
-mass = 0.0164  # g (8 mg quartz wool)
-metal_load = 0.04983  # wt.%
-support_sa = 54  # Surface area in m²/g
-metal_density = (metal_load / 100) * (1 / 106.42) * (6.023e23) * (1 / support_sa) * (1e-9**2)
+notebook = _sample["notebook"]
+metal = _sample["metal"]
+support = _sample["support"]
+mass = _sample["mass"]  # g (includes quartz wool as currently used)
+metal_load = _sample["metal_load"]  # wt.%
+support_sa = _sample["support_sa"]  # Surface area in m²/g
+metal_density = (metal_load / 100) * (1 / 106.42) * (6.023e23) * (1 / support_sa) * (
+    1e-9**2
+)
 
 # Device IDs
-chiller_id = "80068F39DE57BDF8D6EA6F2AB145251E223AF901"
-variac_id = "80068C02EA20EFE6A7149420FAA20DB5223A54AA"
-variac_id_vsl = "8006CF042D478C8A62FE5B07A53B29B8223A2135" # 50 mL tube
+chiller_id = _kasa_plugs["chiller_id"]
+variac_id = _kasa_plugs["variac_id"]
+variac_id_vsl = _kasa_plugs["variac_id_vsl"]  # 50 mL tube
