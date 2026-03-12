@@ -1343,7 +1343,10 @@ class InstrumentOperations:
 
 
 if __name__ == "__main__":
-    from src import *
+    from src.devices.network.network_messaging import NetworkMessaging
+    from src.devices.ni_daq.ni_usb6009_devices import ActuatorManager, device_map
+    from src.devices.serial.serial_devices import SerialDevices
+    from src.operations.actuator_control import ActuatorControl
 
     actuators = ActuatorManager(device_map)
     serial = SerialDevices()

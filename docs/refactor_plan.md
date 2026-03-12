@@ -20,11 +20,11 @@ Rename the package directory and update all references. Establish the documentat
 |---|------|---------|--------|
 | 0.1 | Rename `instrument_control/` to `src/` | directory, `pyproject.toml` | [x] |
 | 0.2 | Update all internal import paths to reflect new package name | all `__init__.py`, all `from ...` imports | [x] |
-| 0.3 | Update `main.py` imports to explicit, see 0.7 | `main.py` | [ ] |
+| 0.3 | Update `main.py` imports to explicit, see 0.7 | `main.py` | [x] |
 | 0.4 | Write root `AGENTS.md` | `AGENTS.md` | [x] |
-| 0.5 | Write module-level `AGENTS.md` for each directory | `src/core/`, `src/devices/`, `src/operations/`, `src/experiments/`, `src/utils/` | [ ] |
-| 0.6 | Clean up `.opencode/` files to reflect this project (not ir-spectro-node) | `.opencode/instructions.md`, `.opencode/conventions.md` | [ ] |
-| 0.7 | Remove flat re-exports from `src/__init__.py`. All imports should be explicit from submodules (e.g. `from src.devices import SerialDevices`, not `from src import *`). | `src/__init__.py` | [ ] |
+| 0.5 | Write module-level `AGENTS.md` for each directory | `src/core/`, `src/devices/`, `src/operations/`, `src/experiments/`, `src/utils/` | [x] |
+| 0.6 | Clean up `.opencode/` files to reflect this project (not ir-spectro-node) | `.opencode/instructions.md`, `.opencode/conventions.md` | [x] |
+| 0.7 | Remove flat re-exports from `src/__init__.py`. All imports should be explicit from submodules (e.g. `from src.devices import SerialDevices`, not `from src import *`). | `src/__init__.py` | [x] |
 
 ---
 
@@ -140,3 +140,4 @@ Final pass on the top-level package.
 | 6.2 | Update `main.py` if any interfaces changed | `main.py` | [ ] |
 | 6.3 | Update `docs/directory_structure.md` to reflect final structure | `docs/directory_structure.md` | [ ] |
 | 6.4 | Final review of all module-level `AGENTS.md` files for accuracy | all `AGENTS.md` files | [ ] |
+
