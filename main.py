@@ -23,9 +23,9 @@ from src.core.config import (
     support_sa,
     v_tot,
 )
-from src.devices.network.network_messaging import NetworkMessaging
-from src.devices.ni_daq.ni_usb6009_devices import ActuatorManager, device_map
-from src.devices.serial.serial_devices import SerialDevices
+from src.devices.network_messaging import NetworkMessaging
+from src.devices.ni_usb6009 import ActuatorManager, device_map
+from src.devices.serial_devices import SerialDevices
 from src.experiments.protocols.experiment_protocols import (
     adsorption_experiment,
     experiment_parameters,

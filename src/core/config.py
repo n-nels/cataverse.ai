@@ -51,6 +51,15 @@ _system_volumes_l = _require(_system_config, "volumes_l", "system.yaml")
 
 _sample = _require(_sample_config, "sample", "sample.yaml")
 _kasa_plugs = _require(_devices_config, "kasa_plugs", "devices.yaml")
+_serial_config = _require(_devices_config, "serial", "devices.yaml")
+_actuators_config = _require(_devices_config, "actuators", "devices.yaml")
+_serial_mks = _require(_serial_config, "mks", "devices.yaml")
+_serial_watlow_ir = _require(_serial_config, "watlow_ir", "devices.yaml")
+_serial_extrel_ms = _require(_serial_config, "extrel_ms", "devices.yaml")
+_actuator_device_map = _require(_actuators_config, "device_map", "devices.yaml")
+_network_config = _require(_devices_config, "network", "devices.yaml")
+_network_opus = _require(_network_config, "opus", "devices.yaml")
+_network_zmq = _require(_network_config, "zmq", "devices.yaml")
 
 # ---------------------------------------------------------------------------
 # Raw values loaded from YAML files
@@ -77,6 +86,33 @@ _raw_chiller_id = _kasa_plugs["chiller_id"]
 _raw_variac_id = _kasa_plugs["variac_id"]
 _raw_variac_id_vsl = _kasa_plugs["variac_id_vsl"]
 
+_raw_mks_serial_port = _serial_mks["port"]
+_raw_mks_serial_baudrate = _serial_mks["baudrate"]
+_raw_mks_serial_timeout_s = _serial_mks["timeout_s"]
+
+_raw_watlow_ir_port = _serial_watlow_ir["port"]
+_raw_watlow_ir_baudrate = _serial_watlow_ir["baudrate"]
+_raw_watlow_ir_parity = _serial_watlow_ir["parity"]
+_raw_watlow_ir_stopbits = _serial_watlow_ir["stopbits"]
+_raw_watlow_ir_bytesize = _serial_watlow_ir["bytesize"]
+_raw_watlow_ir_timeout_s = _serial_watlow_ir["timeout_s"]
+
+_raw_extrel_ms_port = _serial_extrel_ms["port"]
+_raw_extrel_ms_baudrate = _serial_extrel_ms["baudrate"]
+_raw_extrel_ms_parity = _serial_extrel_ms["parity"]
+_raw_extrel_ms_stopbits = _serial_extrel_ms["stopbits"]
+_raw_extrel_ms_bytesize = _serial_extrel_ms["bytesize"]
+_raw_extrel_ms_timeout_s = _serial_extrel_ms["timeout_s"]
+
+_raw_ni_usb6009_device_map = {
+    actuator_id: tuple(device_channel)
+    for actuator_id, device_channel in _actuator_device_map.items()
+}
+
+_raw_opus_default_ip = _network_opus["ip"]
+_raw_opus_default_port = _network_opus["port"]
+_raw_zmq_receive_timeout_ms = _network_zmq["receive_timeout_ms"]
+
 # Public raw values
 R = _raw_R
 t_mfld = _raw_t_mfld
@@ -99,6 +135,30 @@ support_sa = _raw_support_sa
 chiller_id = _raw_chiller_id
 variac_id = _raw_variac_id
 variac_id_vsl = _raw_variac_id_vsl
+
+mks_serial_port = _raw_mks_serial_port
+mks_serial_baudrate = _raw_mks_serial_baudrate
+mks_serial_timeout_s = _raw_mks_serial_timeout_s
+
+watlow_ir_port = _raw_watlow_ir_port
+watlow_ir_baudrate = _raw_watlow_ir_baudrate
+watlow_ir_parity = _raw_watlow_ir_parity
+watlow_ir_stopbits = _raw_watlow_ir_stopbits
+watlow_ir_bytesize = _raw_watlow_ir_bytesize
+watlow_ir_timeout_s = _raw_watlow_ir_timeout_s
+
+extrel_ms_port = _raw_extrel_ms_port
+extrel_ms_baudrate = _raw_extrel_ms_baudrate
+extrel_ms_parity = _raw_extrel_ms_parity
+extrel_ms_stopbits = _raw_extrel_ms_stopbits
+extrel_ms_bytesize = _raw_extrel_ms_bytesize
+extrel_ms_timeout_s = _raw_extrel_ms_timeout_s
+
+ni_usb6009_device_map = _raw_ni_usb6009_device_map
+
+opus_default_ip = _raw_opus_default_ip
+opus_default_port = _raw_opus_default_port
+zmq_receive_timeout_ms = _raw_zmq_receive_timeout_ms
 
 # ---------------------------------------------------------------------------
 # Derived values (computed from raw values)

@@ -54,21 +54,21 @@ Flatten the device sub-packages into single modules. Clean up each device file. 
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 2.1 | Flatten `devices/serial/serial_devices.py` → `devices/serial_devices.py` | move file, update imports | [ ] |
-| 2.2 | Flatten `devices/ni_daq/ni_usb6009_devices.py` → `devices/ni_usb6009.py` | move file, update imports | [ ] |
-| 2.3 | Flatten `devices/network/network_messaging.py` → `devices/network_messaging.py` | move file, update imports | [ ] |
-| 2.4 | Remove empty sub-package directories and their `__init__.py` files | `devices/serial/`, `devices/ni_daq/`, `devices/network/` | [ ] |
-| 2.5 | Update `devices/__init__.py` exports | `src/devices/__init__.py` | [ ] |
-| 2.6 | Clean up `serial_devices.py` — load COM ports and baud rates from `config/devices.yaml` instead of hardcoding | `src/devices/serial_devices.py` | [ ] |
-| 2.7 | Clean up `serial_devices.py` — replace `print()` with `logging` | `src/devices/serial_devices.py` | [ ] |
-| 2.8 | Clean up `ni_usb6009.py` — load `device_map` from `config/devices.yaml`, remove empty-string keys | `src/devices/ni_usb6009.py` | [ ] |
-| 2.9 | Clean up `ni_usb6009.py` — replace `print()` with `logging` | `src/devices/ni_usb6009.py` | [ ] |
-| 2.10 | Clean up `network_messaging.py` — load default IP/port from `config/devices.yaml` | `src/devices/network_messaging.py` | [ ] |
-| 2.11 | Clean up `network_messaging.py` — replace `print()` with `logging` | `src/devices/network_messaging.py` | [ ] |
-| 2.12 | Add type hints to all device files where missing | all `src/devices/*.py` | [ ] |
-| 2.13 | Split `SerialDevices` into per-instrument classes: `MKSPressureGauge`, `WatlowController`, `ExtrelMassSpec`. Keep `SerialDevices` as a thin container holding instances of each so the upstream interface doesn't change. | `src/devices/serial_devices.py` → `src/devices/mks_pressure.py`, `src/devices/watlow_controller.py`, `src/devices/extrel_mass_spec.py` | [ ] |
-| 2.14 | Extract Kasa smart plug control into `devices/kasa_plugs.py` — move chiller/variac plug logic out of operations/experiments into a proper device module | `src/devices/kasa_plugs.py` | [ ] |
-| 2.15 | Move `device_map` definition out of `ni_usb6009.py` — it is configuration, not device logic. After Phase 1 it lives in `config/devices.yaml`; remove the in-code definition. | `src/devices/ni_usb6009.py` | [ ] |
+| 2.1 | Flatten `devices/serial/serial_devices.py` → `devices/serial_devices.py` | move file, update imports | [x] |
+| 2.2 | Flatten `devices/ni_daq/ni_usb6009_devices.py` → `devices/ni_usb6009.py` | move file, update imports | [x] |
+| 2.3 | Flatten `devices/network/network_messaging.py` → `devices/network_messaging.py` | move file, update imports | [x] |
+| 2.4 | Remove empty sub-package directories and their `__init__.py` files | `devices/serial/`, `devices/ni_daq/`, `devices/network/` | [x] |
+| 2.5 | Update `devices/__init__.py` exports | `src/devices/__init__.py` | [x] |
+| 2.6 | Clean up `serial_devices.py` — load COM ports and baud rates from `config/devices.yaml` instead of hardcoding | `src/devices/serial_devices.py` | [x] |
+| 2.7 | Clean up `serial_devices.py` — replace `print()` with `logging` | `src/devices/serial_devices.py` | [x] |
+| 2.8 | Clean up `ni_usb6009.py` — load `device_map` from `config/devices.yaml`, remove empty-string keys | `src/devices/ni_usb6009.py` | [x] |
+| 2.9 | Clean up `ni_usb6009.py` — replace `print()` with `logging` | `src/devices/ni_usb6009.py` | [x] |
+| 2.10 | Clean up `network_messaging.py` — load default IP/port from `config/devices.yaml` | `src/devices/network_messaging.py` | [x] |
+| 2.11 | Clean up `network_messaging.py` — replace `print()` with `logging` | `src/devices/network_messaging.py` | [x] |
+| 2.12 | Add type hints to all device files where missing | all `src/devices/*.py` | [x] |
+| 2.13 | Split `SerialDevices` into per-instrument classes: `MKSPressureGauge`, `WatlowController`, `ExtrelMassSpec`. Keep `SerialDevices` as a thin container holding instances of each so the upstream interface doesn't change. | `src/devices/serial_devices.py` → `src/devices/mks_pressure.py`, `src/devices/watlow_controller.py`, `src/devices/extrel_mass_spec.py` | [x] |
+| 2.14 | Extract Kasa smart plug control into `devices/kasa_plugs.py` — move chiller/variac plug logic out of operations/experiments into a proper device module | `src/devices/kasa_plugs.py` | [x] |
+| 2.15 | Move `device_map` definition out of `ni_usb6009.py` — it is configuration, not device logic. After Phase 1 it lives in `config/devices.yaml`; remove the in-code definition. | `src/devices/ni_usb6009.py` | [x] |
 
 **Validation:** `SerialDevices`, `NI_USB6009`, `ActuatorManager`, `device_map`, `NetworkMessaging`, and the new per-instrument classes must all be importable from `devices` with the same interfaces. `SerialDevices` must still expose `connect_mks()`, `connect_watlow_ir()`, `connect_extrel()`, `read_pressure()`, `readTemp_ir()`, `setTemp_ir()`, and `disconnect()` with identical behavior. Kasa plug control must produce the same on/off behavior for chiller and variac IDs.
 

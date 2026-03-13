@@ -6,10 +6,8 @@ It is designed to work with the ActuatorManager, SerialDevices, and NetworkMessa
 """
 
 import csv
-import json
 import os
 import struct
-import subprocess
 import threading
 import time
 import sys
@@ -22,7 +20,6 @@ if str(SRC_PATH) not in sys.path:
 
 from src.core.config import (
     R,
-    chiller_id,
     mass,
     metal_load,
     t_mfld,
@@ -33,6 +30,7 @@ from src.core.config import (
     variac_id,
     variac_id_vsl,
 )
+from src.devices.kasa_plugs import KasaPlugs
 from src.utils.data_logging import create_directory, log_actuator_state, log_temperature
 
 
@@ -44,6 +42,7 @@ class InstrumentOperations:
         self.serial = serial
         self.actuator_control = actuator_control
         self.opus = opus
+        self.kasa_plugs = KasaPlugs()
 
     def deliver_gas_to_mfld(self, filename, foldername, id, target, openMS=True) -> tuple:
         """
@@ -1002,16 +1001,20 @@ class InstrumentOperations:
 
     def chiller_state(self, cmd):
         """use 'True' for on, 'False' for off"""
-        self.run_script('cataverse_venv', 'kasa_smartPlug.py', chiller_id, cmd)
+        self.kasa_plugs.chiller_state(cmd)
 
     def variac_state(self, cmd):
         """use 'True' for on, 'False' for off"""
-        self.run_script('cataverse_venv', 'kasa_smartPlug.py', variac_id, cmd)
+        self.kasa_plugs.variac_state(cmd)
         # self.run_script('cataverse_venv', 'kasa_smartPlug.py', variac_2_id, cmd)
 
     def kasaPlug_state(self, plug_id, cmd):
         """use 'True' for on, 'False' for off"""
-        self.run_script('.venv', 'kasa_smartPlug.py', plug_id, cmd)
+        self.kasa_plugs.kasaPlug_state(plug_id, cmd)
+
+    def run_script(self, env, script, *args):
+        """Compatibility shim for legacy script runner usage."""
+        self.kasa_plugs.run_script(env, script, *args)
 
     def pressure_log(self, filename: str, stop_event: threading.Event, p_mfld_initial: float, p_cell_initial: float, read_interval: int=5) -> None:
         """Log pressure data to a CSV file.
@@ -1205,47 +1208,6 @@ class InstrumentOperations:
 
             j += 1
 
-    def run_script(self, env, script, *args):
-
-        def log(message):
-            print("{}: {}".format(datetime.now(), message))
-
-        if env == '.venv':
-            python_path = "C:\\Users\\labuser\\CataVerse\\.venv\\Scripts\\python.exe"
-        else:
-            python_path = "C:\\Program Files\\Python312\\python.exe" # this is not a path
-
-        script_path = f"C:\\Users\\labuser\\CataVerse\\{script}"
-        serialized_args = [json.dumps(arg) if isinstance(arg, list) else str(arg) for arg in args]
-        # arguments = " ".join(f'"{arg}"' for arg in serialized_args)
-
-        try:
-            process = subprocess.Popen(
-                        [python_path, script_path] + serialized_args,  # Include the script_path and args in the list
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
-                    
-                    # Set timeout and capture output and errors
-            try:
-                output, error = process.communicate(timeout=30)
-                print(output.decode())
-                # log(f"Output:\n{output.decode()}")
-                # log(f"Error:\n{error.decode()}")
-                # log(f"Exit Code: {process.returncode}")
-            except subprocess.TimeoutExpired:
-                process.kill()
-                log("Process killed after timeout")
-                output, error = process.communicate()
-                log(f"Output:\n{output.decode()}")
-                log(f"Error:\n{error.decode()}")
-        except Exception as e:
-            log(f"An error occurred: {e}")
-        finally:
-            if process.poll() is None:
-                process.kill()
-                log("Process forcefully killed")
-
     def temperature_log(self, filename: str, stop_event: threading.Event, read_interval: int = 5) -> None:
         """
         Log temperature data to a CSV file.
@@ -1343,9 +1305,9 @@ class InstrumentOperations:
 
 
 if __name__ == "__main__":
-    from src.devices.network.network_messaging import NetworkMessaging
-    from src.devices.ni_daq.ni_usb6009_devices import ActuatorManager, device_map
-    from src.devices.serial.serial_devices import SerialDevices
+    from src.devices.network_messaging import NetworkMessaging
+    from src.devices.ni_usb6009 import ActuatorManager, device_map
+    from src.devices.serial_devices import SerialDevices
     from src.operations.actuator_control import ActuatorControl
 
     actuators = ActuatorManager(device_map)
