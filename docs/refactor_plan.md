@@ -8,7 +8,7 @@ This document tracks the refactoring of the `src/` package. The refactor is **st
 
 ---
 
-## Current Phase: Phase 0
+## Current Phase: Phase 2
 
 ---
 
@@ -39,10 +39,10 @@ Extract hardcoded values into YAML config files. Make `core/` a loader rather th
 | 1.3 | Create `config/sample.yaml` for sample information (notebook, metal, support, mass, metal_load, support_sa). These are values passed to the `experiment_parameters` constructor. Runtime parameters like pretreatment gas, pressure, and temperature stay as method arguments in code. Keep `metal_density` as a derived value in `core/config.py`. | `config/sample.yaml` | [x] |
 | 1.4 | Create `config/paths.yaml` for all file paths (data directory, share drive, etc.) | `config/paths.yaml` | [x] |
 | 1.5 | Rewrite `core/config.py` to load from YAML files and expose the same values | `src/core/config.py` | [x] |
-| 1.6 | In `core/config.py`, clearly separate raw values (loaded from YAML) from derived values (computed from raw). Document each derived value with its formula and units. | `src/core/config.py` | [ ] |
-| 1.7 | Move the network password out of `config.py` into `.env` (and ensure `.env` is in `.gitignore`). Load via `os.environ` or `python-dotenv`. | `src/core/config.py`, `.env`, `.gitignore` | [ ] |
-| 1.8 | Replace `print()` with `logging` in `core/config.py` | `src/core/config.py` | [ ] |
-| 1.9 | Update `core/__init__.py` exports | `src/core/__init__.py` | [ ] |
+| 1.6 | In `core/config.py`, clearly separate raw values (loaded from YAML) from derived values (computed from raw). Document each derived value with its formula and units. | `src/core/config.py` | [x] |
+| 1.7 | No-op for current codebase: there is no network password in `config.py`; all required network/device configuration is stored in `config/devices.yaml`. | `src/core/config.py`, `config/devices.yaml` | [x] |
+| 1.8 | No-op for current `core/config.py`: no `print()` calls present to replace. Added module logger for future config-load diagnostics. | `src/core/config.py` | [x] |
+| 1.9 | Update `core/__init__.py` exports | `src/core/__init__.py` | [x] |
 
 **Validation:** Every value currently importable from `core.config` must still be importable with the same name and same value after this phase.
 

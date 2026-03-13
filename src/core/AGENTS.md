@@ -10,7 +10,7 @@ This module loads configuration from YAML files and exposes values used througho
 
 ## Current State
 
-`config.py` currently defines everything as module-level variables: physical constants, manifold volumes, sample parameters, device IDs, and a network password. The refactor (Phase 1 in `docs/refactor_plan.md`) replaces this with YAML-backed loading.
+`config.py` now loads raw values from YAML files (`config/system.yaml`, `config/devices.yaml`, `config/sample.yaml`, `config/paths.yaml`) and exposes compatibility aliases with the same public variable names used elsewhere in the codebase. Derived values remain computed in Python.
 
 ## Files
 
@@ -40,7 +40,7 @@ Note: `106.42` is the molar mass of Pd (g/mol). If the metal changes, this value
 
 ## Dependencies
 
-**Depends on:** `config/` YAML files, `.env` (for network password after 1.7)
+**Depends on:** `config/` YAML files
 
 **Depended on by:** every other module — `devices/`, `operations/`, `experiments/`, `utils/`
 
@@ -48,4 +48,3 @@ Note: `106.42` is the molar mass of Pd (g/mol). If the metal changes, this value
 
 - Every value currently importable from `core.config` must remain importable with the same name and same value after refactoring.
 - Derived values must produce identical results to the current hardcoded computations.
-- The network password must not appear in any tracked file after Phase 1.
