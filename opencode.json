@@ -3,7 +3,7 @@
   "model": "github-copilot/gpt-5.2-codex",
   "agent": {
     "coder": {
-      "description": "Safely refactors legacy code following REFACTORING_PLAN.md",
+      "description": "Safely refactors legacy code.md",
       "mode": "primary",
       "model": "github-copilot/gpt-5.2-codex",
       "variant": "high",

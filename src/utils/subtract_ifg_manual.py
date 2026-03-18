@@ -1,6 +1,12 @@
-import os, glob
+import os, glob, sys
 from datetime import datetime
-from ..core import config
+from pathlib import Path
+
+root = Path(__file__).resolve().parent.parent.parent
+if str(root) not in sys.path:
+    sys.path.insert(0, str(root))
+
+from src.core import config
 
 
 def SaveAs(file, name, path):
@@ -76,8 +82,8 @@ def Deconvolute(file):
 
 
 # specify file & folder
-opus_filename = "20260108_220047_pd_ceo2_003-093"
-folder_name = "nn1120-3_pd_ceo2_003\\"
+opus_filename = "20260307_203322_pd_ceo2_004-002"
+folder_name = "nn1120-3_pd_ceo2_004\\"
 
 # define paths
 path_OpusFiles = os.path.join(
@@ -162,8 +168,8 @@ for file in files:
 
 
 #### for redoing fsd with different parameters############
-folder = r"C:\Data\OpusFiles\nn1120-3_pd_ceo2_003\\*"
-path_fsd = "C:\\Data\\OpusConvert_fsd\\nn1120-3_pd_ceo2_003\\"
+folder = r"C:\Data\OpusFiles\nn1120-3_pd_ceo2_004\\*"
+path_fsd = "C:\\Data\\OpusConvert_fsd\\nn1120-3_pd_ceo2_004\\"
 
 files = glob.glob(folder)
 

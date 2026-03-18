@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -10,8 +12,12 @@ from typing import cast
 import numpy as np
 import pandas as pd
 
+SRC_PATH = Path(__file__).resolve().parent.parent.parent
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
 from src.core import config
-from .spectral_fitting import get_shifted_monomer_peaks
+from src.analysis.spectral_fitting import get_shifted_monomer_peaks
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,7 +27,6 @@ class MonomerMaxRow:
     """Monomer max results for a single lgRefl file."""
 
     file_name: str
-    time_s: float
     max_monomer_peak: float
     peak_bin: int
     time_total_s: float
@@ -145,10 +150,10 @@ def _build_time_lookup(exp_params: pd.DataFrame) -> dict[str, pd.Timestamp]:  # 
 def _compute_time_integrals(
     exp_params: pd.DataFrame,
     max_peaks: list[tuple[str, float]],
-) -> dict[str, tuple[float, float, int, float, float]]:
+) -> dict[str, tuple[float, int, float, float]]:
     """Compute cumulative and total time per peak bin by iterator.
 
-    Returns a mapping of iterator -> (time_s, time_total_s, peak_bin,
+    Returns a mapping of iterator -> (time_total_s, peak_bin,
     max_monomer_peak, time_total_fraction).
     """
     time_lookup = _build_time_lookup(exp_params)
@@ -179,7 +184,7 @@ def _compute_time_integrals(
 
     total_experiment_time = sum(total_by_peak.values())
     cumulative_by_peak: dict[int, float] = {}
-    results: dict[str, tuple[float, float, int, float, float]] = {}
+    results: dict[str, tuple[float, int, float, float]] = {}
     for iterator, max_peak, _ in records:
         peak_bin, max_peak, time_delta_s = delta_by_iterator[iterator]
         cumulative_by_peak[peak_bin] = (
@@ -191,7 +196,6 @@ def _compute_time_integrals(
         else:
             time_total_fraction = 0.0
         results[iterator] = (
-            cumulative_by_peak[peak_bin],
             time_total_s,
             peak_bin,
             max_peak,
@@ -207,10 +211,17 @@ def compute_monomer_max_row(
     peak_min: float | None = None,
     peak_max: float | None = None,
 ) -> pd.DataFrame:
-    """Compute monomer max row for a single lgRefl file."""
+    """Compute monomer max for a folder based on an lgRefl file path.
+
+    Returns all rows for the folder (for the whole-run time_total_fraction).
+
+    Args:
+        file_path: Path to an lgRefl file (used to determine folder/stem)
+        peak_min: Minimum wavenumber for monomer peak search
+        peak_max: Maximum wavenumber for monomer peak search
+    """
     folder_name = file_path.parent.name
     stem = file_path.stem
-    iterator = file_path.suffix.lstrip(".")
 
     if peak_min is None or peak_max is None:
         voigt_settings = config.get_analysis_setting("voigt_fit")
@@ -246,19 +257,117 @@ def compute_monomer_max_row(
         max_peaks.append((match, max_peak))
 
     time_summary = _compute_time_integrals(exp_params, max_peaks)
-    if iterator not in time_summary:
+
+    # Return all rows for this stem/folder (for full rebuild)
+    all_rows = []
+    for iter_name, values in time_summary.items():
+        time_total_s, peak_bin, max_peak_val, time_total_fraction = values
+        row = MonomerMaxRow(
+            file_name=f"{stem}.{iter_name}",
+            max_monomer_peak=max_peak_val,
+            peak_bin=peak_bin,
+            time_total_s=time_total_s,
+            time_total_fraction=time_total_fraction,
+        )
+        all_rows.append(row.__dict__)
+
+    if not all_rows:
         return pd.DataFrame()
 
-    time_s, time_total_s, peak_bin, max_peak, time_total_fraction = time_summary[
-        iterator
-    ]
+    df_all = pd.DataFrame(all_rows)
 
-    row = MonomerMaxRow(
-        file_name=file_path.name,
-        time_s=time_s,
-        max_monomer_peak=max_peak,
-        peak_bin=peak_bin,
-        time_total_s=time_total_s,
-        time_total_fraction=time_total_fraction,
+    return df_all
+
+
+def compute_and_save_monomer_max(
+    folder_name: str,
+    stem: str | None = None,
+    save_dir: str | None = None,
+    peak_min: float | None = None,
+    peak_max: float | None = None,
+) -> pd.DataFrame:
+    """Compute monomer max for all files in a folder and save to CSV (overwrites).
+
+    Args:
+        folder_name: The folder name (e.g., nn1120-3_pd_ceo2_004)
+        stem: Optional stem name. If not provided, will process all stems in folder.
+        save_dir: Optional save directory. If not provided, uses config path.
+        peak_min: Optional minimum wavenumber for monomer peak search
+        peak_max: Optional maximum wavenumber for monomer peak search
+    """
+    if save_dir is None:
+        save_dir = config.get_path("data.peak_fit", folder_name)
+
+    # Find the lgRefl folder
+    folder_path = Path(config.get_path("data.lg_refl", folder_name))
+    if not folder_path.exists():
+        LOGGER.warning("Folder not found: %s", folder_path)
+        return pd.DataFrame()
+
+    # Get list of stems to process
+    if stem is not None:
+        stems_to_process = [stem]
+    else:
+        # Auto-detect all stems from existing files (exclude isoX)
+        lg_files = list(folder_path.glob("*.*"))
+        stems_to_process = set()
+        for f in lg_files:
+            # Skip isoX files
+            if "isoX" in f.name:
+                continue
+            if f.suffix.lstrip(".").isdigit():
+                stems_to_process.add(f.stem)
+
+        if not stems_to_process:
+            LOGGER.warning("No lgRefl files found in %s", folder_path)
+            return pd.DataFrame()
+
+        stems_to_process = sorted(stems_to_process)
+        LOGGER.debug("Processing %d stems: %s", len(stems_to_process), stems_to_process)
+
+    # Process each stem and combine results
+    all_dfs = []
+    for stem in stems_to_process:
+        lg_files = list(folder_path.glob(f"{stem}.*"))
+        if not lg_files:
+            LOGGER.warning("No lgRefl files found for stem %s in %s", stem, folder_name)
+            continue
+
+        # Compute all rows for this stem
+        df_stem = compute_monomer_max_row(
+            file_path=lg_files[0],
+            peak_min=peak_min,
+            peak_max=peak_max,
+        )
+
+        if not df_stem.empty:
+            all_dfs.append(df_stem)
+
+    if not all_dfs:
+        LOGGER.warning("No data computed for any stem in %s", folder_name)
+        return pd.DataFrame()
+
+    # Combine all stems into one DataFrame
+    df_all = pd.concat(all_dfs, ignore_index=True)
+
+    if df_all.empty:
+        return df_all
+
+    # Overwrite the CSV (not append)
+    filename = f"{folder_name}_monomerMax.csv"
+    path = os.path.join(save_dir, filename)
+    df_all.to_csv(path, index=False)
+    LOGGER.debug("Saved monomer max to %s", path)
+
+    return df_all
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s"
     )
-    return pd.DataFrame([row.__dict__])
+
+    # Example: run for a specific folder (stem is auto-detected)
+    FOLDER_NAME = "nn1120-3_pd_ceo2_004"
+
+    df = compute_and_save_monomer_max(FOLDER_NAME)

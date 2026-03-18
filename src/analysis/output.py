@@ -311,8 +311,8 @@ def save_monomer_max_df(
     file_name: str,
     save_dir: str,
 ) -> str:
-    """Save or append monomer max results to CSV."""
+    """Save monomer max results to CSV (overwrites existing file)."""
     filename = f"{file_name}_monomerMax.csv"
     path = os.path.join(save_dir, filename)
-    save_data(new_data=df_monomer_max, file_path=path, axis=0)
+    df_monomer_max.to_csv(path, index=False)
     return path

@@ -26,6 +26,9 @@ data:
   # Directory for README-derived outputs.
   readme: "X:\\peakFit"
 
+  # Directory for log reflectance outputs.
+  lg_refl: "C:\\Data\\OpusConvert_lgRfl"
+
   # Visualization subfolders (used with data.figures).
   plot_kinetics_fit: "plot_kinetics_fit"
   plot_area_vs_time: "plot_area_vs_time"

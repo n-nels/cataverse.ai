@@ -56,8 +56,24 @@ class KineticFit:
 
 
 if __name__ == "__main__":
-    kinetic_fit = KineticFit(
-        input_path=r"X:\peakFit\20260223_215629_pd_ceo2_003-119_CarbonylPeakFitParams.csv",
-        output_path=r"X:\peakFit\20260223_215629_pd_ceo2_003-119_CarbonylPeakArea_new.csv",
-    )
-    kinetic_fit.run()
+
+    # kinetic_fit = KineticFit(
+    #     input_path=r"X:\peakFit\20260223_215629_pd_ceo2_003-119_CarbonylPeakFitParams.csv",
+    #     output_path=r"X:\peakFit\20260223_215629_pd_ceo2_003-119_CarbonylPeakArea_new.csv",
+    # )
+    # kinetic_fit.run()
+
+# ---------------------------------------------------------------------------------------------------
+
+    file_directory = r"C:\Data\OpusConvert_subIFG_lgRfl\nn1120-3_pd_ceo2_004"
+    name = r"20260307_203322_pd_ceo2_004-002"
+
+    for file_name in os.listdir(file_directory):
+        if name in file_name:
+            file_path = os.path.join(file_directory, file_name)
+            if os.path.isfile(file_path):
+                try:
+                    print(f"Processing {file_path}...")
+                    KineticFit.run_main(file_path)
+                except Exception as e:
+                    print(e)

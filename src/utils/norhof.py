@@ -30,7 +30,7 @@ pump_on = "pon.txt"
 pump_off = "pof.txt"
 
 # Specify cyle and wait times
-cycle_time = 5 * 3600  # h * s/h (default is 7 hours)
+cycle_time = 7 * 3600  # h * s/h (default is 7 hours)
 wait_time = 20 * 60  # min * s/min
 
 # Run indefinitely

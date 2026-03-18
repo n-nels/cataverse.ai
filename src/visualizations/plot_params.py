@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 import logging
 import sys
-from typing import cast
+from typing import cast, Literal
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,31 +21,41 @@ from src.core import config
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_DATASET_FOLDERS = ["nn1120-2_pd_ceo2_000"]
-DEFAULT_SCAN_PARENT = True
+DEFAULT_DATASET_FOLDERS = ["nn1120-3_pd_ceo2_004"]
+DEFAULT_SCAN_PARENT = False
 DEFAULT_PEAK_NAMES = ["monomer_sum", "cluster_sum"]
 DEFAULT_PFO_PARAMETERS = [
-    "pfo_ka_s-1",
-    "pfo_kd_s-1",
-    "pfo_qe_au",
-    "pfo_Keq_au",
+    "pfo_k_s-1",
+    "pfo_q_e_au",
     "pfo_q0_au",
     "pfo_r^2",
     "pfo_rmse",
 ]
+DEFAULT_SECONDARY_PFO_PARAMETERS = [
+    "pfo-sec_k_a_s-1",
+    "pfo-sec_q_e_au",
+    "pfo-sec_k_s_s-1",
+    "pfo-sec_k_p_s-1",
+    "pfo-sec_q_inf_au",
+    "pfo-sec_q0_au",
+    "pfo-sec_r^2",
+    "pfo-sec_rmse",
+]
 DEFAULT_DELTA_GROUP: str | None = None
 DEFAULT_SHOW = False
 DEFAULT_STDDEV_THRESHOLD: float | None = None  # Disable filtering by stddev for now
+DEFAULT_MODEL: Literal["pfo", "secondary"] = "secondary"
 PARENT_OUTPUT_SUBDIR = "plot_params_all"
 
 
 def _resolve_output_path(
-    output_dir: Path, base_name: str, peak_name: str, parameter: str
+    output_dir: Path, base_name: str, peak_name: str, parameter: str, model: str = ""
 ) -> Path:
     safe_base = base_name.replace(" ", "_")
     safe_peak = peak_name.replace(" ", "_")
     safe_param = parameter.replace(" ", "_")
-    return output_dir / f"{safe_base}_{safe_peak}_{safe_param}.tiff"
+    model_suffix = f"_{model}" if model else ""
+    return output_dir / f"{safe_base}_{safe_peak}_{safe_param}{model_suffix}.tiff"
 
 
 def _resolve_dataset_paths(
@@ -81,6 +91,7 @@ def _extract_parameter_value(
     parameter: str,
     *,
     delta_group: str | None,
+    model: Literal["pfo", "secondary"] = "pfo",
 ) -> float | None:
     df = df.copy()
     if "Time (s)" not in df.columns:
@@ -94,13 +105,22 @@ def _extract_parameter_value(
     if parameter_column not in df.columns or bool(df[parameter_column].isna().all()):
         return None
 
-    base_params = {
-        "pfo_ka_s-1",
-        "pfo_kd_s-1",
-        "pfo_qe_au",
-        "pfo_Keq_au",
-        "pfo_q0_au",
-    }
+    # Define base params based on model
+    if model == "secondary":
+        base_params = {
+            "pfo-sec_k_a_s-1",
+            "pfo-sec_q_e_au",
+            "pfo-sec_k_s_s-1",
+            "pfo-sec_k_p_s-1",
+            "pfo-sec_q_inf_au",
+            "pfo-sec_q0_au",
+        }
+    else:
+        base_params = {
+            "pfo_k_s-1",
+            "pfo_q_e_au",
+            "pfo_q0_au",
+        }
     pre_column = f"pre_{parameter}"
 
     df["Time (s)"] = pd.to_numeric(df["Time (s)"], errors="coerce")
@@ -180,6 +200,7 @@ def _collect_parameter_points(
     parameter: str,
     *,
     delta_group: str | None,
+    model: Literal["pfo", "secondary"] = "pfo",
 ) -> tuple[list[int], list[float], list[bool | None]]:
     experiment_numbers: list[int] = []
     parameter_values: list[float] = []
@@ -199,6 +220,7 @@ def _collect_parameter_points(
             df_peak,
             parameter,
             delta_group=delta_group,
+            model=model,
         )
         if param_value is None:
             continue
@@ -275,6 +297,7 @@ def plot_parameter_by_experiment(
     base_name: str,
     *,
     delta_group: str | None,
+    model: Literal["pfo", "secondary"] = "pfo",
 ) -> None:
     """Plot parameter values versus experiment number for each peak name."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -300,6 +323,7 @@ def plot_parameter_by_experiment(
                     peak_name,
                     parameter,
                     delta_group=delta_group,
+                    model=model,
                 )
                 if not parameter_values:
                     continue
@@ -343,22 +367,23 @@ def plot_parameter_by_experiment(
                 plt.xlabel("Index")
                 plt.ylabel(parameter)
                 positive_values = [value for value in all_values if value > 0]
-                use_log = "k" in parameter and len(positive_values) == len(all_values)
-                plt.yscale("log" if use_log else "linear")
-                if use_log:
-                    y_max = max(positive_values) * 1.02
-                    y_min = min(positive_values) * 0.98
-                else:
-                    y_max = max(all_values) * 1.02
-                    y_min = -0.02
-                plt.ylim(bottom=y_min, top=y_max)
-                if parameter in {"pfo_qe_au"}:
-                    plt.ylim(bottom=-0.02, top=2)
+                # use_log = "k" in parameter and len(positive_values) == len(all_values)
+                # plt.yscale("log" if use_log else "linear")
+                # if use_log:
+                #     y_max = max(positive_values) * 1.02
+                #     y_min = min(positive_values) * 0.98
+                # else:
+                #     y_max = max(all_values) * 1.02
+                #     # y_min = -0.02
+                # plt.ylim(top=y_max)
+                # # Add secondary-specific y-limits
+                # # if parameter in {"pfo_qe_au"}:
+                # #     plt.ylim(bottom=-0.02, top=2)
                 plt.title(f"{peak_name}: {parameter}")
                 plt.legend(fontsize=8, loc="best")
                 plt.tight_layout()
                 output_path = _resolve_output_path(
-                    output_dir, base_name, peak_name, parameter
+                    output_dir, base_name, peak_name, parameter, model=model
                 )
                 plt.savefig(output_path, dpi=300)
                 if DEFAULT_SHOW:
@@ -375,6 +400,7 @@ def plot_params_folder(
     peak_names: list[str] | None = None,
     parameters: list[str] | None = None,
     delta_group: str | None = DEFAULT_DELTA_GROUP,
+    model: Literal["pfo", "secondary"] = "pfo",
 ) -> None:
     """Plot parameter trends for a single folder."""
     file_path_obj = Path(file_path)
@@ -412,13 +438,22 @@ def plot_params_folder(
         )
     )
 
+    # Select parameters based on model
+    if parameters is None:
+        parameters = (
+            DEFAULT_SECONDARY_PFO_PARAMETERS
+            if model == "secondary"
+            else DEFAULT_PFO_PARAMETERS
+        )
+
     plot_parameter_by_experiment(
         [csv_path.parent],
         peak_names or DEFAULT_PEAK_NAMES,
-        parameters or DEFAULT_PFO_PARAMETERS,
+        parameters,
         figure_dir,
         base_name,
         delta_group=delta_group,
+        model=model,
     )
 
 
@@ -428,6 +463,7 @@ def plot_params_all(
     peak_names: list[str] | None = None,
     parameters: list[str] | None = None,
     delta_group: str | None = DEFAULT_DELTA_GROUP,
+    model: Literal["pfo", "secondary"] = "pfo",
 ) -> None:
     """Plot parameter trends for every peak-area CSV in a dataset folder."""
     dataset_paths = _resolve_dataset_paths(dataset_folders=[folder])
@@ -442,17 +478,28 @@ def plot_params_all(
         )
     )
 
+    # Select parameters based on model
+    if parameters is None:
+        parameters = (
+            DEFAULT_SECONDARY_PFO_PARAMETERS
+            if model == "secondary"
+            else DEFAULT_PFO_PARAMETERS
+        )
+
     plot_parameter_by_experiment(
         dataset_paths,
         peak_names or DEFAULT_PEAK_NAMES,
-        parameters or DEFAULT_PFO_PARAMETERS,
+        parameters,
         output_dir,
         folder,
         delta_group=delta_group,
+        model=model,
     )
 
 
-def main() -> None:
+def main(
+    model: Literal["pfo", "secondary"] = DEFAULT_MODEL,
+) -> None:
     """CLI entry point for plotting parameter trends."""
     dataset_paths = _resolve_dataset_paths(
         dataset_folders=DEFAULT_DATASET_FOLDERS, scan_parent=DEFAULT_SCAN_PARENT
@@ -472,7 +519,13 @@ def main() -> None:
                 config.get_path("data.plot_params"),
             )
         )
-    parameters = DEFAULT_PFO_PARAMETERS
+
+    # Select parameters based on model
+    parameters = (
+        DEFAULT_SECONDARY_PFO_PARAMETERS
+        if model == "secondary"
+        else DEFAULT_PFO_PARAMETERS
+    )
 
     plot_parameter_by_experiment(
         dataset_paths,
@@ -481,6 +534,7 @@ def main() -> None:
         output_dir,
         dataset_label,
         delta_group=DEFAULT_DELTA_GROUP,
+        model=model,
     )
 
 

@@ -31,3 +31,6 @@ def readme_to_csv(file_path: str) -> None:
     df = pd.DataFrame(exp_params)
     output_file = file_path.replace("README.md", "expParams.csv")
     df.to_csv(output_file, index=False)
+
+if __name__ == "__main__":
+    readme_to_csv(r"X:\peakFit\nn1120-3_pd_ceo2_004\20260307_203322_pd_ceo2_004-002_README.md")

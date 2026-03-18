@@ -61,7 +61,7 @@ def handle_readme() -> str:
 def handle_end_experiment() -> str:
     state = get_state()
     paths = ensure_paths(state)
-    for fileid in state.all_fileids[-10:]:
+    for fileid in state.all_fileids[-11:]:
         try:
             unload_file(fileid)
         except Exception as exc:
@@ -96,7 +96,7 @@ def handle_end_experiment() -> str:
                 f"file_path={file_path} folder_name={folder_name} "
                 f"base_name={base_name}: {exc}"
             )
-    subprocess.run([paths.cloud_script], shell=True, check=True)
+    # subprocess.run([paths.cloud_script], shell=True, check=True)
     return "End of experiment, files copied to cloud"
 
 
@@ -106,13 +106,12 @@ def handle_message(message: dict) -> Optional[str]:
     if message.get("readme"):
         return handle_readme()
     if message.get("end_experiment"):
-        if message.get("foldername") and message.get("filename"):
-            state = get_state()
-            state.foldername = message["foldername"]
-            state.filename = message["filename"] + "_evacuation"
-            define_paths()
-            fileid = do_sample_measurement(state.nss_value, state.n)
-            unload_file(fileid)
+        state = get_state()
+        state.foldername = message["foldername"]
+        state.filename = message["filename"]
+        define_paths()
+        fileid = do_sample_measurement(state.nss_value, state.n)
+        unload_file(fileid)
         return handle_end_experiment()
 
     required_keys = ["foldername", "filename", "do_fit", "do_bckg", "reset_fileids"]

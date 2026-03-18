@@ -11,6 +11,7 @@ import sys
 from typing import cast
 
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import pandas as pd
 
 path = Path(__file__).parent.parent.parent
@@ -22,7 +23,7 @@ from src.core import config
 LOGGER = logging.getLogger(__name__)
 
 PLOT_ALL = False
-FOLDER_NAME = "nn1120-3_pd_ceo2_001"
+FOLDER_NAME = "nn1120-3_pd_ceo2_004"
 
 
 def _resolve_input_root() -> Path:
@@ -38,6 +39,8 @@ def load_folder_data(folder_name: str, input_root: Path) -> pd.DataFrame:
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV not found: {csv_path}")
     df = pd.read_csv(csv_path)
+    # Filter out isoX rows
+    df = df[~df["file_name"].str.contains("isoX", case=False, na=False)]
     df["folder"] = folder_name
     return df
 
@@ -49,6 +52,8 @@ def load_all_data(input_root: Path) -> pd.DataFrame:
     frames = []
     for path in csv_files:
         df = pd.read_csv(path)
+        # Filter out isoX rows
+        df = df[~df["file_name"].str.contains("isoX", case=False, na=False)]
         if "folder" not in df.columns:
             df["folder"] = path.parent.name
         frames.append(df)
@@ -81,12 +86,16 @@ def plot_mode(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Use explicit normalization (0-1) since time_total_fraction is already normalized
+    norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
+
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.scatter(
+    scatter = ax.scatter(
         df["x_index"],
-        df["peak_bin"],
+        df["max_monomer_peak"],
         c=df["time_total_fraction"],
         cmap="plasma",
+        norm=norm,
         s=60,
         edgecolors="black",
         linewidth=0.5,
@@ -100,7 +109,7 @@ def plot_mode(
     for boundary in boundaries:
         ax.axvline(boundary - 0.5, color="gray", linestyle="--", linewidth=0.8)
 
-    cbar = plt.colorbar(ax.collections[0], ax=ax)
+    cbar = plt.colorbar(scatter, ax=ax)
     cbar.set_label("Time Fraction")
 
     plt.tight_layout()
@@ -123,14 +132,14 @@ def plot_monomer_max(
 
     if plot_all:
         df = load_all_data(input_root)
-        title = "All Folders - Dominant Monomer Peak"
+        title = "All Folders"
         all_output = Path(config.get_path("data.plot_monomer_max_all"))
         output_path = all_output / "all_monomer_max.tiff"
     else:
         if not folder_name:
             raise ValueError("folder_name is required when plot_all is False")
         df = load_folder_data(folder_name, input_root)
-        title = f"{folder_name} - Dominant Monomer Peak"
+        title = f"{folder_name}"
         output_path = output_root / folder_name / f"{folder_name}_monomerMax.tiff"
     df = build_stem_index(df)
     df_mode = select_mode(df)

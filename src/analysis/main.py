@@ -303,11 +303,13 @@ class DataAnalysisRunner:
             )
         )
         if lg_refl_path.exists():
+            # Compute ALL rows for the folder to get correct whole-run
+            # time_total_fraction values, then overwrite the CSV
             df_monomer_max = compute_monomer_max_row(file_path=lg_refl_path)
             if not df_monomer_max.empty:
                 save_monomer_max_df(
                     df_monomer_max,
-                    paths.file_name,
+                    paths.folder_name,
                     paths.save_dir,
                 )
 
