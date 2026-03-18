@@ -80,15 +80,15 @@ Clean up the operations layer. This is the highest-risk area — actuator sequen
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 3.1 | Clean up `actuator_control.py` — replace `print()` with `logging` | `src/operations/actuator_control.py` | [ ] |
-| 3.2 | Clean up `actuator_control.py` — add type hints where missing | `src/operations/actuator_control.py` | [ ] |
-| 3.3 | Clean up `actuator_control.py` — load any hardcoded values from config | `src/operations/actuator_control.py` | [ ] |
-| 3.4 | Review `actuator_control.py` — document every function's behavior in its docstring without changing logic | `src/operations/actuator_control.py` | [ ] |
-| 3.5 | Clean up `instrument_operations.py` — replace `print()` with `logging` | `src/operations/instrument_operations.py` | [ ] |
-| 3.6 | Clean up `instrument_operations.py` — replace hardcoded paths with config lookups | `src/operations/instrument_operations.py` | [ ] |
-| 3.7 | Clean up `instrument_operations.py` — add type hints where missing | `src/operations/instrument_operations.py` | [ ] |
-| 3.8 | Review `instrument_operations.py` — document every function's behavior in its docstring without changing logic | `src/operations/instrument_operations.py` | [ ] |
-| 3.9 | Update `operations/__init__.py` exports | `src/operations/__init__.py` | [ ] |
+| 3.1 | Clean up `actuator_control.py` — replace `print()` with `logging` | `src/operations/actuator_control.py` | [x] |
+| 3.2 | Clean up `actuator_control.py` — add type hints where missing | `src/operations/actuator_control.py` | [x] |
+| 3.3 | Clean up `actuator_control.py` — load any hardcoded values from config | `src/operations/actuator_control.py` | [x] |
+| 3.4 | Review `actuator_control.py` — document every function's behavior in its docstring without changing logic | `src/operations/actuator_control.py` | [x] |
+| 3.5 | Clean up `instrument_operations.py` — replace `print()` with `logging` | `src/operations/instrument_operations.py` | [x] |
+| 3.6 | Clean up `instrument_operations.py` — replace hardcoded paths with config lookups | `src/operations/instrument_operations.py` | [x] |
+| 3.7 | Clean up `instrument_operations.py` — add type hints where missing | `src/operations/instrument_operations.py` | [x] |
+| 3.8 | Review `instrument_operations.py` — document every function's behavior in its docstring without changing logic | `src/operations/instrument_operations.py` | [x] |
+| 3.9 | Update `operations/__init__.py` exports | `src/operations/__init__.py` | [x] |
 
 **Validation:** Every method on `ActuatorControl` and `InstrumentOperations` must produce the same sequence of device calls in the same order with the same values. Pay special attention to `time.sleep()` durations, voltage values (1.0 for close, 5.0 for open), and pressure check thresholds.
 
@@ -100,15 +100,15 @@ Clean up experiment protocols. This file is large and mixes several concerns —
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 4.1 | Clean up `experiment_protocols.py` — replace hardcoded paths (`C://Data//...`) with config lookups | `src/experiments/protocols/experiment_protocols.py` | [ ] |
-| 4.2 | Clean up `experiment_protocols.py` — replace `print()` with `logging` | `src/experiments/protocols/experiment_protocols.py` | [ ] |
-| 4.3 | Clean up `experiment_protocols.py` — add type hints where missing | `src/experiments/protocols/experiment_protocols.py` | [ ] |
-| 4.4 | Flatten `experiments/protocols/` — move `experiment_protocols.py` up to `experiments/experiment_protocols.py`, remove `protocols/` sub-directory | directory cleanup, update imports | [ ] |
-| 4.5 | Split `experiment_parameters` into its own module | `src/experiments/parameters.py` | [ ] |
-| 4.6 | Split `adsorption_experiment` into its own module | `src/experiments/adsorption.py` | [ ] |
-| 4.7 | Split `isotopic_exchange_calibration` into its own module | `src/experiments/isotopic_exchange.py` | [ ] |
-| 4.8 | Remove the original `experiment_protocols.py` once all classes are extracted | `src/experiments/experiment_protocols.py` | [ ] |
-| 4.9 | Update `experiments/__init__.py` exports | `src/experiments/__init__.py` | [ ] |
+| 4.1 | Clean up `experiment_protocols.py` — replace hardcoded paths (`C://Data//...`) with config lookups | `src/experiments/protocols/experiment_protocols.py` | [x] |
+| 4.2 | Clean up `experiment_protocols.py` — replace `print()` with `logging` | `src/experiments/protocols/experiment_protocols.py` | [x] |
+| 4.3 | Clean up `experiment_protocols.py` — add type hints where missing | `src/experiments/protocols/experiment_protocols.py` | [x] |
+| 4.4 | Flatten `experiments/protocols/` — move `experiment_protocols.py` up to `experiments/experiment_protocols.py`, remove `protocols/` sub-directory | directory cleanup, update imports | [x] |
+| 4.5 | Split `experiment_parameters` into its own module | `src/experiments/parameters.py` | [x] |
+| 4.6 | Split `adsorption_experiment` into its own module | `src/experiments/adsorption.py` | [x] |
+| 4.7 | Split `isotopic_exchange_calibration` into its own module | `src/experiments/isotopic_exchange.py` | [x] |
+| 4.8 | Remove the original `experiment_protocols.py` once all classes are extracted | `src/experiments/experiment_protocols.py` | [x] |
+| 4.9 | Update `experiments/__init__.py` exports | `src/experiments/__init__.py` | [x] |
 
 **Validation:** `experiment_parameters`, `adsorption_experiment`, and `isotopic_exchange_calibration` must be importable with the same interfaces. The threading behavior (opus_thread, gas_thread, pressure_thread) and the order of operations in experiment sequences must be identical.
 

@@ -26,11 +26,9 @@ from src.core.config import (
 from src.devices.network_messaging import NetworkMessaging
 from src.devices.ni_usb6009 import ActuatorManager, device_map
 from src.devices.serial_devices import SerialDevices
-from src.experiments.protocols.experiment_protocols import (
-    adsorption_experiment,
-    experiment_parameters,
-    isotopic_exchange_calibration,
-)
+from src.experiments.adsorption import adsorption_experiment
+from src.experiments.isotopic_exchange import isotopic_exchange_calibration
+from src.experiments.parameters import experiment_parameters
 from src.operations.actuator_control import ActuatorControl
 from src.operations.instrument_operations import InstrumentOperations
 
@@ -106,7 +104,7 @@ def run_isotopic_exchange_calibration():
                                 )
     exp_params.experiment_id()
     exp_params.material_parameters()
-    isoX = isotopic_exchange_calibration(exp_params)
+    isoX = isotopic_exchange_calibration(exp_params, serial, actuator_control, instrument_operations)
 
     # clean surface
     isoX.chiller_variac_state(chiller_cmd= True, variac_cmd=True, variac_vsl_cmd=True)

@@ -51,12 +51,19 @@ _system_volumes_l = _require(_system_config, "volumes_l", "system.yaml")
 
 _sample = _require(_sample_config, "sample", "sample.yaml")
 _kasa_plugs = _require(_devices_config, "kasa_plugs", "devices.yaml")
+_paths = _require(_paths_config, "paths", "paths.yaml")
+_share_drive_paths = _require(_paths, "share_drive", "paths.yaml")
 _serial_config = _require(_devices_config, "serial", "devices.yaml")
 _actuators_config = _require(_devices_config, "actuators", "devices.yaml")
 _serial_mks = _require(_serial_config, "mks", "devices.yaml")
 _serial_watlow_ir = _require(_serial_config, "watlow_ir", "devices.yaml")
 _serial_extrel_ms = _require(_serial_config, "extrel_ms", "devices.yaml")
 _actuator_device_map = _require(_actuators_config, "device_map", "devices.yaml")
+_actuator_voltages = _require(_actuators_config, "voltages", "devices.yaml")
+_actuator_timing_s = _require(_actuators_config, "timing_s", "devices.yaml")
+_actuator_safety_limits_torr = _require(
+    _actuators_config, "safety_limits_torr", "devices.yaml"
+)
 _network_config = _require(_devices_config, "network", "devices.yaml")
 _network_opus = _require(_network_config, "opus", "devices.yaml")
 _network_zmq = _require(_network_config, "zmq", "devices.yaml")
@@ -109,9 +116,27 @@ _raw_ni_usb6009_device_map = {
     for actuator_id, device_channel in _actuator_device_map.items()
 }
 
+_raw_actuator_voltage_closed = _actuator_voltages["closed"]
+_raw_actuator_voltage_open = _actuator_voltages["open"]
+_raw_actuator_voltage_max_write = _actuator_voltages["max_write"]
+_raw_actuator_post_write_sleep_s = _actuator_timing_s["post_write_sleep"]
+_raw_actuator_turbo_pressure_poll_s = _actuator_timing_s["turbo_pressure_poll"]
+_raw_actuator_turbo_open_max_manifold_torr = _actuator_safety_limits_torr[
+    "turbo_open_max_manifold"
+]
+_raw_actuator_mass_spec_open_max_cell_torr = _actuator_safety_limits_torr[
+    "mass_spec_open_max_cell"
+]
+
 _raw_opus_default_ip = _network_opus["ip"]
 _raw_opus_default_port = _network_opus["port"]
 _raw_zmq_receive_timeout_ms = _network_zmq["receive_timeout_ms"]
+
+_raw_data_directory = _paths["data_directory"]
+_raw_autonomous_parameters_directory = _paths["autonomous_parameters_directory"]
+_raw_share_drive_peak_fit_root = _share_drive_paths["peak_fit_root"]
+_raw_share_drive_pressure_data_root = _share_drive_paths["pressure_data_root"]
+_raw_share_drive_ms_calibrations_root = _share_drive_paths["ms_calibrations_root"]
 
 # Public raw values
 R = _raw_R
@@ -156,9 +181,23 @@ extrel_ms_timeout_s = _raw_extrel_ms_timeout_s
 
 ni_usb6009_device_map = _raw_ni_usb6009_device_map
 
+actuator_voltage_closed = _raw_actuator_voltage_closed
+actuator_voltage_open = _raw_actuator_voltage_open
+actuator_voltage_max_write = _raw_actuator_voltage_max_write
+actuator_post_write_sleep_s = _raw_actuator_post_write_sleep_s
+actuator_turbo_pressure_poll_s = _raw_actuator_turbo_pressure_poll_s
+actuator_turbo_open_max_manifold_torr = _raw_actuator_turbo_open_max_manifold_torr
+actuator_mass_spec_open_max_cell_torr = _raw_actuator_mass_spec_open_max_cell_torr
+
 opus_default_ip = _raw_opus_default_ip
 opus_default_port = _raw_opus_default_port
 zmq_receive_timeout_ms = _raw_zmq_receive_timeout_ms
+
+data_directory = _raw_data_directory
+autonomous_parameters_directory = _raw_autonomous_parameters_directory
+share_drive_peak_fit_root = _raw_share_drive_peak_fit_root
+share_drive_pressure_data_root = _raw_share_drive_pressure_data_root
+share_drive_ms_calibrations_root = _raw_share_drive_ms_calibrations_root
 
 # ---------------------------------------------------------------------------
 # Derived values (computed from raw values)

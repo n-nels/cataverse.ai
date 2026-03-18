@@ -35,6 +35,19 @@ kasa_plugs:
   variac_id_vsl: "8006CF042D478C8A62FE5B07A53B29B8223A2135"
 
 actuators:
+  voltages:
+    closed: 1.0
+    open: 5.0
+    max_write: 5.0
+
+  timing_s:
+    post_write_sleep: 5
+    turbo_pressure_poll: 2
+
+  safety_limits_torr:
+    turbo_open_max_manifold: 0.02
+    mass_spec_open_max_cell: 0.1
+
   device_map:
     v16: [act1-2, ao0]
     RoughPump: [act1-2, ao1]

@@ -6,13 +6,16 @@ It is designed to work with the ActuatorManager, SerialDevices, and NetworkMessa
 """
 
 import csv
+import builtins
 import os
 import struct
 import threading
 import time
 import sys
+import logging
 from pathlib import Path
 from datetime import datetime, timedelta
+from typing import Any
 
 SRC_PATH = Path(__file__).resolve().parent.parent.parent
 if str(SRC_PATH) not in sys.path:
@@ -20,6 +23,7 @@ if str(SRC_PATH) not in sys.path:
 
 from src.core.config import (
     R,
+    data_directory,
     mass,
     metal_load,
     t_mfld,
@@ -34,8 +38,30 @@ from src.devices.kasa_plugs import KasaPlugs
 from src.utils.data_logging import create_directory, log_actuator_state, log_temperature
 
 
+logger = logging.getLogger(__name__)
+
+
+def print(*args: Any, **kwargs: Any) -> None:
+    """Module-local print compatibility routed to logging.
+
+    Preserves built-in print behavior while additionally logging the same message.
+    """
+    builtins.print(*args, **kwargs)
+
+    sep = kwargs.get("sep", " ")
+    if sep is None:
+        sep = " "
+    end = kwargs.get("end", "\n")
+    if end is None:
+        end = "\n"
+    message = sep.join(str(arg) for arg in args)
+    if end != "\n":
+        message = f"{message}{end}"
+    logger.info(message)
+
+
 class InstrumentOperations:
-    def __init__(self, serial, actuator_control, opus):
+    def __init__(self, serial: Any, actuator_control: Any, opus: Any) -> None:
         """
         Initialize the InstrumentOperations class, which handles the operations of the instruments used in the experiment.
         """
@@ -44,12 +70,41 @@ class InstrumentOperations:
         self.opus = opus
         self.kasa_plugs = KasaPlugs()
 
-    def deliver_gas_to_mfld(self, filename, foldername, id, target, openMS=True) -> tuple:
+    def deliver_gas_to_mfld(
+        self,
+        filename: str | None,
+        foldername: str | None,
+        id: str,
+        target: float,
+        openMS: bool = True,
+    ) -> tuple[str, float]:
         """
-        Deliver gas to the manifold and control the pressure using the actuator control system. Still need a more
-        robust overpressure handling system.
+        Deliver gas to manifold through staged actuator writes and pressure feedback.
+
+        Behavior summary:
+        - Optionally initializes actuator-state logging when ``filename`` is provided.
+        - Closes ``RoughPump``/``TurboPump``/``irCell`` and conditionally opens ``MassSpec``.
+        - Uses iterative write/measure loops with dithered adjustments to approach ``target``.
+        - Uses nested overpressure recovery when pressure readings are non-numeric.
+        - Closes the gas actuator, waits for equilibration, and applies rough-pump trim if needed.
+
+        Args:
+            filename: Optional base name for actuator log output.
+            foldername: Optional folder name under configured data directory.
+            id: Gas actuator identifier to modulate.
+            target: Target manifold pressure.
+            openMS: Whether to open ``MassSpec`` during manifold filling.
+
+        Returns:
+            Tuple of actuator id and final manifold pressure increase from start.
         """
-        def pressure_difference(p_mfld_final, p_mfld_initial):
+        def pressure_difference(p_mfld_final: Any, p_mfld_initial: Any) -> float:
+            """Return absolute manifold pressure delta or execute overpressure recovery.
+
+            If subtraction fails due to non-numeric pressure values, this helper triggers
+            the existing overpressure recovery routine (close gas actuator, rough-pump,
+            wait for pressure recovery), then returns the recovered manifold pressure.
+            """
             global p_mfld_f # to handle while loop error
             try:
                 return abs(p_mfld_final - p_mfld_initial)
@@ -75,8 +130,8 @@ class InstrumentOperations:
                 return float(p_mfld_f)
                 
         if filename is not None:
-            dir_actLog = 'C://Data//' + foldername
-            path_actLog = dir_actLog + '//' + filename + '_actLog.csv'
+            dir_actLog = os.path.join(data_directory, str(foldername))
+            path_actLog = os.path.join(dir_actLog, filename + '_actLog.csv')
             create_directory(dir_actLog)
 
         self.actuator_control.actuator_close('RoughPump')
@@ -507,7 +562,13 @@ class InstrumentOperations:
         
         return id, p_mfld_f
 
-    def deliver_gas_to_cell(self): # this is for large amounts of gas, pressure dependent
+    def deliver_gas_to_cell(self) -> None: # this is for large amounts of gas, pressure dependent
+        """Admit gas to the IR cell using staged actuator writes and pressure dithering.
+
+        This routine closes MassSpec, incrementally opens ``irCell`` with fixed timing,
+        repeatedly checks manifold pressure deltas, and applies dithered write/settle
+        loops until pressure stabilization criteria are met before final opening steps.
+        """
 
         self.actuator_control.actuator_close('MassSpec')
 
@@ -620,8 +681,21 @@ class InstrumentOperations:
         print(id, 'write value is', value, 'at', datetime.now())
         time.sleep(30)
 
-    def evacuate_cell(self, id):
-        """should check pressure first, if safe for turbo open, open turbo?"""
+    def evacuate_cell(self, id: str) -> str:
+        """Evacuate cell-side volume using staged pump-valve opening sequence.
+
+        Behavior:
+        - Closes ``TurboPump`` and ``MassSpec`` first.
+        - Uses ``RoughPump`` path for stepped opening when needed.
+        - Opens ``irCell`` and advances actuator writes with pressure checks and waits.
+        - Optionally opens ``TurboPump`` at the end when roughing branch is used.
+
+        Args:
+            id: Requested evacuation actuator identifier.
+
+        Returns:
+            Final actuator id used for evacuation flow.
+        """
         self.actuator_control.actuator_close('TurboPump')
         self.actuator_control.actuator_close('MassSpec')
 
@@ -690,7 +764,12 @@ class InstrumentOperations:
 
         return id
 
-    def cell_open_admit(self):  # this is for IR, fixed time
+    def cell_open_admit(self) -> None:  # this is for IR, fixed time
+        """Open ``irCell`` using a fixed-time calibration-like voltage schedule.
+
+        The sequence uses predefined step increments, intermittent dithering, and fixed
+        wait durations validated for this hardware path.
+        """
         
         self.actuator_control.actuator_close('MassSpec')
 
@@ -751,7 +830,12 @@ class InstrumentOperations:
         print(id, 'write value is', value, 'at', datetime.now())
         time.sleep(20)
 
-    def MassSpec_open_calibration(self):
+    def MassSpec_open_calibration(self) -> None:
+        """Open ``MassSpec`` using the legacy calibration stepping profile.
+
+        Applies staged voltage ramps and dither blocks with specific loop counts and
+        hold times, then closes the valve at the end of the routine.
+        """
 
         id = 'MassSpec'
         value = 1.0
@@ -879,17 +963,42 @@ class InstrumentOperations:
 
         self.actuator_control.actuator_close(id)
 
-    def Watlow(self, filename, foldername, target_temp, duration, rate, variac_cmd, update_interval=2):
+    def Watlow(
+        self,
+        filename: str | None,
+        foldername: str | None,
+        target_temp: float,
+        duration: float,
+        rate: float,
+        variac_cmd: bool,
+        update_interval: int = 2,
+    ) -> tuple[float, float, float]:
+        """Control Watlow temperature ramp/hold behavior for IR cell operations.
+
+        Depending on current temperature and ``rate``, this method performs ramped
+        heating, controlled cooling handling, or direct hold behavior while optionally
+        coordinating variac plug state and recording temperature logs.
+        """
         global dir_tempLog, path_tempLog
 
-        def generate_temp_list(start_temp, end_temp, rate, interval):
+        def generate_temp_list(
+            start_temp: float, end_temp: float, rate: float, interval: int
+        ) -> list[float]:
+            """Generate the target-temperature list used for ramp execution."""
 
             total_seconds = float(((end_temp - start_temp) / rate) * 60)
             steps = int(total_seconds / interval)
 
             return [round(start_temp + (rate * i * interval / 60.0),1) for i in range(steps + 1)]
 
-        def hold_temp(file_path):
+        def hold_temp(file_path: str | None) -> None:
+            """Hold at the latest target temperature for the hold phase.
+
+            If ``file_path`` is provided, append periodic hold-temperature samples;
+            otherwise execute the existing sleep-only branch with
+            ``time.sleep(end_hold)`` where ``end_hold`` is computed as
+            ``time.time() + duration * 3600``.
+            """
 
             end_hold = time.time() + (duration * 3600)
             print(f"Hold at {target_temp} °C until {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(end_hold))}")
@@ -912,8 +1021,8 @@ class InstrumentOperations:
             return
 
         if filename is not None:
-            dir_tempLog = f"C://Data//{foldername}"
-            path_tempLog = f"{dir_tempLog}//{filename}_tempLog.csv"
+            dir_tempLog = os.path.join(data_directory, str(foldername))
+            path_tempLog = os.path.join(dir_tempLog, f"{filename}_tempLog.csv")
             create_directory(dir_tempLog)
 
         current_temp = self.serial.readTemp_ir()  # °C
@@ -988,7 +1097,7 @@ class InstrumentOperations:
 
         return target_temp, rate, duration
 
-    def calc_pressure(self, p1, v1):
+    def calc_pressure(self, p1: float, v1: float) -> float:
         """Calculate the total pressure in the system using the ideal gas law.
         Args:
             p1 (float): Pressure in manifold (Torr).
@@ -999,20 +1108,33 @@ class InstrumentOperations:
         p_tot = p1 * v1 / v_tot
         return p_tot
 
-    def chiller_state(self, cmd):
-        """use 'True' for on, 'False' for off"""
+    def chiller_state(self, cmd: bool) -> None:
+        """Set chiller smart-plug state through Kasa device control.
+
+        Args:
+            cmd: ``True`` turns chiller on, ``False`` turns chiller off.
+        """
         self.kasa_plugs.chiller_state(cmd)
 
-    def variac_state(self, cmd):
-        """use 'True' for on, 'False' for off"""
+    def variac_state(self, cmd: bool) -> None:
+        """Set variac smart-plug state through Kasa device control.
+
+        Args:
+            cmd: ``True`` turns variac on, ``False`` turns variac off.
+        """
         self.kasa_plugs.variac_state(cmd)
         # self.run_script('cataverse_venv', 'kasa_smartPlug.py', variac_2_id, cmd)
 
-    def kasaPlug_state(self, plug_id, cmd):
-        """use 'True' for on, 'False' for off"""
+    def kasaPlug_state(self, plug_id: str, cmd: bool) -> None:
+        """Set arbitrary Kasa smart-plug state by plug id.
+
+        Args:
+            plug_id: Kasa cloud device id string.
+            cmd: ``True`` for on, ``False`` for off.
+        """
         self.kasa_plugs.kasaPlug_state(plug_id, cmd)
 
-    def run_script(self, env, script, *args):
+    def run_script(self, env: str, script: str, *args: Any) -> None:
         """Compatibility shim for legacy script runner usage."""
         self.kasa_plugs.run_script(env, script, *args)
 
@@ -1109,7 +1231,12 @@ class InstrumentOperations:
             finally:
                 file.close()
 
-    def OpusVertex80(self, message: dict, timeout_ms: int = 300000, retry_on_timeout: bool = True):
+    def OpusVertex80(
+        self,
+        message: dict[str, Any],
+        timeout_ms: int = 300000,
+        retry_on_timeout: bool = True,
+    ) -> str | None:
         """Collect spectrum from OPUS Vertex 80 with timeout handling.
         
         Args:
@@ -1158,8 +1285,21 @@ class InstrumentOperations:
         print("Error: No response from OPUS after timeout and retry")
         return None
 
-    def opusAcquire(self, filename, foldername, repeat, delay, all_fileids, do_bckg, do_fit):
-        """To reset all_fileids, do_bckg, or do_fit set equal to True, else False"""
+    def opusAcquire(
+        self,
+        filename: str,
+        foldername: str,
+        repeat: list[int],
+        delay: list[float],
+        all_fileids: bool,
+        do_bckg: bool,
+        do_fit: bool,
+    ) -> None:
+        """Run repeated OPUS acquisition loops with configured delays.
+
+        Sends optional initialization message when background/reset flags are enabled,
+        then iterates delay/repeat schedule to collect spectra using :meth:`OpusVertex80`.
+        """
 
         message = {
             'foldername': foldername,
@@ -1238,26 +1378,40 @@ class InstrumentOperations:
             finally:
                 file.close()
 
-    def extrel_filament(self, cmd: str):
-        """cmd: 'on' or 'off'"""
-        cmd = 1 if cmd == 'on' else 0
-        success = self.serial.extrel_write(address=0, value=cmd) # put address in config file?
+    def extrel_filament(self, cmd: str) -> None:
+        """Set Extrel filament state via Modbus command register 0.
+
+        Args:
+            cmd: ``'on'`` maps to ``1``; any other value maps to ``0``.
+        """
+        cmd_value = 1 if cmd == 'on' else 0
+        success = self.serial.extrel_write(address=0, value=cmd_value) # put address in config file?
         if success:
-            print(f"Extrel filament turned {cmd}")
+            print(f"Extrel filament turned {cmd_value}")
         else:
             print("Failed to change Extrel filament state")
 
-    def extrel_sequence(self, cmd: str):
-        """cmd: 'start' or 'stop'"""
-        cmd = 2 if cmd == 'start' else 9
-        success = self.serial.extrel_write(address=1, value=cmd) # put address in config file?
+    def extrel_sequence(self, cmd: str) -> None:
+        """Set Extrel acquisition sequence state via register 1.
+
+        Args:
+            cmd: ``'start'`` maps to ``2``; any other value maps to ``9``.
+        """
+        cmd_value = 2 if cmd == 'start' else 9
+        success = self.serial.extrel_write(address=1, value=cmd_value) # put address in config file?
         if success:
-            print("Extrel sequence started" if cmd == 2 else "Extrel sequence stopped")
+            print("Extrel sequence started" if cmd_value == 2 else "Extrel sequence stopped")
         else:
             print("Failed to set Extrel sequence")
 
-    def extrel_stream(self, filename: str, stop_event: threading.Event, 
-                      start_address=2, poll_interval=1.2, unit=1): # put addresses in config file?
+    def extrel_stream(
+        self,
+        filename: str,
+        stop_event: threading.Event,
+        start_address: int = 2,
+        poll_interval: float = 1.2,
+        unit: int = 1,
+    ) -> bool: # put addresses in config file?
         """
         Reads 4 Paired+IEEE754 values in one contiguous block and logs to CSV.
         
@@ -1268,7 +1422,7 @@ class InstrumentOperations:
             poll_interval (float): Time in seconds between readings.
             unit (int): Modbus unit ID.
         """
-        def decode_ieee754_cdab(r0, r1):
+        def decode_ieee754_cdab(r0: int, r1: int) -> float:
             """Decode two Modbus registers (r0, r1) in CDAB order to a float."""
             raw = r1.to_bytes(2, "big") + r0.to_bytes(2, "big")
             return struct.unpack(">f", raw)[0]
