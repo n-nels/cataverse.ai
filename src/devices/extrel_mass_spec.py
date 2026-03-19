@@ -1,10 +1,10 @@
-import logging
 import struct
 import time
 from datetime import datetime
 
 from pymodbus.client import ModbusSerialClient as ModbusClient
 
+from ..core import get_logger
 from ..core.config import (
     extrel_ms_baudrate,
     extrel_ms_bytesize,
@@ -15,7 +15,7 @@ from ..core.config import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ExtrelMassSpec:

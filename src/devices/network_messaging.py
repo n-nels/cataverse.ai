@@ -1,16 +1,16 @@
 ## network_messaging.py
 
 import json
-import logging
 import time
 from typing import Any
 
 import zmq
 
+from ..core import get_logger
 from ..core.config import opus_default_ip, opus_default_port, zmq_receive_timeout_ms
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class NetworkMessaging:

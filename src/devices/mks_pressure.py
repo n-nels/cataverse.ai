@@ -1,13 +1,13 @@
-import logging
 import time
 from datetime import datetime
 
 import serial
 
+from ..core import get_logger
 from ..core.config import mks_serial_baudrate, mks_serial_port, mks_serial_timeout_s
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MKSPressureGauge:

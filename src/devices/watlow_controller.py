@@ -1,9 +1,9 @@
-import logging
 import struct
 import sys
 
 from pymodbus.client import ModbusSerialClient as ModbusClient
 
+from ..core import get_logger
 from ..core.config import (
     watlow_ir_baudrate,
     watlow_ir_bytesize,
@@ -14,7 +14,7 @@ from ..core.config import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class WatlowController:

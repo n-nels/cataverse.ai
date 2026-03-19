@@ -8,7 +8,7 @@ This document tracks the refactoring of the `src/` package. The refactor is **st
 
 ---
 
-## Current Phase: Phase 2
+## Current Phase: Completed (Phases 0–6)
 
 ---
 
@@ -120,13 +120,13 @@ Clean up utility functions and data logging.
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 5.1 | Clean up `data_logging.py` — replace hardcoded paths with config lookups | `src/utils/data_logging.py` | [ ] |
-| 5.2 | Clean up `data_logging.py` — replace `print()` with `logging` | `src/utils/data_logging.py` | [ ] |
-| 5.3 | Clean up `data_logging.py` — add type hints where missing | `src/utils/data_logging.py` | [ ] |
-| 5.4 | Separate concerns in `data_logging.py` — CSV writing, README generation, and directory management are experiment data I/O. Keep these in `data_logging.py`. | `src/utils/data_logging.py` | [ ] |
-| 5.5 | Create `core/logging.py` for Python `logging` module configuration (format, handlers, log levels). All other modules import their logger from here. | `src/core/logging.py` | [ ] |
-| 5.6 | Review `data_processing.py` if it exists — same cleanup | `src/utils/data_processing.py` | [ ] |
-| 5.7 | Update `utils/__init__.py` exports | `src/utils/__init__.py` | [ ] |
+| 5.1 | Clean up `data_logging.py` — replace hardcoded paths with config lookups | `src/utils/data_logging.py` | [x] |
+| 5.2 | Clean up `data_logging.py` — replace `print()` with `logging` | `src/utils/data_logging.py` | [x] |
+| 5.3 | Clean up `data_logging.py` — add type hints where missing | `src/utils/data_logging.py` | [x] |
+| 5.4 | Separate concerns in `data_logging.py` — CSV writing, README generation, and directory management are experiment data I/O. Keep these in `data_logging.py`. | `src/utils/data_logging.py` | [x] |
+| 5.5 | Create `core/logging.py` for Python `logging` module configuration (format, handlers, log levels). All other modules import their logger from here. | `src/core/logging.py` | [x] |
+| 5.6 | Review `data_processing.py` if it exists — same cleanup | `src/utils/data_processing.py` | [x] |
+| 5.7 | Update `utils/__init__.py` exports | `src/utils/__init__.py` | [x] |
 
 ---
 
@@ -136,7 +136,7 @@ Final pass on the top-level package.
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 6.1 | Update `src/__init__.py` to reflect all changes from prior phases | `src/__init__.py` | [ ] |
-| 6.2 | Update `main.py` if any interfaces changed | `main.py` | [ ] |
-| 6.3 | Update `docs/directory_structure.md` to reflect final structure | `docs/directory_structure.md` | [ ] |
-| 6.4 | Final review of all module-level `AGENTS.md` files for accuracy | all `AGENTS.md` files | [ ] |
+| 6.1 | Update `src/__init__.py` to reflect all changes from prior phases | `src/__init__.py` | [x] |
+| 6.2 | Update `main.py` if any interfaces changed | `main.py` | [x] |
+| 6.3 | Update `docs/directory_structure.md` to reflect final structure | `docs/directory_structure.md` | [x] |
+| 6.4 | Final review of all module-level `AGENTS.md` files for accuracy | all `AGENTS.md` files | [x] |

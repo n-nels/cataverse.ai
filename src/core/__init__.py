@@ -23,6 +23,7 @@ from .config import (
     variac_id,
     variac_id_vsl,
 )
+from .logging import configure_logging, get_logger
 
 __all__ = [
     "R",
@@ -46,4 +47,6 @@ __all__ = [
     "chiller_id",
     "variac_id",
     "variac_id_vsl",
+    "configure_logging",
+    "get_logger",
 ]

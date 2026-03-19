@@ -1,13 +1,13 @@
-import logging
 from typing import cast
 
 import nidaqmx
 from nidaqmx.constants import AcquisitionType
 
+from ..core import get_logger
 from ..core.config import ni_usb6009_device_map as device_map
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class NI_USB6009:

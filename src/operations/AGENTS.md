@@ -17,7 +17,7 @@ This is the highest-risk layer because it directly controls sequencing that affe
 
 ## Dependencies
 
-**Depends on:** `devices`, `core`, `utils`
+**Depends on:** `devices`, `core`, `utils` (including central logger from `core.logging`)
 
 **Depended on by:** `experiments`, top-level execution scripts
 

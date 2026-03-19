@@ -2,15 +2,14 @@
 """Defines classes for experiment categories"""
 
 import csv
-import logging
 import os
 import shutil
-import sys
 import threading
 import time
 from datetime import datetime, timedelta
 from typing import Any, List
 
+from ..core import get_logger
 from ..core.config import (
     R,
     chiller_id,
@@ -27,16 +26,7 @@ from ..core.config import (
     variac_id,
     variac_id_vsl,
 )
-
-
-logger = logging.getLogger(__name__)
-
-if not logger.handlers:
-    _stream_handler = logging.StreamHandler(sys.stdout)
-    _stream_handler.setFormatter(logging.Formatter("%(message)s"))
-    logger.addHandler(_stream_handler)
-logger.setLevel(logging.INFO)
-logger.propagate = False
+logger = get_logger(__name__)
 
 
 def print(*args: Any, **kwargs: Any) -> None:

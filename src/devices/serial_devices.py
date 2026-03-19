@@ -1,14 +1,13 @@
 ## device_interface.py
 
-import logging
-
+from ..core import get_logger
 from ..core.config import extrel_ms_port, watlow_ir_port
 from .extrel_mass_spec import ExtrelMassSpec
 from .mks_pressure import MKSPressureGauge
 from .watlow_controller import WatlowController
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class SerialDevices:

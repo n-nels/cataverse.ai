@@ -14,8 +14,9 @@ This module loads configuration from YAML files and exposes values used througho
 
 ## Files
 
-- **`config.py`** — Loads YAML config and computes derived values. After refactoring, this is the bridge between YAML files and the rest of the package.
-- **`__init__.py`** — Exports from `config.py`.
+- **`config.py`** — Loads YAML config and computes derived values; exports compatibility variable names used across the codebase.
+- **`logging.py`** — Central logging setup (`configure_logging`) and logger access (`get_logger`).
+- **`__init__.py`** — Re-exports core configuration and logging helpers.
 
 ## Config Sources (after Phase 1)
 

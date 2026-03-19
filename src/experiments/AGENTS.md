@@ -13,9 +13,15 @@ This module defines experiment protocols and automation workflows (e.g., adsorpt
 - Data/log file setup and experiment metadata writing
 - Threaded acquisition/monitoring coordination
 
+Current structure:
+- `parameters.py` — `experiment_parameters`
+- `adsorption.py` — `adsorption_experiment`
+- `isotopic_exchange.py` — `isotopic_exchange_calibration`
+- `automation/` — automation package scaffold
+
 ## Dependencies
 
-**Depends on:** `operations`, `devices`, `core`, `utils`
+**Depends on:** `operations`, `core`, `utils`
 
 **Depended on by:** top-level scripts (e.g., `main.py`)
 

@@ -8,9 +8,9 @@ from typing import Any
 
 import sys
 import time
-import logging
 from datetime import datetime
 
+from src.core import get_logger
 from src.core.config import (
     actuator_mass_spec_open_max_cell_torr,
     actuator_post_write_sleep_s,
@@ -22,7 +22,7 @@ from src.core.config import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ActuatorControl:

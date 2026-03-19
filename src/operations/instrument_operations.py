@@ -7,12 +7,12 @@ It is designed to work with the ActuatorManager, SerialDevices, and NetworkMessa
 
 import csv
 import builtins
+import logging
 import os
 import struct
 import threading
 import time
 import sys
-import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any
@@ -34,30 +34,33 @@ from src.core.config import (
     variac_id,
     variac_id_vsl,
 )
+from src.core import get_logger
 from src.devices.kasa_plugs import KasaPlugs
 from src.utils.data_logging import create_directory, log_actuator_state, log_temperature
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def print(*args: Any, **kwargs: Any) -> None:
     """Module-local print compatibility routed to logging.
 
-    Preserves built-in print behavior while additionally logging the same message.
+    Emit to logging when configured; otherwise fall back to built-in print.
     """
-    builtins.print(*args, **kwargs)
+    if logger.hasHandlers() or logging.getLogger().hasHandlers():
+        sep = kwargs.get("sep", " ")
+        if sep is None:
+            sep = " "
+        end = kwargs.get("end", "\n")
+        if end is None:
+            end = "\n"
+        message = sep.join(str(arg) for arg in args)
+        if end != "\n":
+            message = f"{message}{end}"
+        logger.info(message)
+        return
 
-    sep = kwargs.get("sep", " ")
-    if sep is None:
-        sep = " "
-    end = kwargs.get("end", "\n")
-    if end is None:
-        end = "\n"
-    message = sep.join(str(arg) for arg in args)
-    if end != "\n":
-        message = f"{message}{end}"
-    logger.info(message)
+    builtins.print(*args, **kwargs)
 
 
 class InstrumentOperations:

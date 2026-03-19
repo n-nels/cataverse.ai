@@ -1,5 +1,9 @@
-"""
-This script is used to manage data logs by creating directorys and writing to .csv files
+"""Experiment data I/O utilities.
+
+This module intentionally keeps three related concerns together for experiment runs:
+- directory management
+- CSV data writing
+- README/parameter markdown writing
 """
 import csv
 import glob
@@ -9,13 +13,24 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List
 
-from ..core.config import metal, notebook, support
+from ..core import get_logger
+from ..core.config import data_directory, metal, notebook, support
 
 
+logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Directory management
+# ---------------------------------------------------------------------------
 def create_directory(directory_path: str) -> None:
     if not os.path.exists(directory_path):
         os.makedirs(directory_path)
 
+
+# ---------------------------------------------------------------------------
+# CSV writing
+# ---------------------------------------------------------------------------
 def log_to_csv(file_path: str, headers: List[str], rows: List[List[Any]]) -> None:
     """
     General-purpose function to log data to a CSV file.
@@ -80,6 +95,10 @@ def log_temperature(file_path: str, write_temps: List[Any],
     log_to_csv(file_path, headers, rows)
     return None
 
+
+# ---------------------------------------------------------------------------
+# README / markdown parameter writing
+# ---------------------------------------------------------------------------
 def log_experiment_parameters(file_path: str, parameters: List[Dict[str, Any]]) -> None:
     """
     Log experiment parameters to a markdown file.
@@ -172,6 +191,10 @@ def materParams(path_readme: str, notebook: str,
     log_experiment_parameters(path_readme, parameters)
     return None
 
+
+# ---------------------------------------------------------------------------
+# Experiment id / naming helpers
+# ---------------------------------------------------------------------------
 def increment(dir_path: str, base_folder_name: str, folder_name: str = None, new_folder: bool = False) -> tuple[int, int]:
     """
     Handles folder and file iteration logic for experiment IDs.
@@ -239,7 +262,7 @@ def expID(file_name: str, folder_name: str, new_sample: bool)-> tuple[str, str]:
     Returns:
         tuple: (file_name, folder_name)
     """
-    dir_path = "C:\\Data"
+    dir_path = data_directory
     base_folder_name = f"{notebook}_{metal}_{support}_"
 
     if file_name and folder_name:
@@ -288,4 +311,4 @@ def copy_to_share_drive(src_path: str, dest_folder: str, file_name: str, suffix:
         shutil.copy(src_path, dest_path)
         time.sleep(10)
     except IOError as e:
-        print(f"An error occurred while copying the file: {e}")
+        logger.error("An error occurred while copying the file: %s", e)

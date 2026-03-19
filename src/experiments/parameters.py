@@ -2,12 +2,11 @@
 
 import csv
 import glob
-import logging
 import os
 import re
-import sys
 from typing import Any, Optional
 
+from ..core import get_logger
 from ..core.config import (
     autonomous_parameters_directory,
     data_directory,
@@ -21,14 +20,7 @@ from ..utils.data_logging import (
 )
 
 
-logger = logging.getLogger(__name__)
-
-if not logger.handlers:
-    _stream_handler = logging.StreamHandler(sys.stdout)
-    _stream_handler.setFormatter(logging.Formatter("%(message)s"))
-    logger.addHandler(_stream_handler)
-logger.setLevel(logging.INFO)
-logger.propagate = False
+logger = get_logger(__name__)
 
 
 def print(*args: Any, **kwargs: Any) -> None:

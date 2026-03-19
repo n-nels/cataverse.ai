@@ -1,14 +1,14 @@
 """Configuration and constants for the instrument control system."""
 
 import os
-import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
+from .logging import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _load_yaml(file_path: Path) -> dict[str, Any]:

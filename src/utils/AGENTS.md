@@ -12,6 +12,8 @@ This module contains utility functions for experiment data I/O and support tasks
 - CSV/README logging helpers
 - Share-drive copy helpers and related experiment file management
 
+Current state: utilities are centered in `data_logging.py`; `utils/__init__.py` re-exports the public helpers used by operations/experiments.
+
 Utilities should remain reusable and avoid embedding experiment sequencing logic.
 
 ## Dependencies
