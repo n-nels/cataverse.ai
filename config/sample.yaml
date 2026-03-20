@@ -11,5 +11,8 @@ sample:
   # Metal loading [wt.%]
   metal_load: 0.04983
 
+  # Metal molar mass [g/mol] (Pd default)
+  metal_molar_mass: 106.42
+
   # Support surface area [m^2/g]
   support_sa: 54

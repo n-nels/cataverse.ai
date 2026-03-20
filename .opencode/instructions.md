@@ -6,7 +6,7 @@ For project context, safety rules, and the boot/shutdown sequence, see `AGENTS.m
 
 ## Golden Rule
 
-**Preserve function.** This refactor changes structure, not behavior. The actuator valve logic, gas delivery sequences, pressure checks, and timing were validated against real hardware. Do not alter what the code does — only how it is organized.
+**Preserve function.** The valve sequences, gas delivery logic, pressure checks, and timing were validated against real hardware by the experimentalist. When porting code from legacy packages to new packages, copy control flow verbatim. You may change dependency wiring, replace `print()` with `logger.info()`, and add types — but the sequence of calls, values, sleeps, and branching must remain identical.
 
 ---
 
@@ -16,15 +16,21 @@ When instructions conflict, follow the nearest file to the root. `AGENTS.md` ove
 
 ---
 
-## Refactoring Protocol
+## Work Protocol
 
-The refactor plan lives in `docs/refactor_plan.md`.
+The active plan lives in `docs/refactor_plan-X.md`. The old refactor plan (`docs/refactor_plan.md`) is historical reference only.
 
-**Before:** Read the target file, its siblings, and the module's `AGENTS.md`.
+**Before:** Read the chunk instructions, the target module's `AGENTS.md`, and any legacy file you are porting from.
 
-**During:** One file at a time. Keep changes small and reviewable. If you're unsure whether a change alters behavior, don't make it.
+**During:** One task per commit. Build new modules alongside legacy code — do not modify legacy files. If you're unsure whether a change alters behavior, don't make it.
 
-**After:** Verify imports resolve. Mark the task complete in the plan.
+**After:** Verify imports resolve, tests pass. Mark the task complete in the execution plan.
+
+---
+
+## Two-Codebase Rule
+
+Legacy packages (`core/`, `devices/`, `operations/`, `utils/`, old `experiments/` files) are **read-only reference**. New code goes in new packages (`config_loader.py`, `physics.py`, `hardware/`, `control/`, `datalog/`, new experiment files). Both coexist until hardware validation.
 
 ---
 

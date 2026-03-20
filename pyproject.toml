@@ -28,6 +28,12 @@ build-backend = "hatchling.build"
 [tool.uv]
 managed = true
 
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
 [tool.ruff]
 # Match your project's python version
 target-version = "py312"

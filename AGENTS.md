@@ -11,7 +11,7 @@ The system controls real physical hardware. Changes to this code can open valves
 Before writing any code, read the following in order:
 
 1. `.opencode/memory.md` — Recent session context and outstanding items.
-2. `docs/refactor_plan.md` — Current refactor phase and task list.
+2. `docs/refactor_plan-X.md` — The active work plan. Identify which chunk and task you are on.
 3. The `AGENTS.md` in whatever module directory you will be working in.
 
 ## On Close
@@ -19,40 +19,30 @@ Before writing any code, read the following in order:
 Before ending a session, update the following as needed:
 
 1. `.opencode/memory.md` — Log what was done, decisions made, and anything unfinished.
-2. `docs/refactor_plan.md` — Mark completed tasks, update the current phase if applicable.
+2. `docs/refactor_plan-X.md` — Mark completed tasks, note the current chunk.
 3. Any `AGENTS.md` files in modules that were modified — keep them accurate.
-
-## Package Structure
-
-The source lives in `src/` with four layers. See `docs/directory_structure.md` for the full file listing.
-
-The dependency flow is strictly downward: **experiments → operations → devices → core**. No layer should import from the layer above it.
-
-- **`core/`** — Configuration, physical constants, experiment parameters.
-- **`devices/`** — Hardware communication drivers (serial, NI DAQ, ZMQ network).
-- **`operations/`** — High-level instrument sequences (valve control, gas delivery, spectral acquisition).
-- **`experiments/`** — Experiment protocols and automation (adsorption, isotopic exchange).
-- **`utils/`** — Data logging, file management.
 
 ## Current State
 
-This codebase is under active refactoring. See `docs/refactor_plan.md` for the current phase and task list.
+**Phases 0–6 (structural refactor) are complete.** See `docs/refactor_plan.md` for historical reference.
 
-## Module Context
+**The active work is an architectural restructure.** New packages (`hardware/`, `control/`, `datalog/`, `config_loader.py`, `physics.py`) are being built alongside the legacy code. The legacy packages (`core/`, `devices/`, `operations/`, `utils/`) are not modified or deleted until the new code is validated on physical hardware.
 
-Each module directory contains an `AGENTS.md` file with just-in-time context for that area: what the module does, what hardware or protocols are involved, dependencies in and out, and any invariants or constraints specific to that module.
+See `docs/restructure_execution_plan.md` for the chunk-by-chunk plan. See `docs/architecture_rethink.md` for the design rationale.
 
-Always read the local `AGENTS.md` before modifying code in a directory.
+## Package Structure
+
+See `docs/directory_structure.md` for the full file listing.
+
+The legacy dependency flow is: **experiments → operations → devices → core**, with `utils` used by operations and experiments. The new architecture replaces this with: **experiments → control + datalog → hardware → config/physics**. Each new package has its own `AGENTS.md` with module-specific context.
 
 ## Critical: Preserve Behavior
 
-This refactor improves structure, readability, and maintainability. **It does not change what the code does.**
+This system was developed by a scientist iterating directly with physical hardware. The specific order of operations, delay values, voltage thresholds, and safety checks exist because they were validated against the real system. They are not arbitrary.
 
-Much of this code — especially valve sequencing, timing, pressure checks, and gas delivery logic — was developed by a human iterating directly with physical hardware. The specific order of operations, delay values, voltage thresholds, and safety checks exist because they were validated against the real system. They are not arbitrary and must not be "optimized," reordered, or simplified.
+**Valve sequences and gas delivery logic are behavior-frozen.** When porting code from legacy packages to new packages, copy the control flow verbatim. You may change dependency wiring (e.g., `self.serial.read_pressure()` → `self.pressure.read()`), replace `print()` with `logger.info()`, and add type hints — but the sequence of calls, the values passed, the sleep durations, and the branching logic must remain identical.
 
-**Actuator and valve logic is the highest-risk area.** Treat all code in `operations/actuator_control.py`, `operations/instrument_operations.py`, and `experiments/protocols/` as behavior-frozen. You may rename variables, extract methods, improve structure, and add type hints — but the sequence of calls, the values passed, and the control flow must remain identical.
-
-When refactoring any module, verify:
+When working on any control or hardware code, verify:
 
 - The same functions are called in the same order with the same arguments.
 - No safety checks, pressure readings, or state verifications are removed or reordered.
