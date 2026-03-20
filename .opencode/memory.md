@@ -35,3 +35,41 @@
 - Process notes:
   - Reviewer agent was invoked after each substantial edit task and follow-up fixes.
   - No commits made.
+
+## 2026-03-20
+
+- Began and completed Chunk 2 (tasks 2.1–2.10) from `docs/refactor_plan-2.md`.
+
+- Implemented new `src/hardware/` package modules:
+  - `src/hardware/__init__.py`
+  - `src/hardware/pressure.py` (`PressureReading`, `MKSPressure` with reconnect-on-failure path)
+  - `src/hardware/temperature.py` (`WatlowTemperature` with `read_temperature`, `set_temperature`, `f2c`, `c2f`, and extracted `tc_malfunc` path)
+  - `src/hardware/mass_spec.py` (`ExtrelMassSpec` with `read_registers`, `write_register`, `decode_ieee754_cdab`)
+  - `src/hardware/analog_io.py` (`AnalogIO` with cached NI device instances and in-module `NI_USB6009` helper)
+  - `src/hardware/spectrometer.py` (`OpusSpectrometer` with `send` and `reconnect` on injected ZMQ socket)
+  - `src/hardware/power.py` (`KasaPower` with `.env` fallback credentials and Kasa cloud control)
+  - `src/hardware/connections.py` (`DeviceManager` connection lifecycle wiring)
+
+- Key compatibility/behavior decisions captured during implementation:
+  - Preserved MKS reconnect order and timings as closely as possible while returning `PressureReading`.
+  - Extracted Watlow thermocouple malfunction branch into `tc_malfunc()` without changing branch behavior.
+  - Kept Kasa command semantics with fresh login per `set_state()` call to match legacy subprocess-per-command behavior.
+  - Added username/password placeholders under `kasa_plugs` in `config/devices.yaml`.
+  - Added `KASA_USERNAME`/`KASA_PASSWORD` placeholders to `.env.local`.
+
+- Added Chunk 2 tests:
+  - `tests/test_hardware/test_pressure.py`
+  - `tests/test_hardware/test_temperature.py`
+  - `tests/test_hardware/test_mass_spec.py`
+  - `tests/test_hardware/test_analog_io.py`
+  - `tests/test_hardware/test_spectrometer.py`
+  - `tests/test_hardware/test_power.py`
+  - `tests/test_hardware/test_connections.py`
+
+- Validation:
+  - `PYTHONPATH=. pytest tests/test_hardware/ -v`
+  - Result: 24 passed.
+
+- Process notes:
+  - Reviewer agent was invoked after each hardware task and after follow-up fixes.
+  - No commits made.
