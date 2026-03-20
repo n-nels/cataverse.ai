@@ -43,35 +43,40 @@ class WatlowTemperature:
         temperature_c = round(self.f2c(int(temperature[0])), 1)
 
         if not (0 < temperature_c < 1000):
-            result = self.client.read_holding_registers(
-                address=362,
-                count=2,
-            )
-            if result.isError():
-                logger.error("Error reading the temperature registers")
-                return None
-
-            registers = result.registers
-            logger.error("Error reading temperature. Error code: %s", registers[0])
-
-            self.set_temperature(25)  # Reset to a default temperature
-
-            result = self.client.read_holding_registers(
-                address=2172,
-                count=2,
-            )
-            if result.isError():
-                logger.error("Error reading the temperature registers")
-                return None
-
-            registers = result.registers
-            registers_bytes = struct.pack(">HH", registers[1], registers[0])
-            set_temperature = struct.unpack(">f", registers_bytes)[0]
-            set_temperature_c = round(self.f2c(int(set_temperature)), 1)
-            logger.error("Set temperature is: %s C", set_temperature_c)
-            sys.exit("Exiting due to temperature read error.")
+            return self.tc_malfunc()
 
         return temperature_c
+
+    def tc_malfunc(self) -> None:
+        """Handle thermocouple malfunction recovery/error path."""
+
+        result = self.client.read_holding_registers(
+            address=362,
+            count=2,
+        )
+        if result.isError():
+            logger.error("Error reading the temperature registers")
+            return None
+
+        registers = result.registers
+        logger.error("Error reading temperature. Error code: %s", registers[0])
+
+        self.set_temperature(25)  # Reset to a default temperature
+
+        result = self.client.read_holding_registers(
+            address=2172,
+            count=2,
+        )
+        if result.isError():
+            logger.error("Error reading the temperature registers")
+            return None
+
+        registers = result.registers
+        registers_bytes = struct.pack(">HH", registers[1], registers[0])
+        set_temperature = struct.unpack(">f", registers_bytes)[0]
+        set_temperature_c = round(self.f2c(int(set_temperature)), 1)
+        logger.error("Set temperature is: %s C", set_temperature_c)
+        sys.exit("Exiting due to temperature read error.")
 
     def set_temperature(
         self,
