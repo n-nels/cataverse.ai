@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ExtrelMassSpec:
     """Low-level Extrel MS communication using an injected Modbus client."""
 
-    def __init__(self, client: ModbusClient) -> None:
+    def __init__(self, client: ModbusClient | None) -> None:
         self.client = client
 
     def read_registers(
@@ -29,6 +29,9 @@ class ExtrelMassSpec:
         unit: int = 1,
     ) -> list[int] | None:
         """Read holding registers from Extrel MS."""
+
+        if not self.client:
+            return None
 
         result = self.client.read_holding_registers(
             address=address,
@@ -43,6 +46,9 @@ class ExtrelMassSpec:
 
     def write_register(self, address: int, value: int) -> bool:
         """Write one holding register on Extrel MS."""
+
+        if not self.client:
+            return False
 
         result = self.client.write_register(address=address, value=value)
         if result.isError():

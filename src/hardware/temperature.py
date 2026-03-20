@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class WatlowTemperature:
     """Low-level Watlow IR temperature adapter using injected Modbus client."""
 
-    def __init__(self, client: ModbusClient) -> None:
+    def __init__(self, client: ModbusClient | None) -> None:
         self.client = client
 
     def read_temperature(self, address: int = 360) -> float | None:
@@ -49,6 +49,10 @@ class WatlowTemperature:
 
     def tc_malfunc(self) -> None:
         """Handle thermocouple malfunction recovery/error path."""
+
+        if not self.client:
+            logger.error("Modbus client not connected.")
+            return None
 
         result = self.client.read_holding_registers(
             address=362,
