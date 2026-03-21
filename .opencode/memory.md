@@ -73,3 +73,51 @@
 - Process notes:
   - Reviewer agent was invoked after each hardware task and after follow-up fixes.
   - No commits made.
+
+## 2026-03-20 (continued)
+
+- Began and completed Chunk 3 (tasks 3.1–3.8) from `docs/refactor_plan-3.md`.
+
+- Added control-layer package setup:
+  - `src/control/AGENTS.md` (mirrored safety/behavior-frozen constraints from `operations/AGENTS.md` with new-architecture dependency wording)
+  - `src/control/__init__.py`
+
+- Implemented behavior-frozen control modules:
+  - `src/control/valves.py` (`ValveController`)
+    - Ported legacy actuator logic and safety checks (`safe_turbo_open`, `safe_mass_spec_open`) with allowed substitutions only.
+    - Preserved `sys.exit(...)` behavior and added TODO comments for future exception migration.
+  - `src/control/gas_delivery.py` (`GasDelivery`)
+    - Ported `deliver_gas_to_mfld` → `deliver_gas_to_manifold`, `evacuate_cell`, `cell_open_admit`, `MassSpec_open_calibration` → `mass_spec_open_calibration`.
+    - Kept call order, thresholds, loop structure, dither logic, and sleep timing behavior-frozen.
+    - `calc_pressure` uses `physics.cell_pressure_from_manifold(..., v_tot)` with equivalent behavior.
+  - `src/control/temperature_control.py` (`TemperatureController`)
+    - Ported legacy `Watlow` workflow as `watlow` with ramp/hold/cooling branches and Kasa plug state management helpers.
+    - Preserved legacy global temp-log path semantics (`dir_tempLog`, `path_tempLog`) to avoid behavior drift in no-filename paths.
+  - `src/control/spectrometer_control.py` (`SpectrometerController`)
+    - Ported `OpusVertex80` → `opus_vertex80` and `opusAcquire` → `opus_acquire` with same timeout/retry ordering.
+
+- Added hardware compatibility methods needed for faithful OPUS control port:
+  - Updated `src/hardware/spectrometer.py` with legacy-compatible:
+    - `send_message(...) -> bool`
+    - `receive_message(timeout_ms=...) -> str`
+  - Kept existing `send(...)` method unchanged for new API use.
+
+- Added control-layer tests:
+  - `tests/test_control/test_valves.py`
+    - Critical safety checks for open/sleep ordering, turbo roughing/polling, mass-spec pressure exit, and over-voltage fail-close exit.
+  - `tests/test_control/test_gas_delivery.py`
+    - Sequence checks for manifold delivery and cell evacuation flows with cross-method ordering assertions.
+  - `tests/test_control/test_temperature.py`
+    - Ramp branch behavior, cooling branch variac sequencing, and Kasa helper delegation checks.
+  - `tests/test_control/test_spectrometer.py`
+    - OPUS success path, timeout/reconnect/retry path, and acquisition-loop delegation checks.
+
+- Validation:
+  - `PYTHONPATH=. pytest tests/test_control/test_temperature.py tests/test_control/test_spectrometer.py -v`
+    - Result: 6 passed.
+  - `PYTHONPATH=. pytest tests/test_control/ -v`
+    - Result: 12 passed.
+
+- Process notes:
+  - Reviewer agent invoked after each major control task and after corrective patches.
+  - No commits made.
