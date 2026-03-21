@@ -35,7 +35,7 @@ class PressureLogger:
         metal_load_wt_percent: float,
         metal_molar_mass_g_mol: float = 106.42,
         temperature_k: float = t_mfld,
-        read_interval_s: int = 5,
+        read_interval_s: float = 5,
     ) -> None:
         self.pressure = pressure
         self.physics = physics
@@ -117,7 +117,6 @@ class PressureLogger:
                         p_mfld_value = cast(float, p_mfld)
                         relative_time_s = (dt - t0).total_seconds() if t0 else None
 
-                        # Preserve legacy formula while centralizing adsorption math in physics.py.
                         n_adsorbed_initial = (p_initial * total_volume_l) / (
                             R * self.temperature_k
                         )

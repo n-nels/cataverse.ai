@@ -121,3 +121,61 @@
 - Process notes:
   - Reviewer agent invoked after each major control task and after corrective patches.
   - No commits made.
+
+## 2026-03-21
+
+- Began and completed Chunk 4 (tasks 4.1–4.10) from `docs/refactor_plan-4.md`.
+
+- Implemented new `src/datalog/` package setup and logging exports:
+  - Added `src/datalog/__init__.py` with:
+    - `configure_logging`
+    - `get_logger`
+    - exports for `PressureLogger`, `TemperatureLogger`, `MassSpecLogger`
+  - Kept `src/core/logging.py` unchanged for legacy code.
+
+- Implemented threaded loggers (start/stop pattern):
+  - `src/datalog/pressure_logger.py`
+    - Ported legacy pressure CSV schema and derived metrics.
+    - Uses `physics.amount_adsorbed` for adsorption calculation.
+    - Fixed stop-event bug to `while not self._stop.is_set()`.
+  - `src/datalog/temperature_logger.py`
+    - Ported legacy temperature CSV loop with daemon-thread lifecycle.
+  - `src/datalog/mass_spec_logger.py`
+    - Ported legacy Extrel stream read/decode/write loop with daemon-thread lifecycle.
+
+- Implemented consolidated file I/O module:
+  - Added `src/datalog/file_io.py` from legacy `utils/data_logging.py`.
+  - Renamed:
+    - `expID` → `generate_experiment_id`
+    - `materParams` → `write_material_parameters`
+  - Preserved helper behavior for:
+    - `create_directory`, `copy_to_share_drive`, `log_to_csv`,
+      `log_actuator_state`, `log_temperature`, `log_experiment_parameters`.
+
+- Implemented new experiment session metadata manager:
+  - Added `src/experiments/session.py` (`ExperimentSession`).
+  - Methods:
+    - `new_experiment(...)`
+    - `log_pretreatment(...)`
+    - `log_experimental_parameters(...)`
+    - `mark_success(...)`
+  - Preserved directory/README behaviors and success flag update semantics.
+  - Adjusted ID generation and counter reset semantics to match legacy expectations in reviewer feedback.
+
+- Added Chunk 4 tests:
+  - `tests/test_datalog/test_pressure_logger.py`
+  - `tests/test_datalog/test_file_io.py`
+  - `tests/test_experiments/test_session.py`
+  - Test coverage includes:
+    - logger thread start/stop + CSV output
+    - file I/O directory/CSV/README/copy behaviors and error handling
+    - session ID generation increments, directory structure, README parameter logging, and success-flag update behavior
+
+- Validation:
+  - `PYTHONPATH=. pytest tests/test_datalog/test_pressure_logger.py -v` → 1 passed
+  - `PYTHONPATH=. pytest tests/test_datalog/test_file_io.py -v` → 8 passed
+  - `PYTHONPATH=. pytest tests/test_datalog/ tests/test_experiments/test_session.py -v` → 12 passed
+
+- Process notes:
+  - Reviewer agent invoked after each major Chunk 4 implementation step and follow-up fixes.
+  - No commits made.

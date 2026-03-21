@@ -27,21 +27,24 @@ This document breaks the architecture rethink into **5 executable chunks**. Each
 
 | # | Task | File(s) | Notes |
 |---|------|---------|-------|
-| 4.1 | Create `src/datalog/__init__.py` (using `datalog` to avoid `logging` name collision). Export `PressureLogger`, `TemperatureLogger`, `MassSpecLogger`, `configure_logging`, `get_logger`. | `src/datalog/__init__.py` | |
-| 4.2 | Move Python logging configuration (`configure_logging`, `get_logger`) from `core/logging.py` into `src/datalog/__init__.py`. Keep `core/logging.py` as-is for old code. | `src/datalog/__init__.py` | |
-| 4.3 | Create `src/datalog/pressure_logger.py` — `PressureLogger` class. Constructor takes `pressure: MKSPressure`, `physics: SystemVolumes`, `path: Path`, and initial conditions. Methods: `start()`, `stop()`. Internally creates a daemon thread. Port the CSV writing and calculation logic from `instrument_operations.pressure_log`. Use `physics.py` for amount_adsorbed calculation instead of inline math. Fix the `while stop_event is None` bug (should be `while not self._stop.is_set()`). | `src/datalog/pressure_logger.py` | |
-| 4.4 | Create `src/datalog/temperature_logger.py` — `TemperatureLogger`. Same start/stop pattern. Port from `instrument_operations.temperature_log`. | `src/datalog/temperature_logger.py` | |
-| 4.5 | Create `src/datalog/mass_spec_logger.py` — `MassSpecLogger`. Port from `instrument_operations.mass_spec_log`. | `src/datalog/mass_spec_logger.py` | |
-| 4.6 | Create `src/datalog/file_io.py` — consolidate from `utils/data_logging.py`. Rename functions: `expID` → `generate_experiment_id`, `materParams` → `write_material_parameters`, keep `create_directory`, `copy_to_share_drive`, `log_to_csv`, `log_actuator_state`, `log_temperature`, `log_experiment_parameters`. | `src/datalog/file_io.py` | Professional function names. |
-| 4.7 | Create `src/experiments/session.py` — `ExperimentSession` class. Replaces `experiment_parameters`. Constructor takes `SampleConfig` and `SystemVolumes`. Methods: `new_experiment(name, new_sample)` (generates ID, creates dirs, initializes README), `log_pretreatment(...)`, `log_experimental_parameters(...)`, `mark_success()`. Uses `datalog/file_io.py` internally. | `src/experiments/session.py` | PascalCase. Clean typed interface. |
-| 4.8 | Create `tests/test_datalog/test_pressure_logger.py`. Mock `MKSPressure.read()` to return a sequence of readings. Verify CSV output using `tmp_path`. Verify thread starts and stops cleanly. | `tests/test_datalog/test_pressure_logger.py` | |
-| 4.9 | Create `tests/test_datalog/test_file_io.py`. Test directory creation, CSV writing, README generation using `tmp_path`. | `tests/test_datalog/test_file_io.py` | |
-| 4.10 | Create `tests/test_experiments/test_session.py`. Test experiment ID generation, directory structure, parameter logging. | `tests/test_experiments/test_session.py` | |
+| ✅ 4.1 | Create `src/datalog/__init__.py` (using `datalog` to avoid `logging` name collision). Export `PressureLogger`, `TemperatureLogger`, `MassSpecLogger`, `configure_logging`, `get_logger`. | `src/datalog/__init__.py` | |
+| ✅ 4.2 | Move Python logging configuration (`configure_logging`, `get_logger`) from `core/logging.py` into `src/datalog/__init__.py`. Keep `core/logging.py` as-is for old code. | `src/datalog/__init__.py` | |
+| ✅ 4.3 | Create `src/datalog/pressure_logger.py` — `PressureLogger` class. Constructor takes `pressure: MKSPressure`, `physics: SystemVolumes`, `path: Path`, and initial conditions. Methods: `start()`, `stop()`. Internally creates a daemon thread. Port the CSV writing and calculation logic from `instrument_operations.pressure_log`. Use `physics.py` for amount_adsorbed calculation instead of inline math. Fix the `while stop_event is None` bug (should be `while not self._stop.is_set()`). | `src/datalog/pressure_logger.py` | |
+| ✅ 4.4 | Create `src/datalog/temperature_logger.py` — `TemperatureLogger`. Same start/stop pattern. Port from `instrument_operations.temperature_log`. | `src/datalog/temperature_logger.py` | |
+| ✅ 4.5 | Create `src/datalog/mass_spec_logger.py` — `MassSpecLogger`. Port from `instrument_operations.mass_spec_log`. | `src/datalog/mass_spec_logger.py` | |
+| ✅ 4.6 | Create `src/datalog/file_io.py` — consolidate from `utils/data_logging.py`. Rename functions: `expID` → `generate_experiment_id`, `materParams` → `write_material_parameters`, keep `create_directory`, `copy_to_share_drive`, `log_to_csv`, `log_actuator_state`, `log_temperature`, `log_experiment_parameters`. | `src/datalog/file_io.py` | Professional function names. |
+| ✅ 4.7 | Create `src/experiments/session.py` — `ExperimentSession` class. Replaces `experiment_parameters`. Constructor takes `SampleConfig` and `SystemVolumes`. Methods: `new_experiment(name, new_sample)` (generates ID, creates dirs, initializes README), `log_pretreatment(...)`, `log_experimental_parameters(...)`, `mark_success()`. Uses `datalog/file_io.py` internally. | `src/experiments/session.py` | PascalCase. Clean typed interface. |
+| ✅ 4.8 | Create `tests/test_datalog/test_pressure_logger.py`. Mock `MKSPressure.read()` to return a sequence of readings. Verify CSV output using `tmp_path`. Verify thread starts and stops cleanly. | `tests/test_datalog/test_pressure_logger.py` | |
+| ✅ 4.9 | Create `tests/test_datalog/test_file_io.py`. Test directory creation, CSV writing, README generation using `tmp_path`. | `tests/test_datalog/test_file_io.py` | |
+| ✅ 4.10 | Create `tests/test_experiments/test_session.py`. Test experiment ID generation, directory structure, parameter logging. | `tests/test_experiments/test_session.py` | |
 
 ### Validation
 ```bash
 pytest tests/test_datalog/ tests/test_experiments/test_session.py -v
 ```
+
+Chunk 4 validation run completed successfully in this environment with:
+`PYTHONPATH=. pytest tests/test_datalog/ tests/test_experiments/test_session.py -v` (12 passed).
 
 ### Definition of done
 - All three loggers follow the same `start()`/`stop()` pattern
