@@ -36,6 +36,11 @@ This document breaks the architecture rethink into **5 executable chunks**. Each
 | 5.7 | Update `docs/directory_structure.md` to reflect the new architecture alongside the old. Mark old packages as `# legacy — pending hardware validation`. | `docs/directory_structure.md` | |
 | 5.8 | Write `MIGRATION.md` — a checklist for the hardware validation step. Lists every experiment sequence in `main.py`, what to run, and what to verify (pressure readings, temperature ramps, valve behavior, OPUS communication, data files). | `docs/MIGRATION.md` | This is the bridge to Phase F (human-only hardware validation). |
 
+**Progress note (WIP):**
+- Task 5.1 has been started in `src/experiments/adsorption_v2.py`.
+- Completed so far: class skeleton + constructor wiring, `acquire_ms_spectra()`, and `heat_under_evacuation()` first-pass port.
+- Not yet complete: remaining adsorption protocol methods and full integration/tests for Chunk 5.
+
 ### Validation
 ```bash
 pytest tests/ -v --cov=src --cov-report=term-missing

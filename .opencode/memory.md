@@ -179,3 +179,33 @@
 - Process notes:
   - Reviewer agent invoked after each major Chunk 4 implementation step and follow-up fixes.
   - No commits made.
+
+## 2026-03-21 (Chunk 5 kickoff)
+
+- Began Chunk 5 from `docs/refactor_plan-5.md`.
+
+- Task 5.1 started (`src/experiments/adsorption_v2.py`):
+  - Added `AdsorptionExperiment` v2 dataclass skeleton with planned dependencies:
+    - `session`, `devices`, `gas_controller`, `temp`, `spec`
+  - Added initial protocol-state fields in `__post_init__` mirroring legacy mutable state usage.
+  - Ported first method subset:
+    - `acquire_ms_spectra()` (legacy valve ordering + Extrel start command + MS logger startup)
+    - `heat_under_evacuation(...)` first-pass port (evacuation path, optional MS block, Watlow call, pressure read, pretreatment log)
+
+- Compatibility/support updates made during this kickoff:
+  - `src/experiments/session.py` `log_pretreatment` signature widened for parity with legacy call patterns:
+    - `gas: Any`
+    - `rate: float`
+
+- Reviewer feedback/actions during 5.1 kickoff:
+  - Removed behavior-changing hard-fail precondition guards from first-pass 5.1 methods.
+  - Restored legacy-like state naming (`gas`, `gas_2`) semantics.
+  - Added Extrel start/stop success/failure logging parity in v2 method path.
+
+- Validation status at pause:
+  - Smoke import check passes for `AdsorptionExperiment`.
+  - Chunk 5 is still **in progress**; only part of 5.1 is implemented.
+
+- Intent for next session:
+  - Continue 5.1 by porting remaining adsorption methods in small behavior-preserving steps.
+  - Then proceed to 5.2–5.8 and full Chunk 5 test/integration validation.

@@ -12,6 +12,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from src.config_loader import PathsConfig, SampleConfig
 from src.datalog.file_io import (
@@ -222,10 +223,10 @@ class ExperimentSession:
 
     def log_pretreatment(
         self,
-        gas: str,
+        gas: Any,
         p_gas_meas: tuple[float, float],
         t_cell: float,
-        rate: int,
+        rate: float,
         duration: float,
         p_gas_calc: float | None = None,
         chiller_state: bool | None = None,
