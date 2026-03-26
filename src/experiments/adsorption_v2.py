@@ -58,8 +58,11 @@ class AdsorptionExperiment:
         self.gas_controller.valves.open("MassSpec")
         time.sleep(30)
 
-        # Legacy extrel_sequence('start') behavior: register 1 -> value 2
-        success = cast(Any, self.devices.mass_spec).write_register(address=1, value=2)
+        # Extrel sequence start from config
+        success = cast(Any, self.devices.mass_spec).write_register(
+            address=self.devices.config.extrel_ms.registers.sequence_start_address,
+            value=self.devices.config.extrel_ms.registers.sequence_start_value,
+        )
         if success:
             logger.info("Extrel sequence started")
         else:
@@ -107,9 +110,10 @@ class AdsorptionExperiment:
             time.sleep(60 * 15)
             ms_logger.stop()
 
-            # Legacy extrel_sequence('stop') behavior: register 1 -> value 9
+            # Extrel sequence stop from config
             success = cast(Any, self.devices.mass_spec).write_register(
-                address=1, value=9
+                address=self.devices.config.extrel_ms.registers.sequence_stop_address,
+                value=self.devices.config.extrel_ms.registers.sequence_stop_value,
             )
             if success:
                 logger.info("Extrel sequence stopped")

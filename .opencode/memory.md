@@ -209,3 +209,49 @@
 - Intent for next session:
   - Continue 5.1 by porting remaining adsorption methods in small behavior-preserving steps.
   - Then proceed to 5.2–5.8 and full Chunk 5 test/integration validation.
+
+## 2026-03-26 (Chunk 5 continued)
+
+- Completed Task 5.1 (`src/experiments/adsorption_v2.py`):
+  - Ported all remaining adsorption methods:
+    - `cool_cell()`
+    - `supply_gas_to_mfld()`
+    - `supply_another_gas_to_mfld()`
+    - `supply_gases_to_mfld()`
+    - `acquire_spectra()`
+    - `introduce_pretreatment_gas_to_cell()`
+    - `chiller_variac_state()`
+    - `start_pressure_log()`
+    - `start_temperature_log()`
+  - All methods preserve legacy behavior, sequencing, timing, and safety checks.
+
+- Completed Task 5.2 (`src/experiments/isotopic_exchange_v2.py`):
+  - Created `IsotopicExchangeCalibration` v2 dataclass with same dependency pattern as adsorption.
+  - Ported all isotopic exchange methods:
+    - `isoX_calib_main()` - main experiment loop with exchange timing and pressure stabilization
+    - `heat_under_evacuation()`
+    - `cool_cell()`
+    - `supply_gas_to_mfld()`
+    - `supply_another_gas_to_mfld()`
+    - `acquire_spectra()`
+    - `introduce_pretreatment_gas_to_cell()`
+    - `chiller_variac_state()`
+    - `copy_readme()`
+    - `massSpec_calibration()` - complex calibration with dilution calculations and CSV logging
+  - All methods preserve legacy behavior, sequencing, timing, and safety checks.
+
+- Additional updates:
+  - Added Extrel register configuration to `config/devices.yaml`:
+    - `sequence_start: {address: 1, value: 2}`
+    - `sequence_stop: {address: 1, value: 9}`
+  - Updated `src/config_loader.py` with `ExtrelRegisterConfig` and `ExtrelDeviceConfig` classes.
+  - Updated `src/hardware/connections.py` to use new Extrel config structure.
+  - Updated `src/experiments/adsorption_v2.py` to use config values for Extrel registers.
+  - Updated `tests/test_config_loader.py` with Extrel config tests.
+
+- Validation status:
+  - Both experiment v2 files compile successfully.
+  - Chunk 5 tasks 5.1 and 5.2 are complete.
+
+- Intent for next session:
+  - Continue with tasks 5.3–5.8 (main_v2.py, integration tests, cleanup, documentation).

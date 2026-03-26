@@ -67,12 +67,12 @@ class DeviceManager:
             self._watlow_client = None
 
         self._extrel_client = ModbusClient(
-            port=self.config.extrel_ms.port,
-            baudrate=self.config.extrel_ms.baudrate,
-            parity=cast(str, self.config.extrel_ms.parity),
-            stopbits=cast(int, self.config.extrel_ms.stopbits),
-            bytesize=cast(int, self.config.extrel_ms.bytesize),
-            timeout=self.config.extrel_ms.timeout_s,
+            port=self.config.extrel_ms.serial.port,
+            baudrate=self.config.extrel_ms.serial.baudrate,
+            parity=cast(str, self.config.extrel_ms.serial.parity),
+            stopbits=cast(int, self.config.extrel_ms.serial.stopbits),
+            bytesize=cast(int, self.config.extrel_ms.serial.bytesize),
+            timeout=self.config.extrel_ms.serial.timeout_s,
         )
         if not self._extrel_client.connect():
             logger.error("Unable to connect to Extrel Modbus serial device")

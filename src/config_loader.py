@@ -49,6 +49,24 @@ class SerialDeviceConfig:
 
 
 @dataclass(frozen=True)
+class ExtrelRegisterConfig:
+    """Extrel mass spectrometer register addresses and values."""
+
+    sequence_start_address: int
+    sequence_start_value: int
+    sequence_stop_address: int
+    sequence_stop_value: int
+
+
+@dataclass(frozen=True)
+class ExtrelDeviceConfig:
+    """Extrel mass spectrometer device configuration."""
+
+    serial: SerialDeviceConfig
+    registers: ExtrelRegisterConfig
+
+
+@dataclass(frozen=True)
 class ActuatorConfig:
     """Actuator voltage/timing/safety settings and channel mapping."""
 
@@ -89,7 +107,7 @@ class HardwareConfig:
 
     mks: SerialDeviceConfig
     watlow_ir: SerialDeviceConfig
-    extrel_ms: SerialDeviceConfig
+    extrel_ms: ExtrelDeviceConfig
     actuator: ActuatorConfig
     network: NetworkConfig
     kasa: KasaConfig
@@ -171,7 +189,9 @@ def _resolve_config_dir(config_dir: Path | None) -> Path:
 
 def _to_channel_tuple(value: Any, context: str) -> tuple[str, str]:
     if not isinstance(value, (list, tuple)) or len(value) != 2:
-        raise ValueError(f"Expected 2-item channel mapping for {context}, got: {value!r}")
+        raise ValueError(
+            f"Expected 2-item channel mapping for {context}, got: {value!r}"
+        )
     left, right = value
     if not isinstance(left, str) or not isinstance(right, str):
         raise TypeError(
@@ -244,13 +264,29 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
             stopbits=watlow_ir_serial.get("stopbits"),
             bytesize=watlow_ir_serial.get("bytesize"),
         ),
-        extrel_ms=SerialDeviceConfig(
-            port=extrel_ms_serial["port"],
-            baudrate=extrel_ms_serial["baudrate"],
-            timeout_s=extrel_ms_serial["timeout_s"],
-            parity=extrel_ms_serial.get("parity"),
-            stopbits=extrel_ms_serial.get("stopbits"),
-            bytesize=extrel_ms_serial.get("bytesize"),
+        extrel_ms=ExtrelDeviceConfig(
+            serial=SerialDeviceConfig(
+                port=extrel_ms_serial["port"],
+                baudrate=extrel_ms_serial["baudrate"],
+                timeout_s=extrel_ms_serial["timeout_s"],
+                parity=extrel_ms_serial.get("parity"),
+                stopbits=extrel_ms_serial.get("stopbits"),
+                bytesize=extrel_ms_serial.get("bytesize"),
+            ),
+            registers=ExtrelRegisterConfig(
+                sequence_start_address=extrel_ms_serial.get("registers", {})
+                .get("sequence_start", {})
+                .get("address", 1),
+                sequence_start_value=extrel_ms_serial.get("registers", {})
+                .get("sequence_start", {})
+                .get("value", 2),
+                sequence_stop_address=extrel_ms_serial.get("registers", {})
+                .get("sequence_stop", {})
+                .get("address", 1),
+                sequence_stop_value=extrel_ms_serial.get("registers", {})
+                .get("sequence_stop", {})
+                .get("value", 9),
+            ),
         ),
         actuator=ActuatorConfig(
             voltage_closed=voltages["closed"],
@@ -258,9 +294,7 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
             voltage_max_write=voltages["max_write"],
             post_write_sleep_s=timing_s["post_write_sleep"],
             turbo_pressure_poll_s=timing_s["turbo_pressure_poll"],
-            turbo_open_max_manifold_torr=safety_limits_torr[
-                "turbo_open_max_manifold"
-            ],
+            turbo_open_max_manifold_torr=safety_limits_torr["turbo_open_max_manifold"],
             mass_spec_open_max_cell_torr=safety_limits_torr["mass_spec_open_max_cell"],
             device_map={
                 actuator_id: _to_channel_tuple(
@@ -294,9 +328,7 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
         mass_g=sample["mass"],
         metal_load_wt_percent=sample["metal_load"],
         support_surface_area_m2_g=sample["support_sa"],
-        metal_molar_mass_g_mol=sample.get(
-            "metal_molar_mass", DEFAULT_METAL_MOLAR_MASS
-        ),
+        metal_molar_mass_g_mol=sample.get("metal_molar_mass", DEFAULT_METAL_MOLAR_MASS),
     )
 
     paths_config = PathsConfig(

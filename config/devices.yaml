@@ -21,6 +21,9 @@ serial:
     stopbits: 1
     bytesize: 8
     timeout_s: 1
+    registers:
+      sequence_start: {address: 1, value: 2}
+      sequence_stop: {address: 1, value: 9}
 
 network:
   opus:

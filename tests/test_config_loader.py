@@ -8,6 +8,8 @@ import src.core.config as core_config
 from src.config_loader import (
     DEFAULT_METAL_MOLAR_MASS,
     AppConfig,
+    ExtrelDeviceConfig,
+    ExtrelRegisterConfig,
     HardwareConfig,
     PathsConfig,
     SampleConfig,
