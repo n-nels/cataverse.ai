@@ -253,5 +253,11 @@
   - Both experiment v2 files compile successfully.
   - Chunk 5 tasks 5.1 and 5.2 are complete.
 
+- Completed Task 5.3 (`main_v2.py`):
+  - Created new main entry point using v2 architecture.
+  - Demonstrates full workflow: `load_config()` → `DeviceManager` → controllers → experiments.
+  - Includes example functions for adsorption and isotopic exchange experiments.
+  - Shows proper initialization and cleanup of hardware connections.
+
 - Intent for next session:
-  - Continue with tasks 5.3–5.8 (main_v2.py, integration tests, cleanup, documentation).
+  - Continue with tasks 5.4–5.8 (integration tests, cleanup, documentation).

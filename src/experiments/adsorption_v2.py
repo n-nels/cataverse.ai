@@ -435,7 +435,7 @@ class AdsorptionExperiment:
         if variac_cmd is not None:
             self.temp.variac_state(variac_cmd)
         if variac_vsl_cmd is not None:
-            self.temp.kasa_plug_state(variac_id_vsl, variac_vsl_cmd)
+            self.temp.kasa_plug_state("variac_id_vsl", variac_vsl_cmd)
 
     def start_pressure_log(
         self, p_mfld_initial: Any, p_cell_initial: Any
