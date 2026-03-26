@@ -259,5 +259,11 @@
   - Includes example functions for adsorption and isotopic exchange experiments.
   - Shows proper initialization and cleanup of hardware connections.
 
+- Completed Task 5.4 (`tests/test_experiments/test_adsorption.py`):
+  - Created integration tests for adsorption experiment v2.
+  - Tests mock all hardware and verify correct order of control calls.
+  - Includes tests for individual methods and full experiment sequences.
+  - Verifies valve sequences, gas delivery, temperature control, and logging.
+
 - Intent for next session:
-  - Continue with tasks 5.4–5.8 (integration tests, cleanup, documentation).
+  - Continue with tasks 5.5–5.8 (integration tests, cleanup, documentation).
