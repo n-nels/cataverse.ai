@@ -272,5 +272,13 @@
   - Tests correct call ordering in experiment sequences.
   - Includes tests for main_v2.py integration.
 
+- Completed Task 5.6 (cleanup):
+  - Deleted stale root files:
+    - `kasa_smartPlug.py` (functionality moved to `src/hardware/power.py`)
+    - `data_processing.py` (standalone utility, not part of core architecture)
+  - Deleted stale file:
+    - `src/operations/code_reviewer_old.md`
+  - No `C/` directory found to delete.
+
 - Intent for next session:
-  - Continue with tasks 5.6–5.8 (cleanup, documentation).
+  - Continue with tasks 5.7–5.8 (documentation).
