@@ -265,5 +265,12 @@
   - Includes tests for individual methods and full experiment sequences.
   - Verifies valve sequences, gas delivery, temperature control, and logging.
 
+- Completed Task 5.5 (`tests/test_integration.py`):
+  - Created full-stack integration tests for v2 architecture.
+  - Tests load config, create mock DeviceManager, build all controllers.
+  - Verifies no exceptions in minimal experiment execution.
+  - Tests correct call ordering in experiment sequences.
+  - Includes tests for main_v2.py integration.
+
 - Intent for next session:
-  - Continue with tasks 5.5–5.8 (integration tests, cleanup, documentation).
+  - Continue with tasks 5.6–5.8 (cleanup, documentation).
