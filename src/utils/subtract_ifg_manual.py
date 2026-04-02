@@ -82,7 +82,7 @@ def Deconvolute(file):
 
 
 # specify file & folder
-opus_filename = "20260307_203322_pd_ceo2_004-002"
+opus_filename = "20260315_214542_pd_ceo2_004-008"
 folder_name = "nn1120-3_pd_ceo2_004\\"
 
 # define paths

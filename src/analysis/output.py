@@ -13,11 +13,7 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 
-from .kinetics_fitting import (
-    append_pfo_fit_results,
-    build_cluster_sum,
-    linfunc_no_intercept,
-)
+from .kinetics_fitting import append_fit_results, build_cluster_sum, linfunc_no_intercept
 
 
 def _coerce_df(value: Any) -> pd.DataFrame:
@@ -106,7 +102,7 @@ def compute_cumulative_peak_area_df(
     cumulative_area_rows = []
 
     if df_fit_peaks.empty:
-        return df_fit_peaks
+        return cast(pd.DataFrame, df_fit_peaks)
 
     cumulative_area_delta1 = None
     cumulative_integral_delta1 = None
@@ -235,11 +231,11 @@ def compute_cumulative_peak_area_df(
 
 def compute_peak_area_with_kinetics_df(
     df_cumulative_areas: pd.DataFrame,
-):
+) -> pd.DataFrame:
     """Compute peak area DataFrame with kinetics fit results (no file I/O)."""
     if df_cumulative_areas.empty:
-        return df_cumulative_areas
-    return _coerce_df(append_pfo_fit_results(df_cumulative_areas))
+        return cast(pd.DataFrame, df_cumulative_areas)
+    return cast(pd.DataFrame, append_fit_results(df_cumulative_areas))
 
 
 def save_peak_area_versus_time_df(

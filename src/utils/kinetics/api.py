@@ -54,6 +54,7 @@ def fit_file(
     mode: str = "full_series",
     min_points: int = 4,
     init: list[float] | None = None,
+    use_prior_p0: bool = True,
     output_folder: str | None = "_test",
     save: bool = True,
 ) -> FitRunResult:
@@ -68,6 +69,9 @@ def fit_file(
             unique time using all points up to that time.
         min_points: Minimum points required before fitting a trajectory slice.
         init: Optional initial parameter list (p0) passed to the model fit.
+        use_prior_p0: If True, successful secondary-p0 values are carried forward
+            between rows (only accepted if r² improves by > 0.01). If False,
+            fitting starts fresh from ``init`` (or defaults) for every row.
         output_folder: Output subfolder name when ``save=True``.
         save: If True, write merged legacy-style CSV output.
 
@@ -92,6 +96,7 @@ def fit_file(
         peak_names=peak_names,
         mode=mode,
         p0=init,
+        carry_forward_p0=use_prior_p0,
     )
 
     output_path: Path | None = None
@@ -106,6 +111,7 @@ def fit_file(
             peak_names=peak_names,
             mode=mode,
             p0=init,
+            use_prior_p0=use_prior_p0,
         )
 
     return FitRunResult(
@@ -185,6 +191,7 @@ def fit_folder(
     mode: str = "full_series",
     min_points: int = 4,
     init: list[float] | None = None,
+    use_prior_p0: bool = True,
     output_folder: str = "_test",
 ) -> BatchFitResult:
     """Fit all matching CarbonylPeakArea files in one dataset folder.
@@ -196,6 +203,9 @@ def fit_folder(
         mode: Execution mode selector passed through to ``fit_file``.
         min_points: Minimum points required before fitting a trajectory slice.
         init: Optional initial parameter list (p0) passed to the model fit.
+        use_prior_p0: If True, successful secondary-p0 values are carried forward
+            between rows (only accepted if r² improves by > 0.01). If False,
+            fitting starts fresh from ``init`` (or defaults) for every row.
         output_folder: Output subfolder name for merged outputs.
 
     Returns:
@@ -230,6 +240,7 @@ def fit_folder(
                 mode=mode,
                 min_points=min_points,
                 init=init,
+                use_prior_p0=use_prior_p0,
                 output_folder=output_folder,
                 save=True,
             )
@@ -256,6 +267,7 @@ def fit_folder_by_sum_models(
     min_points: int = 4,
     monomer_init: list[float] | None = None,
     cluster_init: list[float] | None = None,
+    carry_forward_p0: bool = True,
     output_folder: str = "_test",
 ) -> BatchFitResult:
     """Fit monomer and cluster groups with different models in one pass.
@@ -263,6 +275,11 @@ def fit_folder_by_sum_models(
     Uses config-based peak lists and writes one merged output file per input:
     - monomer peaks + ``monomer_sum`` -> ``monomer_model``
     - cluster peaks + ``cluster_sum`` -> ``cluster_model``
+
+    The ``use_prior_p0`` option applies to the monomer (secondary) model only:
+    - True: successful secondary-p0 values are carried forward between rows
+      (only accepted if r² improves by > 0.01).
+    - False: fitting starts fresh from ``monomer_init`` (or defaults) for every row.
     """
     if mode not in {"full_series", "rolling"}:
         raise ValueError("mode must be one of: full_series, rolling")
@@ -296,6 +313,7 @@ def fit_folder_by_sum_models(
                 mode=mode,
                 monomer_p0=monomer_init,
                 cluster_p0=cluster_init,
+                carry_forward_p0=carry_forward_p0,
             )
             outputs.append(output_path)
         except Exception as exc:
@@ -418,5 +436,6 @@ if __name__ == "__main__":
         min_points=4,
         monomer_init=None,
         cluster_init=None,
+        carry_forward_p0=False,
         output_folder="_test",
     )

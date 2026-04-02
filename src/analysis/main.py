@@ -14,10 +14,7 @@ from lmfit import Parameters
 from . import peak_heights
 from ..core import config
 from .io import import_calibration_data, import_data, load_peak_parameters
-from .kinetics_fitting import (
-    append_pfo_fit_results,
-    calibration_statistics,
-)
+from .kinetics_fitting import append_fit_results, calibration_statistics
 from .output import (
     compute_baseline_df,
     compute_cumulative_peak_area_df,
@@ -186,7 +183,7 @@ class DataAnalysisRunner:
         )
         return self.calibration
 
-    def run_spectral_fit(self, file_path: str) -> str | None:
+    def run_spectral_fit(self, file_path: str, run_kinetics: bool = True) -> str | None:
         """Fit a Voigt profile to the carbonyl peak in subIFG data."""
         peak_list_core = get_peak_list(self.voigt_settings)
         if not peak_list_core:
@@ -278,7 +275,12 @@ class DataAnalysisRunner:
             df_fit_peaks_history,
             [f"Peak_{peak}" for peak in get_shifted_monomer_peaks(self.voigt_settings)],
         )
-        df_peak_area_output = compute_peak_area_with_kinetics_df(df_cumulative_areas)
+        if run_kinetics:
+            df_peak_area_output = compute_peak_area_with_kinetics_df(
+                df_cumulative_areas
+            )
+        else:
+            df_peak_area_output = df_cumulative_areas
         peak_area_path = save_peak_area_versus_time_df(
             df_peak_area_output,
             paths.file_name,
@@ -328,8 +330,7 @@ class DataAnalysisRunner:
             df_cumulative_peak_area = cumulative_peak_area
         if df_cumulative_peak_area is None or df_cumulative_peak_area.empty:
             return df_cumulative_peak_area
-        df_with_pfo = append_pfo_fit_results(df_cumulative_peak_area)
-        return df_with_pfo
+        return append_fit_results(df_cumulative_peak_area)
 
     def run_spectral_peak_heights(self, file_path: str) -> None:
         """Run peak height analysis for a subIFG file."""
@@ -337,9 +338,8 @@ class DataAnalysisRunner:
         analyzer.run(file_path)
 
     def run_main(self, file_path: str) -> None:
-        """Run spectral fit, kinetics fit, and peak heights in order."""
-        peak_area_path = self.run_spectral_fit(file_path)
-        self.run_kinetics_fit(peak_area_path)
+        """Run spectral fit and peak heights in order."""
+        self.run_spectral_fit(file_path)
         self.run_spectral_peak_heights(file_path)
 
 

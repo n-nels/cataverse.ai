@@ -5,12 +5,14 @@ from __future__ import annotations
 import logging
 import warnings
 from dataclasses import dataclass
+from threading import Thread
 from typing import Any, Callable, cast
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from scipy.optimize import OptimizeWarning, curve_fit
+from scipy.integrate import solve_ivp
+from scipy.optimize import OptimizeWarning, curve_fit, minimize
 
 from ..core import config
 from .spectral_fitting import get_shifted_monomer_peaks
@@ -24,11 +26,17 @@ SMOOTHING_WINDOW = int(CLASSIFICATION_SETTINGS.get("smoothing_window", 4))
 EPS_FLAT_DEFAULT = float(CLASSIFICATION_SETTINGS.get("eps_flat", 1e-6))
 RISE_DELTA_DEFAULT = float(CLASSIFICATION_SETTINGS.get("rise_delta", 1.1e-1))
 PFO_PARAMS = [
-    "pfo_ka_s-1",
-    "pfo_kd_s-1",
-    "pfo_qe_au",
-    "pfo_Keq_au",
+    "pfo_k_s-1",
+    "pfo_q_e_au",
     "pfo_q0_au",
+]
+SECONDARY_PFO_PARAMS = [
+    "pfo-sec_k_a_s-1",
+    "pfo-sec_q_e_au",
+    "pfo-sec_k_s_s-1",
+    "pfo-sec_k_p_s-1",
+    "pfo-sec_q_inf_au",
+    "pfo-sec_q0_au",
 ]
 
 
@@ -38,16 +46,11 @@ class PfoFitResult:
 
     peak_name: str
     time_s: float
-    ka_s_1: float
-    ka_stderr: float
-    kd_s_1: float
-    kd_stderr: float
-    qe_au: float
-    qe_au_stderr: float
-    Keq_au: float
-    Keq_au_stderr: float
+    k_s_1: float
+    k_stderr: float
+    q_e_au: float
+    q_e_stderr: float
     q0_au: float
-    q0_au_stderr: float
     r_squared: float
     rmse: float
     classification: str
@@ -58,16 +61,11 @@ class PfoFitResult:
         return {
             "Peak_Name": self.peak_name,
             "Time (s)": self.time_s,
-            "pfo_ka_s-1": self.ka_s_1,
-            "pfo_ka_stderr": self.ka_stderr,
-            "pfo_kd_s-1": self.kd_s_1,
-            "pfo_kd_stderr": self.kd_stderr,
-            "pfo_qe_au": self.qe_au,
-            "pfo_qe_au_stderr": self.qe_au_stderr,
-            "pfo_Keq_au": self.Keq_au,
-            "pfo_Keq_au_stderr": self.Keq_au_stderr,
+            "pfo_k_s-1": self.k_s_1,
+            "pfo_k_stderr": self.k_stderr,
+            "pfo_q_e_au": self.q_e_au,
+            "pfo_q_e_stderr": self.q_e_stderr,
             "pfo_q0_au": self.q0_au,
-            "pfo_q0_au_stderr": self.q0_au_stderr,
             "pfo_r^2": self.r_squared,
             "pfo_rmse": self.rmse,
             "classification": self.classification,
@@ -106,16 +104,12 @@ def linfunc_no_intercept(
 
 def pfo(
     time_s: NDArray[np.float64],
-    k_a: float,
-    k_d: float,
+    k: float,
     q_e: float,
-    K_eq: float,
     q_0: float,
 ) -> NDArray[np.float64]:
-    """PFO uptake with exponential decay toward equilibrium offset."""
-    adsorption = q_e * (1.0 - np.exp(-k_a * time_s)) * np.exp(-k_d * time_s)
-    equilibrium = K_eq * (1.0 - np.exp(-k_d * time_s))
-    return q_0 + adsorption + equilibrium
+    """True pseudo-first-order uptake with fixed offset."""
+    return q_0 + q_e * (1.0 - np.exp(-k * time_s))
 
 
 def calculate_metrics(
@@ -255,12 +249,25 @@ def fit_and_evaluate(
     p0: list[float] | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], float, float]:
     """Fit PFO model and return parameters, errors, and diagnostics."""
+    q_guess = float(np.max(intensity)) if intensity.size else 0.0
+    q_0_fixed = float(intensity[0]) if intensity.size else 0.0
+
     if p0 is None:
-        q_guess = float(np.max(intensity)) if intensity.size else 0.0
-        q_floor = max(q_guess, 0.0)
-        q0_guess = float(intensity[0]) if intensity.size else 0.0
-        p0 = [1e-4, 1e-6, q_floor, q_floor * 0.5, q0_guess]
-    bounds = ([0.0, 0.0, 0.0, 0.0, -np.inf], [np.inf, np.inf, np.inf, np.inf, np.inf])
+        p0_fit = [1e-4, max(q_guess, 0.0)]
+    elif len(p0) == 2:
+        p0_fit = [float(p0[0]), float(p0[1])]
+    elif len(p0) == 3:
+        p0_fit = [float(p0[0]), float(p0[1])]
+        q_0_fixed = float(p0[2])
+    else:
+        raise ValueError("pfo p0 must contain 2 or 3 values")
+
+    bounds = ([0.0, 0.0], [0.01, q_guess * 2])
+
+    p0_fit = [
+        float(np.clip(value, low, high))
+        for value, low, high in zip(p0_fit, bounds[0], bounds[1], strict=True)
+    ]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", OptimizeWarning)
@@ -269,21 +276,25 @@ def fit_and_evaluate(
                 divide="ignore", invalid="ignore", over="ignore", under="ignore"
             ):
                 popt, pcov = curve_fit(
-                    pfo,
+                    lambda t, k, q_e: pfo(t, k, q_e, q_0_fixed),
                     time_s,
                     intensity,
-                    p0=p0,
+                    p0=p0_fit,
                     bounds=bounds,
                     maxfev=20000,
                 )
-                y_pred = pfo(time_s, *popt)
+                y_pred = pfo(time_s, popt[0], popt[1], q_0_fixed)
                 r_squared, rmse, _ = calculate_metrics(intensity, y_pred)
                 std_errors = np.sqrt(np.diag(pcov))
-                return popt, std_errors, r_squared, rmse
+                popt_full = np.array([popt[0], popt[1], q_0_fixed], dtype=float)
+                std_errors_full = np.array(
+                    [std_errors[0], std_errors[1], np.nan], dtype=float
+                )
+                return popt_full, std_errors_full, r_squared, rmse
         except Exception as exc:
             LOGGER.warning("PFO fit failed: %s", exc)
 
-    popt_length = len(p0)
+    popt_length = len(PFO_PARAMS)
     return (
         np.full(popt_length, np.nan),
         np.full(popt_length, np.nan),
@@ -356,18 +367,171 @@ def _append_sum_rows(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def pfo_fit(df_cumulative_peak_area: pd.DataFrame) -> pd.DataFrame | None:
-    """Fit PFO kinetics for cumulative peak area trajectories."""
-    df = df_cumulative_peak_area.copy()
-    df["Time (s)"] = pd.to_numeric(df["Time (s)"], errors="coerce")
-    df["Cumulative_Peak_Area"] = pd.to_numeric(
-        df["Cumulative_Peak_Area"], errors="coerce"
-    )
-    df = df.dropna(subset=["Time (s)", "Cumulative_Peak_Area"])
-    df = _append_sum_rows(df)
+def coupled_pfo_odes(
+    t: float,
+    y: list[float],
+    k_a: float,
+    q_e: float,
+    k_s: float,
+    k_p: float,
+    q_inf: float,
+) -> list[float]:
+    """Coupled ODE system for secondary PFO model."""
+    q, p = y
+    dq = k_a * (q_e - q) - k_s * p
+    dp = k_p * (q - q_inf - p)
+    return [dq, dp]
 
+
+def pfo_with_secondary_states(
+    time_s: NDArray[np.float64],
+    k_a: float,
+    q_e: float,
+    k_s: float,
+    k_p: float,
+    q_inf: float,
+    q_0: float,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]] | None:
+    """Return q(t) and p(t) for secondary PFO model."""
+    _, unique_indices = np.unique(time_s, return_index=True)
+    time_s_unique = np.sort(time_s[unique_indices])
+
+    result_container: dict[str, Any] = {"sol": None, "error": None}
+
+    def solve_ode() -> None:
+        try:
+            result_container["sol"] = solve_ivp(
+                coupled_pfo_odes,
+                t_span=(time_s_unique[0], time_s_unique[-1]),
+                y0=[q_0, 0.0],
+                args=(k_a, q_e, k_s, k_p, q_inf),
+                t_eval=time_s_unique,
+                method="RK45",
+                rtol=1e-8,
+            )
+        except Exception as exc:
+            result_container["error"] = exc
+
+    thread = Thread(target=solve_ode)
+    thread.start()
+    thread.join(timeout=0.1)
+
+    if thread.is_alive():
+        LOGGER.warning("Secondary PFO solve_ivp timed out")
+        return None
+
+    if result_container["error"] is not None:
+        return None
+
+    sol = result_container["sol"]
+    if sol is None or not sol.success:
+        return None
+
+    q_unique = cast(NDArray[np.float64], sol.y[0])
+    p_unique = cast(NDArray[np.float64], sol.y[1])
+
+    interp_q = np.interp(time_s, time_s_unique, q_unique)
+    interp_p = np.interp(time_s, time_s_unique, p_unique)
+    return interp_q, interp_p
+
+
+def fit_secondary_pfo_with_errors(
+    time_s: NDArray[np.float64],
+    intensity: NDArray[np.float64],
+    p0: list[float] | None = None,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], float, float]:
+    """Fit secondary PFO model and return parameters, errors, and diagnostics."""
+    q_0_fixed = float(intensity[0]) if intensity.size else 0.0
+    q_guess = float(np.max(intensity)) if intensity.size else 0.0
+
+    if p0 is None:
+        p0 = [3e-4, q_guess, 5e-5, 0.5, 0.0]
+    if len(p0) != 5:
+        raise ValueError("secondary_pfo p0 must have exactly 5 values")
+
+    bounds = [
+        (0.0, 0.01),
+        (0.0, q_guess * 2),
+        (0.0, 0.01),
+        (0.0, 1.0),
+        (0.0, q_guess * 2),
+    ]
+
+    p0 = [
+        float(np.clip(value, low, high))
+        for value, (low, high) in zip(p0, bounds, strict=True)
+    ]
+
+    def objective(params: NDArray[np.float64]) -> float:
+        k_a, q_e, k_s, k_p_ratio, q_inf = params
+        k_p = k_a * k_p_ratio
+        states = pfo_with_secondary_states(
+            time_s, k_a, q_e, k_s, k_p, q_inf, q_0_fixed
+        )
+        if states is None:
+            return np.inf
+        q_fit, p_fit = states
+        if np.any(~np.isfinite(q_fit)) or np.any(~np.isfinite(p_fit)):
+            return np.inf
+        residuals = intensity - q_fit
+        return float(np.sum(residuals**2))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", OptimizeWarning)
+        try:
+            result = minimize(
+                objective,
+                x0=np.array(p0, dtype=float),
+                bounds=bounds,
+                method="L-BFGS-B",
+            )
+        except Exception as exc:
+            LOGGER.debug("Secondary PFO minimization failed: %s", exc)
+            result = None
+
+    if result is not None and result.success:
+        k_a_fit, q_e_fit, k_s_fit, k_p_ratio, q_inf_fit = result.x
+        k_p_fit = k_a_fit * k_p_ratio
+        states = pfo_with_secondary_states(
+            time_s, k_a_fit, q_e_fit, k_s_fit, k_p_fit, q_inf_fit, q_0_fixed
+        )
+        if states is None:
+            popt_length = len(p0) + 1
+            return (
+                np.full(popt_length, np.nan),
+                np.full(popt_length, np.nan),
+                np.nan,
+                np.nan,
+            )
+        q_fit, _ = states
+        r_squared, rmse, _ = calculate_metrics(intensity, q_fit)
+        popt_full = np.array(
+            [k_a_fit, q_e_fit, k_s_fit, k_p_fit, q_inf_fit, q_0_fixed],
+            dtype=float,
+        )
+        std_errors_full = np.full_like(popt_full, np.nan, dtype=float)
+        return popt_full, std_errors_full, r_squared, rmse
+
+    popt_length = len(p0) + 1
+    return (
+        np.full(popt_length, np.nan),
+        np.full(popt_length, np.nan),
+        np.nan,
+        np.nan,
+    )
+
+
+def _prepare_pfo_fit_rows(
+    df: pd.DataFrame,
+    *,
+    peak_names: list[str] | None = None,
+    min_points: int = 4,
+) -> pd.DataFrame:
     records: list[dict[str, float | str]] = []
     sum_names = ["cluster_sum"]
+
+    if peak_names is not None:
+        df = df.loc[df["Peak_Name"].isin(peak_names)].copy()
 
     for group_key, group in df.groupby("Peak_Name"):
         group = group.sort_values("Time (s)").reset_index(drop=True)
@@ -376,7 +540,7 @@ def pfo_fit(df_cumulative_peak_area: pd.DataFrame) -> pd.DataFrame | None:
         classification_value: float | str = np.nan
         breakpoint_used_value: float | str = np.nan
         classification: dict[str, Any] = {}
-        if peak_name in sum_names and len(group) >= 4:
+        if peak_name in sum_names and len(group) >= min_points:
             time_s_all = group["Time (s)"].to_numpy(dtype=float)
             intensity_all = group["Cumulative_Peak_Area"].to_numpy(dtype=float)
             classification = classify_trajectory(time_s_all, intensity_all)
@@ -393,7 +557,7 @@ def pfo_fit(df_cumulative_peak_area: pd.DataFrame) -> pd.DataFrame | None:
                 float(breakpoint_raw) if breakpoint_raw is not None else np.nan
             )
 
-        if len(group) < 4:
+        if len(group) < min_points:
             continue
 
         unique_times = sorted(group["Time (s)"].unique())
@@ -402,7 +566,7 @@ def pfo_fit(df_cumulative_peak_area: pd.DataFrame) -> pd.DataFrame | None:
             time_s = group.loc[mask, "Time (s)"].to_numpy(dtype=float)
             intensity = group.loc[mask, "Cumulative_Peak_Area"].to_numpy(dtype=float)
 
-            if len(time_s) < 4:
+            if len(time_s) < min_points:
                 continue
 
             current_row = group[group["Time (s)"] == unique_time].iloc[0]
@@ -422,67 +586,220 @@ def pfo_fit(df_cumulative_peak_area: pd.DataFrame) -> pd.DataFrame | None:
                         record[key] = value
 
             param_keys = [
-                ("pfo_ka_s-1", "pfo_ka_stderr"),
-                ("pfo_kd_s-1", "pfo_kd_stderr"),
-                ("pfo_qe_au", "pfo_qe_au_stderr"),
-                ("pfo_Keq_au", "pfo_Keq_au_stderr"),
-                ("pfo_q0_au", "pfo_q0_au_stderr"),
+                ("pfo_k_s-1", "pfo_k_stderr"),
+                ("pfo_q_e_au", "pfo_q_e_stderr"),
+                ("pfo_q0_au", None),
             ]
             for (value_key, stderr_key), value, stderr in zip(
                 param_keys, popt, std_errors, strict=True
             ):
                 record[value_key] = float(value) if np.isfinite(value) else np.nan
-                record[stderr_key] = float(stderr) if np.isfinite(stderr) else np.nan
+                if stderr_key is not None:
+                    record[stderr_key] = (
+                        float(stderr) if np.isfinite(stderr) else np.nan
+                    )
 
             records.append(record)
 
-    if not records:
-        return None
+    return pd.DataFrame(records) if records else pd.DataFrame()
 
-    df_fit_results = pd.DataFrame(records)
 
+def _prepare_secondary_fit_rows(
+    df: pd.DataFrame,
+    *,
+    peak_names: list[str] | None = None,
+    min_points: int = 4,
+    p0: list[float] | None = None,
+) -> pd.DataFrame:
+    records: list[dict[str, float | str]] = []
+    if peak_names is not None:
+        df = df.loc[df["Peak_Name"].isin(peak_names)].copy()
+
+    for group_key, group in df.groupby("Peak_Name"):
+        group = group.sort_values("Time (s)").reset_index(drop=True)
+        if len(group) < min_points:
+            continue
+
+        unique_times = sorted(group["Time (s)"].unique())
+        for unique_time in unique_times:
+            mask = group["Time (s)"] <= unique_time
+            time_s = group.loc[mask, "Time (s)"].to_numpy(dtype=float)
+            intensity = group.loc[mask, "Cumulative_Peak_Area"].to_numpy(dtype=float)
+
+            if len(time_s) < min_points:
+                continue
+
+            current_row = group[group["Time (s)"] == unique_time].iloc[0]
+            effective_p0 = _select_secondary_p0(
+                time_s,
+                intensity,
+                threshold_r2=0.96,
+                user_p0=p0,
+                min_points=min_points,
+            )
+            popt, std_errors, r_squared, rmse = fit_secondary_pfo_with_errors(
+                time_s,
+                intensity,
+                effective_p0,
+            )
+
+            record: dict[str, float | str] = {
+                "Peak_Name": str(current_row["Peak_Name"]),
+                "Time (s)": float(unique_time),
+                "pfo-sec_r^2": r_squared,
+                "pfo-sec_rmse": rmse,
+            }
+
+            param_keys = [
+                ("pfo-sec_k_a_s-1", "pfo-sec_k_a_stderr"),
+                ("pfo-sec_q_e_au", "pfo-sec_q_e_stderr"),
+                ("pfo-sec_k_s_s-1", "pfo-sec_k_s_stderr"),
+                ("pfo-sec_k_p_s-1", "pfo-sec_k_p_stderr"),
+                ("pfo-sec_q_inf_au", "pfo-sec_q_inf_stderr"),
+                ("pfo-sec_q0_au", None),
+            ]
+            for (value_key, stderr_key), value, stderr in zip(
+                param_keys, popt, std_errors, strict=True
+            ):
+                record[value_key] = float(value) if np.isfinite(value) else np.nan
+                if stderr_key is not None:
+                    record[stderr_key] = (
+                        float(stderr) if np.isfinite(stderr) else np.nan
+                    )
+
+            records.append(record)
+
+    return pd.DataFrame(records) if records else pd.DataFrame()
+
+
+def append_fit_results(
+    df_cumulative_peak_area: pd.DataFrame,
+) -> pd.DataFrame:
+    """Safely append kinetics fit results to cumulative peak areas."""
+    if df_cumulative_peak_area.empty:
+        return df_cumulative_peak_area
+
+    fit_columns = {
+        "pfo_k_s-1",
+        "pfo_k_stderr",
+        "pfo_q_e_au",
+        "pfo_q_e_stderr",
+        "pfo_q0_au",
+        "pfo_r^2",
+        "pfo_rmse",
+        "pfo-sec_k_a_s-1",
+        "pfo-sec_q_e_au",
+        "pfo-sec_k_s_s-1",
+        "pfo-sec_k_p_s-1",
+        "pfo-sec_q_inf_au",
+        "pfo-sec_q0_au",
+        "pfo-sec_r^2",
+        "pfo-sec_rmse",
+        "classification",
+        "growth_onset_s",
+    }
+    if fit_columns.intersection(df_cumulative_peak_area.columns):
+        return df_cumulative_peak_area
+
+    df = df_cumulative_peak_area.copy()
+    df["Time (s)"] = pd.to_numeric(df["Time (s)"], errors="coerce")
+    df["Cumulative_Peak_Area"] = pd.to_numeric(
+        df["Cumulative_Peak_Area"], errors="coerce"
+    )
+    df = df.dropna(subset=["Time (s)", "Cumulative_Peak_Area"])
+    df = _append_sum_rows(df)
+
+    monomer_peak_names = [*_get_monomer_peak_names(isotope=None), "monomer_sum"]
+    cluster_peak_names = [
+        *_get_peak_names("cluster_peaks_base", isotope=None),
+        "cluster_sum",
+    ]
+
+    overlap = set(monomer_peak_names) & set(cluster_peak_names)
+    if overlap:
+        raise ValueError(
+            "Monomer/cluster peak sets overlap in config: "
+            + ", ".join(sorted(overlap))
+        )
+
+    try:
+        monomer_rows = _prepare_secondary_fit_rows(df, peak_names=monomer_peak_names)
+        cluster_rows = _prepare_pfo_fit_rows(df, peak_names=cluster_peak_names)
+    except Exception as exc:
+        LOGGER.warning("An error occurred during kinetics fitting: %s", exc)
+        return df_cumulative_peak_area
+
+    frames = [frame for frame in [monomer_rows, cluster_rows] if not frame.empty]
+    if not frames:
+        return df_cumulative_peak_area
+
+    df_fit_results = pd.concat(frames, ignore_index=True)
     df_merged = pd.merge(
         df_cumulative_peak_area,
         df_fit_results,
         on=["Peak_Name", "Time (s)"],
         how="left",
     )
-
     return df_merged
 
 
-def append_pfo_fit_results(
-    df_cumulative_peak_area: pd.DataFrame,
-) -> pd.DataFrame:
-    """Safely append PFO fit results to cumulative peak areas."""
-    if df_cumulative_peak_area.empty:
-        return df_cumulative_peak_area
-    pfo_columns = {
-        "pfo_ka_s-1",
-        "pfo_ka_stderr",
-        "pfo_kd_s-1",
-        "pfo_kd_stderr",
-        "pfo_qe_au",
-        "pfo_qe_au_stderr",
-        "pfo_Keq_au",
-        "pfo_Keq_au_stderr",
-        "pfo_q0_au",
-        "pfo_q0_au_stderr",
-        "pfo_r^2",
-        "pfo_rmse",
-        "classification",
-        "growth_onset_s",
-    }
-    if pfo_columns.intersection(df_cumulative_peak_area.columns):
-        return df_cumulative_peak_area
-    try:
-        df_peak_area_output = pfo_fit(df_cumulative_peak_area)
-    except Exception as exc:
-        LOGGER.warning("An error occurred during pfo_fit: %s", exc)
-        return df_cumulative_peak_area
-    return (
-        df_cumulative_peak_area if df_peak_area_output is None else df_peak_area_output
-    )
+def _select_secondary_p0(
+    time_s: NDArray[np.float64],
+    intensity: NDArray[np.float64],
+    *,
+    threshold_r2: float = 0.96,
+    user_p0: list[float] | None = None,
+    min_points: int = 4,
+) -> list[float]:
+    """Select secondary p0 for the current trajectory slice."""
+    if len(time_s) < min_points:
+        return user_p0 if user_p0 is not None else [3e-4, 1.0, 5e-5, 0.5, 0.0]
+
+    q_guess = float(np.max(intensity)) if intensity.size else 0.0
+    default_p0 = [3e-4, q_guess, 5e-5, 0.5, 0.0]
+    current = list(user_p0) if user_p0 is not None else list(default_p0)
+    if len(current) != 5:
+        current = list(default_p0)
+
+    best_p0 = list(current)
+    best_r2 = -np.inf
+
+    def eval_r2(candidate: list[float]) -> float:
+        _, _, r2, _ = fit_secondary_pfo_with_errors(time_s, intensity, candidate)
+        return float(r2) if np.isfinite(r2) else -np.inf
+
+    baseline_r2 = eval_r2(best_p0)
+    if baseline_r2 > best_r2:
+        best_r2 = baseline_r2
+    if best_r2 >= threshold_r2:
+        return best_p0
+
+    search_steps: list[tuple[int, list[float]]] = [
+        (0, [3e-5, 6e-4]),  # k_a
+        (1, [q_guess / 2.0]),  # q_e
+        (2, [9e-5, 1e-5]),  # k_s
+        (3, [0.1, 1.0]),  # k_p_ratio
+        (4, [0.5]),  # q_inf
+    ]
+
+    for param_idx, trial_values in search_steps:
+        local_best_p0 = list(best_p0)
+        local_best_r2 = best_r2
+
+        for trial in trial_values:
+            candidate = list(best_p0)
+            candidate[param_idx] = float(trial)
+            r2 = eval_r2(candidate)
+            if r2 > local_best_r2:
+                local_best_r2 = r2
+                local_best_p0 = candidate
+
+        best_p0 = local_best_p0
+        best_r2 = local_best_r2
+        if best_r2 >= threshold_r2:
+            return best_p0
+
+    return best_p0
 
 
 def calibration_statistics(
