@@ -70,6 +70,8 @@ class GasDelivery:
             dir_actLog = os.path.join(data_directory, str(foldername))
             path_actLog = os.path.join(dir_actLog, filename + "_actLog.csv")
             create_directory(dir_actLog)
+            """[fix] move elsewhere since they create files?
+            """
 
         self.valves.close("RoughPump")
         self.valves.close("TurboPump")
@@ -97,7 +99,7 @@ class GasDelivery:
         while p_mfld_f < (target - tolerance):
             if value < 1.2:
                 act_write = float(value) + 0.1
-                logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                logger.info("%s write value is %s", id, act_write)
                 value = self.valves.write(id, act_write)[1]
                 time.sleep(read_short)
                 continue
@@ -136,7 +138,7 @@ class GasDelivery:
                         logger.info("Pressure difference is below tolerance")
                         dt, p_mfld_i, p_cell = self.pressure.read()
                         act_write = float(value) + step
-                        logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                        logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_short)
                         continue
@@ -144,7 +146,7 @@ class GasDelivery:
 
                 elif pressure_diff >= 0.2 * target:
                     act_write = float(value) - step
-                    logger.info("%s write value is %s at %s for 0", id, act_write, datetime.now())
+                    logger.info("%s write value is %s for 0", id, act_write)
                     value = self.valves.write(id, act_write)[1]
 
                     act_writes.append(act_write)
@@ -169,12 +171,7 @@ class GasDelivery:
                         dithers.append(None)
 
                         act_write = float(value) + step
-                        logger.info(
-                            "%s write value is %s at %s for 1",
-                            id,
-                            act_write,
-                            datetime.now(),
-                        )
+                        logger.info("%s write value is %s for 1", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(dither)
 
@@ -184,7 +181,7 @@ class GasDelivery:
                         dithers.append(dither)
 
                         act_write = value - step
-                        logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                        logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_long)
 
@@ -196,20 +193,24 @@ class GasDelivery:
                         dithers.append(None)
 
                         pressure_diff = pressure_difference(p_mfld_f, p_mfld_i)
-                        logger.info("Pressure difference after dithering: %s", pressure_diff)
+                        logger.info(
+                            "Pressure difference after dithering: %s", pressure_diff
+                        )
 
                         if pressure_diff > target / 4:
                             dither = 0.2
 
                         if pressure_diff < target / 10:
                             dither *= 2
-                            logger.info("dither duration increased to: %s seconds", dither)
+                            logger.info(
+                                "dither duration increased to: %s seconds", dither
+                            )
 
                         if dither > 4:
                             logger.info("dither maximum reached")
                             dither = 0.2
                             act_write = float(value) + step
-                            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                            logger.info("%s write value is %s", id, act_write)
                             value = self.valves.write(id, act_write)[1]
                             time.sleep(read_short)
                     continue
@@ -218,7 +219,7 @@ class GasDelivery:
                     0.125 * target < pressure_diff < 0.5 * target
                 ):
                     dt, p_mfld_i, p_cell = self.pressure.read()
-                    logger.info("%s write value is %s at %s for 2", id, act_write, datetime.now())
+                    logger.info("%s write value is %s for 2", id, act_write)
 
                     act_writes.append(act_write)
                     datetimes.append(dt)
@@ -247,12 +248,7 @@ class GasDelivery:
                         dithers.append(None)
 
                         act_write = float(value) + step
-                        logger.info(
-                            "%s write value is %s at %s for 3",
-                            id,
-                            act_write,
-                            datetime.now(),
-                        )
+                        logger.info("%s write value is %s for 3", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(dither)
 
@@ -262,7 +258,7 @@ class GasDelivery:
                         dithers.append(dither)
 
                         act_write = value - step
-                        logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                        logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_long)
                         dt, p_mfld_f, p_cell = self.pressure.read()
@@ -273,19 +269,23 @@ class GasDelivery:
                         dithers.append(None)
 
                         pressure_diff = pressure_difference(p_mfld_f, p_mfld_i)
-                        logger.info("Pressure difference after dithering: %s", pressure_diff)
+                        logger.info(
+                            "Pressure difference after dithering: %s", pressure_diff
+                        )
 
                         if (pressure_diff < tolerance * 5) and (
                             p_mfld_f < target - (0.2 * target)
                         ):
                             dither *= 2
-                            logger.info("dither duration increased to: %s seconds", dither)
+                            logger.info(
+                                "dither duration increased to: %s seconds", dither
+                            )
 
                         if dither > 4:
                             logger.info("dither maximum reached")
                             dither = 0.2
                             act_write = float(value) + step
-                            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                            logger.info("%s write value is %s", id, act_write)
                             value = self.valves.write(id, act_write)[1]
                             time.sleep(read_short)
                     continue
@@ -294,7 +294,11 @@ class GasDelivery:
                     dither = 0.2
                     dt, p_mfld_f, p_cell = self.pressure.read()
 
-                    while (target - (0.2 * target)) < p_mfld_f <= (target - (0.1 * target)):
+                    while (
+                        (target - (0.2 * target))
+                        < p_mfld_f
+                        <= (target - (0.1 * target))
+                    ):
                         # Dither between two voltage settings
                         time.sleep(read_short)
                         dt, p_mfld_i, p_cell = self.pressure.read()
@@ -307,12 +311,7 @@ class GasDelivery:
                         dithers.append(None)
 
                         act_write = float(value) + step
-                        logger.info(
-                            "%s write value is %s at %s for 4",
-                            id,
-                            act_write,
-                            datetime.now(),
-                        )
+                        logger.info("%s write value is %s for 4", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(dither)
 
@@ -322,7 +321,7 @@ class GasDelivery:
                         dithers.append(dither)
 
                         act_write = value - step
-                        logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                        logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_short)
                         dt, p_mfld_f, p_cell = self.pressure.read()
@@ -333,7 +332,9 @@ class GasDelivery:
                         dithers.append(None)
 
                         pressure_diff = pressure_difference(p_mfld_f, p_mfld_i)
-                        logger.info("Pressure difference after dithering: %s", pressure_diff)
+                        logger.info(
+                            "Pressure difference after dithering: %s", pressure_diff
+                        )
 
                         if pressure_diff < (2 * tolerance):
                             dither *= 2  # changed from += 0.25 on 10/26
@@ -343,7 +344,7 @@ class GasDelivery:
                             logger.info("dither maximum reached")
                             dither = 0.2
                             act_write = float(value) + step
-                            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                            logger.info("%s write value is %s", id, act_write)
                             value = self.valves.write(id, act_write)[1]
                             time.sleep(read_short)
                     continue
@@ -353,10 +354,12 @@ class GasDelivery:
                     act_write = value - step
                     tmp_step = True
                     value = self.valves.write(id, act_write)[1]
-                    logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                    logger.info("%s write value is %s", id, act_write)
                     dt, p_mfld_f, p_cell = self.pressure.read()
 
-                    while target - (0.1 * target) < p_mfld_f <= target - (0.05 * target):
+                    while (
+                        target - (0.1 * target) < p_mfld_f <= target - (0.05 * target)
+                    ):
                         time.sleep(read_short)
                         dt, p_mfld_i, p_cell = self.pressure.read()
                         if p_mfld_i > target - (0.05 * target):
@@ -368,12 +371,7 @@ class GasDelivery:
                         dithers.append(None)
 
                         act_write = float(value) + step
-                        logger.info(
-                            "%s write value is %s at %s for 5",
-                            id,
-                            act_write,
-                            datetime.now(),
-                        )
+                        logger.info("%s write value is %s for 5", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(dither)
 
@@ -383,7 +381,7 @@ class GasDelivery:
                         dithers.append(dither)
 
                         act_write = value - step
-                        logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                        logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_short)
 
@@ -395,7 +393,9 @@ class GasDelivery:
                         dithers.append(None)
 
                         pressure_diff = pressure_difference(p_mfld_f, p_mfld_i)
-                        logger.info("Pressure difference after dithering: %s", pressure_diff)
+                        logger.info(
+                            "Pressure difference after dithering: %s", pressure_diff
+                        )
 
                         if (pressure_diff < tolerance) and (
                             p_mfld_f <= target - (0.05 * target)
@@ -407,7 +407,7 @@ class GasDelivery:
                             logger.info("dither maximum reached")
                             dither = 0.2
                             act_write = float(value) + step
-                            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                            logger.info("%s write value is %s", id, act_write)
                             value = self.valves.write(id, act_write)[1]
                             time.sleep(read_short)
 
@@ -415,7 +415,7 @@ class GasDelivery:
                             logger.info("dither maximum reached")
                             dither = 0.2
                             act_write = float(value) + step
-                            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                            logger.info("%s write value is %s", id, act_write)
                             value = self.valves.write(id, act_write)[1]
                             time.sleep(read_short)
                     continue
@@ -423,7 +423,7 @@ class GasDelivery:
                 elif target - (0.05 * target) < p_mfld_f < target - tolerance:
                     if pressure_diff > tolerance:
                         act_write = value - step
-                        logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                        logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
 
                     dither = 0.2
@@ -447,12 +447,7 @@ class GasDelivery:
                         dithers.append(None)
 
                         act_write = float(value) + step
-                        logger.info(
-                            "%s write value is %s at %s for 6",
-                            id,
-                            act_write,
-                            datetime.now(),
-                        )
+                        logger.info("%s write value is %s for 6", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(dither)
 
@@ -462,7 +457,7 @@ class GasDelivery:
                         dithers.append(dither)
 
                         act_write = value - step
-                        logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                        logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_long)
 
@@ -474,7 +469,9 @@ class GasDelivery:
                         dithers.append(None)
 
                         pressure_diff = pressure_difference(p_mfld_f, p_mfld_i)
-                        logger.info("Pressure difference after dithering: %s", pressure_diff)
+                        logger.info(
+                            "Pressure difference after dithering: %s", pressure_diff
+                        )
 
                         if pressure_diff < tolerance:
                             dither += 0.2  # Increase dithering duration
@@ -484,7 +481,7 @@ class GasDelivery:
                             logger.info("dither maximum reached")
                             dither = 0.2
                             act_write = float(value) + step
-                            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                            logger.info("%s write value is %s", id, act_write)
                             value = self.valves.write(id, act_write)[1]
                             time.sleep(read_short)
                     continue
@@ -529,6 +526,140 @@ class GasDelivery:
 
         return id, p_mfld_f
 
+    def deliver_gas_to_cell(
+        self, id: str = "irCell"
+    ) -> None:  # [fix] deliver_pretreatment..
+        """Admit gas to the IR cell using staged writes and pressure dithering.
+
+        This preserves the legacy pressure-dependent stepping flow used for
+        larger gas admissions into the cell volume.
+        """
+
+        self.valves.close("MassSpec")
+
+        act_write = 1.0
+        value = self.valves.write(id, act_write)[1]
+        read_short = 5
+        dither = 0.5
+
+        dt, p_mfld_i, p_cell = self.pressure.read()
+
+        while act_write < 1.52:
+            step = 0.1 if act_write < 1.4 else 0.04
+            act_write = float(value) + step
+            value = self.valves.write(id, act_write)[1]
+            logger.info("%s write value is %s", id, round(act_write, 2))
+            time.sleep(5)
+
+        # Measure pressure
+        dt, p_mfld_f, p_cell = self.pressure.read()
+        pressure_diff = abs(p_mfld_f - p_mfld_i)
+        logger.info(
+            "Manifold pressure is %s ; dP = %s",
+            round(p_mfld_f, 4),
+            round(pressure_diff, 4),
+        )
+
+        while pressure_diff > 0.02:
+            time.sleep(read_short)
+            dt, p_mfld_i, p_cell = self.pressure.read()
+
+            time.sleep(read_short)
+            dt, p_mfld_f, p_cell = self.pressure.read()
+            pressure_diff = abs(p_mfld_f - p_mfld_i)
+            logger.info(
+                "Manifold pressure is %s ; dP = %s",
+                round(p_mfld_f, 4),
+                round(pressure_diff, 4),
+            )
+
+        while True:
+            time.sleep(read_short)
+            dt, p_mfld_i, p_cell = self.pressure.read()
+            act_write = float(value) + step
+            logger.info("%s write value is %s", id, round(act_write, 2))
+            value = self.valves.write(id, act_write)[1]
+            time.sleep(dither)
+
+            act_write = value - step
+            logger.info("%s write value is %s", id, round(act_write, 2))
+            value = self.valves.write(id, act_write)[1]
+            time.sleep(read_short)
+
+            dt, p_mfld_f, p_cell = self.pressure.read()
+            pressure_diff = abs(p_mfld_f - p_mfld_i)
+            logger.info(
+                "Pressure difference after dithering: %s", round(pressure_diff, 4)
+            )
+
+            if pressure_diff < 0.02:
+                dither *= 2
+                logger.info(
+                    "dither duration increased to: %s seconds", round(dither, 2)
+                )
+
+            if dither >= 4:
+                act_write = float(value) + step
+                logger.info("%s write value is %s", id, round(act_write, 2))
+                value = self.valves.write(id, act_write)[1]
+                dither = 0.5
+                break
+
+        while pressure_diff > 0.02:
+            time.sleep(read_short)
+            dt, p_mfld_i, p_cell = self.pressure.read()
+
+            time.sleep(read_short)
+            dt, p_mfld_f, p_cell = self.pressure.read()
+            pressure_diff = abs(p_mfld_f - p_mfld_i)
+            logger.info(
+                "Manifold pressure is %s ; dP = %s",
+                round(p_mfld_f, 4),
+                round(pressure_diff, 4),
+            )
+
+        while True:
+            time.sleep(read_short)
+            dt, p_mfld_i, p_cell = self.pressure.read()
+            act_write = float(value) + step
+            logger.info("%s write value is %s", id, round(act_write, 2))
+            value = self.valves.write(id, act_write)[1]
+            time.sleep(dither)
+
+            act_write = value - step
+            logger.info("%s write value is %s", id, round(act_write, 2))
+            value = self.valves.write(id, act_write)[1]
+            time.sleep(read_short)
+
+            dt, p_mfld_f, p_cell = self.pressure.read()
+            pressure_diff = abs(p_mfld_f - p_mfld_i)
+            logger.info(
+                "Pressure difference after dithering: %s", round(pressure_diff, 4)
+            )
+
+            if pressure_diff < 0.02:
+                dither *= 2
+                logger.info(
+                    "dither duration increased to: %s seconds", round(dither, 2)
+                )
+
+            if dither >= 4:
+                act_write = float(value) + step
+                logger.info("%s write value is %s", id, round(act_write, 2))
+                value = self.valves.write(id, act_write)[1]
+                dither = 0.5
+                break
+
+        while act_write < 1.68:
+            act_write = float(value) + step
+            value = self.valves.write(id, act_write)[1]
+            logger.info("%s write value is %s", id, round(act_write, 2))
+            time.sleep(30)
+
+        value = self.valves.write(id, 5.0)[1]
+        logger.info("%s write value is %s", id, round(value, 2))
+        time.sleep(30)
+
     def evacuate_cell(self, id: str) -> str:
         """Evacuate cell-side volume using staged pump-valve opening sequence."""
 
@@ -553,10 +684,9 @@ class GasDelivery:
             step = 0.1 if act_write < 1.4 else 0.04
             act_write = float(value) + step
             value = self.valves.write(id, act_write)[1]
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             time.sleep(5)
 
-        # Measure pressure
         dt, p_mfld_f, p_cell = self.pressure.read()
         pressure_diff = abs(p_mfld_f - p_mfld_i)
         logger.info("Manifold pressure is %s ; dP = %s", p_mfld_f, pressure_diff)
@@ -573,11 +703,11 @@ class GasDelivery:
         while act_write < 1.60:
             act_write = float(value) + step
             value = self.valves.write(id, act_write)[1]
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             time.sleep(10)
 
         value = self.valves.write(id, 5.0)[1]
-        logger.info("%s write value is %s at %s", id, value, datetime.now())
+        logger.info("%s write value is %s", id, value)
 
         while pressure_diff > 0.0:
             time.sleep(read_short)
@@ -608,36 +738,36 @@ class GasDelivery:
 
         while act_write < 1.2:
             act_write = float(value) + 0.1
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             value = self.valves.write(id, act_write)[1]
             time.sleep(5)
 
         while act_write < 1.44:
             act_write = float(value) + 0.04
             value = self.valves.write(id, act_write)[1]
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             time.sleep(5)
 
         while act_write < 1.48:
             act_write = float(value) + 0.04
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             value = self.valves.write(id, act_write)[1]
             time.sleep(5)
 
         while act_write < 1.52:
             act_write = float(value) + 0.04
             value = self.valves.write(id, act_write)[1]
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             time.sleep(15)
 
         while act_write < 1.56:
             act_write = float(value) + 0.04
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             value = self.valves.write(id, act_write)[1]
             time.sleep(3)
             act_write = float(value) - 0.04
             value = self.valves.write(id, act_write)[1]
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             logger.info("i = %s out of 4", i)
             time.sleep(1)
             i += 1
@@ -650,11 +780,11 @@ class GasDelivery:
         while act_write < 1.6:
             act_write = float(value) + 0.04
             value = self.valves.write(id, act_write)[1]
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             time.sleep(10)
 
         value = self.valves.write(id, 5.0)[1]
-        logger.info("%s write value is %s at %s", id, value, datetime.now())
+        logger.info("%s write value is %s", id, value)
         time.sleep(20)
 
     def mass_spec_open_calibration(self) -> None:
@@ -668,20 +798,20 @@ class GasDelivery:
 
         while act_write < 1.2:
             act_write = float(value) + 0.1
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             value = self.valves.write(id, act_write)[1]
             time.sleep(3)
 
         while act_write < 1.24:
             act_write = float(value) + 0.04
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
             value = self.valves.write(id, act_write)[1]
             time.sleep(3)
 
         while act_write < 1.28:
             if i <= 10:  # was 5
                 act_write = float(value) + 0.04
-                logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                logger.info("%s write value is %s", id, act_write)
                 value = self.valves.write(id, act_write)[1]
 
                 time.sleep(0.5)
@@ -703,7 +833,7 @@ class GasDelivery:
         while act_write < 1.32:
             if i <= 5:
                 act_write = float(value) + 0.04
-                logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                logger.info("%s write value is %s", id, act_write)
                 value = self.valves.write(id, act_write)[1]
 
                 time.sleep(0.25)  # was 0.35
@@ -717,7 +847,7 @@ class GasDelivery:
 
             elif i <= 45:  # was 35, currently 35
                 act_write = float(value) + 0.04
-                logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                logger.info("%s write value is %s", id, act_write)
                 value = self.valves.write(id, act_write)[1]
 
                 time.sleep(0.3)  # was 0.5, currently 0.4
@@ -731,7 +861,7 @@ class GasDelivery:
 
             elif i > 45 and i <= 65:  # was 35 and 55, currently 35 and 55
                 act_write = float(value) + 0.04
-                logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+                logger.info("%s write value is %s", id, act_write)
                 value = self.valves.write(id, act_write)[1]
 
                 time.sleep(1)
@@ -756,7 +886,7 @@ class GasDelivery:
         while act_write < 1.40:
             act_write = float(value) + 0.04
             value = self.valves.write(id, act_write)[1]
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
 
             wait_time = timedelta(seconds=30)
             logger.info("Wait until: %s", datetime.now() + wait_time)
@@ -765,14 +895,14 @@ class GasDelivery:
         while act_write < 1.48:
             act_write = float(value) + 0.04
             value = self.valves.write(id, act_write)[1]
-            logger.info("%s write value is %s at %s", id, act_write, datetime.now())
+            logger.info("%s write value is %s", id, act_write)
 
             wait_time = timedelta(seconds=5)
             logger.info("Wait until: %s", datetime.now() + wait_time)
             time.sleep(5)
 
         value = self.valves.write(id, 5.0)[1]
-        logger.info("%s write value is %s at %s", id, value, datetime.now())
+        logger.info("%s write value is %s", id, value)
 
         wait_time = timedelta(seconds=300)
         logger.info("Wait until: %s", datetime.now() + wait_time)

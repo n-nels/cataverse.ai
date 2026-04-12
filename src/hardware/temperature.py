@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import struct
 import sys
+from typing import NoReturn
 
 from pymodbus.client import ModbusSerialClient as ModbusClient
 
@@ -22,20 +23,18 @@ class WatlowTemperature:
     def __init__(self, client: ModbusClient | None) -> None:
         self.client = client
 
-    def read_temperature(self, address: int = 360) -> float | None:
+    def read_temperature(self, address: int = 360) -> float:
         """Read temperature from Modbus controller and return Celsius."""
 
         if not self.client:
-            logger.error("Modbus client not connected.")
-            return None
+            raise RuntimeError("Modbus client not connected.")
 
         result = self.client.read_holding_registers(
             address=address,
             count=2,
         )
         if result.isError():
-            logger.error("Error reading the temperature registers")
-            return None
+            raise RuntimeError("Error reading the temperature registers")
 
         registers = result.registers
         registers_bytes = struct.pack(">HH", registers[1], registers[0])
@@ -47,20 +46,18 @@ class WatlowTemperature:
 
         return temperature_c
 
-    def tc_malfunc(self) -> None:
+    def tc_malfunc(self) -> NoReturn:
         """Handle thermocouple malfunction recovery/error path."""
 
         if not self.client:
-            logger.error("Modbus client not connected.")
-            return None
+            raise RuntimeError("Modbus client not connected.")
 
         result = self.client.read_holding_registers(
             address=362,
             count=2,
         )
         if result.isError():
-            logger.error("Error reading the temperature registers")
-            return None
+            raise RuntimeError("Error reading the temperature registers")
 
         registers = result.registers
         logger.error("Error reading temperature. Error code: %s", registers[0])
@@ -72,8 +69,7 @@ class WatlowTemperature:
             count=2,
         )
         if result.isError():
-            logger.error("Error reading the temperature registers")
-            return None
+            raise RuntimeError("Error reading the temperature registers")
 
         registers = result.registers
         registers_bytes = struct.pack(">HH", registers[1], registers[0])

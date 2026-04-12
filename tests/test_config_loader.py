@@ -32,7 +32,7 @@ def test_load_config_returns_typed_app_config_from_repo_yaml() -> None:
 def test_load_config_values_match_repo_yaml() -> None:
     cfg = load_config()
 
-    assert cfg.system.gas_constant_l_torr_per_k_mol == 62.363577
+    assert cfg.system.gas_constant == 62.363577
     assert cfg.system.manifold_temperature_k == 298
     assert cfg.system.manifold_m1m2m3_volume_l == 0.11116
 

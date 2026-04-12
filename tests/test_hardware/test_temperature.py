@@ -44,7 +44,7 @@ def test_set_temperature_writes_registers() -> None:
     )
 
 
-def test_read_temperature_returns_none_on_modbus_error() -> None:
+def test_read_temperature_raises_on_modbus_error() -> None:
     client = MagicMock()
     rr = MagicMock()
     rr.isError.return_value = True
@@ -52,7 +52,8 @@ def test_read_temperature_returns_none_on_modbus_error() -> None:
 
     watlow = WatlowTemperature(client)
 
-    assert watlow.read_temperature() is None
+    with pytest.raises(RuntimeError, match="Error reading the temperature registers"):
+        watlow.read_temperature()
 
 
 def test_read_temperature_malfunction_path_calls_exit() -> None:
@@ -70,7 +71,11 @@ def test_read_temperature_malfunction_path_calls_exit() -> None:
     rr_setpoint.isError.return_value = False
     rr_setpoint.registers = _regs_from_fahrenheit(77.0)
 
-    client.read_holding_registers.side_effect = [rr_bad_temp, rr_error_code, rr_setpoint]
+    client.read_holding_registers.side_effect = [
+        rr_bad_temp,
+        rr_error_code,
+        rr_setpoint,
+    ]
 
     watlow = WatlowTemperature(client)
     with patch("src.hardware.temperature.sys.exit", side_effect=SystemExit):
@@ -80,6 +85,7 @@ def test_read_temperature_malfunction_path_calls_exit() -> None:
     client.write_registers.assert_called_once()
 
 
-def test_read_temperature_returns_none_when_client_missing() -> None:
+def test_read_temperature_raises_when_client_missing() -> None:
     watlow = WatlowTemperature(None)
-    assert watlow.read_temperature() is None
+    with pytest.raises(RuntimeError, match="Modbus client not connected"):
+        watlow.read_temperature()

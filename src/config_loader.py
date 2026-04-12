@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 
-
+load_dotenv()
 DEFAULT_METAL_MOLAR_MASS = 106.42
 
 
@@ -25,7 +26,7 @@ DEFAULT_METAL_MOLAR_MASS = 106.42
 class SystemConstants:
     """Physical constants, temperatures, and calibrated volumes."""
 
-    gas_constant_l_torr_per_k_mol: float
+    gas_constant: float
     manifold_temperature_k: float
     vessel_volume_l: float
     valve_volume_l: float
@@ -77,7 +78,7 @@ class ActuatorConfig:
     turbo_pressure_poll_s: float
     turbo_open_max_manifold_torr: float
     mass_spec_open_max_cell_torr: float
-    device_map: dict[str, tuple[str, str]]
+    actuator_map: dict[str, tuple[str, str]]
     reserved_channels: list[tuple[str, str]]
 
 
@@ -97,8 +98,6 @@ class KasaConfig:
     chiller_id: str
     variac_id: str
     variac_id_vsl: str
-    username: str | None = None
-    password: str | None = None
 
 
 @dataclass(frozen=True)
@@ -156,7 +155,7 @@ def _load_yaml(file_path: Path) -> dict[str, Any]:
         data = yaml.safe_load(file)
 
     if data is None:
-        return {}
+        raise ValueError(f"YAML file is empty: {file_path}")
     if not isinstance(data, dict):
         raise TypeError(f"Expected mapping at root of YAML file: {file_path}")
     return data
@@ -223,8 +222,8 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
     voltages = _require(actuators, "voltages", "devices.yaml")
     timing_s = _require(actuators, "timing_s", "devices.yaml")
     safety_limits_torr = _require(actuators, "safety_limits_torr", "devices.yaml")
-    device_map_raw = _require(actuators, "device_map", "devices.yaml")
-    reserved_channels_raw = actuators.get("reserved_channels", [])
+    actuator_map = _require(actuators, "actuator_map", "devices.yaml")
+    reserved_channels = actuators.get("reserved_channels", [])
 
     network = _require(devices_yaml, "network", "devices.yaml")
     opus = _require(network, "opus", "devices.yaml")
@@ -239,7 +238,7 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
     runtime = paths.get("runtime", {})
 
     system_config = SystemConstants(
-        gas_constant_l_torr_per_k_mol=physical_constants["R"],
+        gas_constant=physical_constants["R"],
         manifold_temperature_k=temperature["t_mfld"],
         vessel_volume_l=volumes_l["v_vessel"],
         valve_volume_l=volumes_l["v_valve"],
@@ -296,15 +295,15 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
             turbo_pressure_poll_s=timing_s["turbo_pressure_poll"],
             turbo_open_max_manifold_torr=safety_limits_torr["turbo_open_max_manifold"],
             mass_spec_open_max_cell_torr=safety_limits_torr["mass_spec_open_max_cell"],
-            device_map={
+            actuator_map={
                 actuator_id: _to_channel_tuple(
                     device_channel, f"actuators.device_map.{actuator_id}"
                 )
-                for actuator_id, device_channel in device_map_raw.items()
+                for actuator_id, device_channel in actuator_map.items()
             },
             reserved_channels=[
                 _to_channel_tuple(channel, f"actuators.reserved_channels[{index}]")
-                for index, channel in enumerate(reserved_channels_raw)
+                for index, channel in enumerate(reserved_channels)
             ],
         ),
         network=NetworkConfig(
@@ -316,8 +315,6 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
             chiller_id=kasa_plugs["chiller_id"],
             variac_id=kasa_plugs["variac_id"],
             variac_id_vsl=kasa_plugs["variac_id_vsl"],
-            username=kasa_plugs.get("username"),
-            password=kasa_plugs.get("password"),
         ),
     )
 

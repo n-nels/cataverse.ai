@@ -24,6 +24,8 @@ from src.datalog.pressure_logger import PressureLogger
 from src.experiments.session import ExperimentSession
 from src.hardware.connections import DeviceManager
 from src.core import get_logger, t_mfld
+from src.core.config import v_tot, v_m1m2m3, v_50tube
+from src.physics import cell_pressure_from_manifold
 
 
 logger = get_logger(__name__)
@@ -107,7 +109,7 @@ class AdsorptionExperiment:
         )
 
         if enable_ms_stream and ms_logger is not None:
-            time.sleep(60 * 15)
+            time.sleep(60 * 15)  # [fix] Should be arg
             ms_logger.stop()
 
             # Extrel sequence stop from config
@@ -127,9 +129,7 @@ class AdsorptionExperiment:
         if log_params:
             p_mfld_value = cast(float, self.p_mfld)
             p_cell_value = cast(float, p_cell)
-            t_cell_value = cast(
-                float, cast(Any, self.devices.temperature).read_temperature()
-            )
+            t_cell_value = cast(float, t_cell)
             self.session.log_pretreatment(
                 gas=self.gas,
                 p_gas_meas=(p_mfld_value, p_cell_value),
@@ -168,9 +168,8 @@ class AdsorptionExperiment:
         """Supply gas to the manifold. The target pressure corresponds to the pressure in the total volume of the system."""
         if self.gas_2:
             self.gas_2 = None
-        # Calculate target pressure for the manifold based on volume ratios
-        from src.core.config import v_tot, v_m1m2m3, v_50tube
 
+        # Calculate target pressure for the manifold based on volume ratios
         val = (v_tot) / (v_m1m2m3 + v_50tube) * target_pressure
         self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
             self.session.file_name,
@@ -179,8 +178,6 @@ class AdsorptionExperiment:
             target=val,
             openMS=True,
         )
-        # Calculate cell pressure using physics module
-        from src.physics import cell_pressure_from_manifold
 
         self.p_cell_calc = cell_pressure_from_manifold(
             self.p_mfld, v_m1m2m3 + v_50tube, v_tot
@@ -256,11 +253,9 @@ class AdsorptionExperiment:
         do_fit: bool,
     ) -> None:
         """Acquire spectra from Opus software with threaded acquisition and pressure logging."""
-        import shutil
-        import os
 
         # Initial Opus acquisition with zero repeat/delay
-        self.spec.opus_vertex80(
+        self.spec.opus_vertex80(  # [fix] could use a beter name
             {
                 "foldername": self.session.folder_name,
                 "filename": self.session.file_name,
@@ -306,7 +301,7 @@ class AdsorptionExperiment:
             self.session.log_experimental_parameters(
                 gas=(self.gas, self.gas_2),
                 p_gas_meas=(p_mfld, p_cell),
-                t_cell=self.gas_controller.temperature.read_temperature(),
+                t_cell=self.temp.temperature.read_temperature(),
                 p_gas_calc=(self.p_cell_calc, getattr(self, "p_cell_calc_2", None)),
                 chiller_state=self.chiller_state,
             )
@@ -314,20 +309,17 @@ class AdsorptionExperiment:
             self.session.log_experimental_parameters(
                 gas=self.gas,
                 p_gas_meas=(p_mfld, p_cell),
-                t_cell=self.gas_controller.temperature.read_temperature(),
+                t_cell=self.temp.temperature.read_temperature(),
                 p_gas_calc=self.p_cell_calc,
                 chiller_state=self.chiller_state,
             )
 
         # Start pressure logging
-        pressure_thread, stop_pressure_log = self.start_pressure_log(
-            p_mfld_initial, p_cell_initial
-        )
+        pressure_logger = self.start_pressure_log(p_mfld_initial, p_cell_initial)
 
         # Wait for Opus acquisition to complete
         opus_thread.join()
-        stop_pressure_log.set()
-        pressure_thread.join()
+        pressure_logger.stop()
 
         # Evacuate cell with rough pump
         self.gas_controller.evacuate_cell("RoughPump")
@@ -408,7 +400,7 @@ class AdsorptionExperiment:
             self.session.log_pretreatment(
                 gas=(self.gas, self.gas_2),
                 p_gas_meas=(self.p_mfld, p_cell),
-                t_cell=self.gas_controller.temperature.read_temperature(),
+                t_cell=t_cell,
                 rate=rate,
                 duration=duration,
                 p_gas_calc=(self.p_cell_calc, getattr(self, "p_cell_calc_2", None)),
@@ -418,7 +410,7 @@ class AdsorptionExperiment:
             self.session.log_pretreatment(
                 gas=self.gas,
                 p_gas_meas=(self.p_mfld, p_cell),
-                t_cell=self.gas_controller.temperature.read_temperature(),
+                t_cell=t_cell,
                 rate=rate,
                 duration=duration,
                 p_gas_calc=self.p_cell_calc,
@@ -436,12 +428,15 @@ class AdsorptionExperiment:
             self.temp.variac_state(variac_cmd)
         if variac_vsl_cmd is not None:
             self.temp.kasa_plug_state("variac_id_vsl", variac_vsl_cmd)
+        """
+        [fix] These are devices controlled by Kasa plugs. Two plugs control the variac and one a chiller.
+            We should just use kasa_plug_state.
+        """
 
     def start_pressure_log(
         self, p_mfld_initial: Any, p_cell_initial: Any
-    ) -> tuple[threading.Thread, threading.Event]:
-        """Start the pressure logging thread and return the thread and stop event."""
-        stop_pressure_log = threading.Event()
+    ) -> PressureLogger:
+        """Start pressure logging and return the logger handle."""
         log_path = self.session.path_pressure_log
         pressure_logger = PressureLogger(
             pressure=self.gas_controller.pressure,
@@ -455,7 +450,8 @@ class AdsorptionExperiment:
             temperature_k=t_mfld,
         )
         pressure_logger.start()
-        return pressure_logger._thread, stop_pressure_log
+
+        return pressure_logger
 
     def start_temperature_log(self) -> tuple[threading.Thread, threading.Event]:
         """Start the temperature logging thread and return the thread and stop event."""

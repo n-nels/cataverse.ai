@@ -1,0 +1,3 @@
+timestamp,p_mfld,p_cell,relative_time_s,amount_adsorbed_umol/g,apparent_conversion,apparent_coverage
+<MagicMock id='138669737964128'>,0.01,0.01,<MagicMock name='mock.__sub__().total_seconds()' id='138669737084304'>,-0.004987150319876492,-20.26493227519543,-0.001065086367732804
+<MagicMock id='138669737964128'>,0.01,0.01,<MagicMock name='mock.__sub__().total_seconds()' id='138669737084304'>,-0.004987150319876492,-20.26493227519543,-0.001065086367732804

@@ -39,7 +39,7 @@ class PressureLogger:
     ) -> None:
         self.pressure = pressure
         self.physics = physics
-        self.path = path
+        self.path = Path(path)
         self.p_mfld_initial = p_mfld_initial
         self.p_cell_initial = p_cell_initial
         self.mass_g = mass_g

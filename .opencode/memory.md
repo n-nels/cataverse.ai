@@ -280,5 +280,42 @@
     - `src/operations/code_reviewer_old.md`
   - No `C/` directory found to delete.
 
-- Intent for next session:
-  - Continue with tasks 5.7–5.8 (documentation).
+- Completed Task 5.7 (`docs/directory_structure.md`):
+  - Updated directory structure documentation to reflect new architecture.
+  - Added clear separation between new architecture and legacy packages.
+  - Marked legacy packages as "pending hardware validation".
+  - Added notes explaining new architecture components and migration path.
+
+- Completed Task 5.8 (`docs/MIGRATION.md`):
+  - Created comprehensive hardware validation checklist.
+  - Includes 16 sections covering all aspects of validation:
+    1. Pre-validation setup
+    2. Hardware connection tests
+    3. Safety system verification
+    4. Experiment sequence validation (adsorption and isotopic exchange)
+    5. Data validation
+    6. Error handling validation
+    7. Performance validation
+    8. Final validation and cleanup
+  - Provides step-by-step instructions with code examples.
+  - Includes troubleshooting guide and debug commands.
+  - Includes sign-off section for validation completion.
+
+- Chunk 5 is now complete:
+  - All tasks 5.1-5.8 have been completed.
+  - New architecture is ready for hardware validation.
+  - Legacy code remains alongside new code for safety.
+
+- Added mock mode to `main_v2.py`:
+  - Added `--mock` flag to run without hardware
+  - Added `--adsorption` and `--isotopic` flags to run specific experiments
+  - Mock devices return convenient values:
+    - Pressure: `(timestamp, 0.5, 0.3)`
+    - Temperature: `25.0°C`
+    - Mass spec: `True` for write_register
+    - OPUS: `"fileid123"` for acquire
+  - Usage:
+    - `python main_v2.py --mock` - Initialize with mocks
+    - `python main_v2.py --mock --adsorption` - Run adsorption experiment
+    - `python main_v2.py --mock --isotopic` - Run isotopic exchange
+  - Can now run in debugger without hardware

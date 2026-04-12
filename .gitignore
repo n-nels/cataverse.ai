@@ -5,6 +5,7 @@ __pycache__/
 *$py.class
 .ruff_cache/
 .env.local
+.env
 
 # --- Build & Distribution ---
 dist/

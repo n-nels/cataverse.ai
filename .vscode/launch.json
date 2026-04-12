@@ -11,6 +11,18 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "Debug main_v2.py (Mock)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main_v2.py",
+            "args": ["--mock", "--adsorption"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         }
     ]
 }

@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import time
 from datetime import datetime
-from typing import cast
 
 from src.core import get_logger
 from src.core.config import (
@@ -48,6 +47,10 @@ class TemperatureController:
         update_interval: int = 2,
     ) -> tuple[float, float, float]:
         """Port of legacy Watlow ramp/hold control flow."""
+
+        """
+        [fix] This needs to be broken up. Too many concerns based off rate value.
+        """
 
         global dir_tempLog, path_tempLog
 
@@ -93,6 +96,7 @@ class TemperatureController:
             dir_tempLog = os.path.join(data_directory, str(foldername))
             path_tempLog = os.path.join(dir_tempLog, f"{filename}_tempLog.csv")
             create_directory(dir_tempLog)
+            """[fix] Should these paths be created elsewhere?"""
 
         current_temp = self.temperature.read_temperature()  # °C
         read_temps = []
@@ -108,7 +112,7 @@ class TemperatureController:
 
         if rate != 0:
             write_temps = generate_temp_list(
-                cast(float, current_temp),
+                current_temp,
                 target_temp,
                 rate,
                 update_interval,
@@ -148,15 +152,15 @@ class TemperatureController:
             )
             hold_temp(path_tempLog)
 
-        elif cast(float, current_temp) > target_temp + 5:  # for cooling
+        elif current_temp > target_temp + 5:  # for cooling
             self.temperature.set_temperature(target_temp)
             state_chg = False
             if not variac_cmd:  # shut off heating to vessel
                 self.kasa_plug_state(variac_id_vsl, variac_cmd)
-            while cast(float, current_temp) > target_temp + 5:
+            while current_temp > target_temp + 5:
                 current_temp = self.temperature.read_temperature()
                 if (
-                    (cast(float, current_temp) <= 1.75 * (target_temp) + 1.25)
+                    (current_temp <= 1.75 * (target_temp) + 1.25)
                     and (variac_cmd is False)
                     and (state_chg is False)
                 ):
@@ -175,8 +179,7 @@ class TemperatureController:
             if not variac_cmd:  # shut off heating to vessel
                 self.kasa_plug_state(variac_id_vsl, variac_cmd)
                 if (
-                    cast(float, self.temperature.read_temperature())
-                    <= 1.75 * (target_temp) + 1.25
+                    self.temperature.read_temperature() <= 1.75 * (target_temp) + 1.25
                 ):  # shut off variac line
                     self.kasa_plug_state(variac_id, variac_cmd)
             write_temps = [target_temp]

@@ -36,9 +36,6 @@ kasa_plugs:
   chiller_id: "80068F39DE57BDF8D6EA6F2AB145251E223AF901"
   variac_id: "80068C02EA20EFE6A7149420FAA20DB5223A54AA"
   variac_id_vsl: "8006CF042D478C8A62FE5B07A53B29B8223A2135"
-  # Keep blank to prefer .env.local / environment variables in new hardware layer.
-  username: ""
-  password: ""
 
 actuators:
   voltages:
@@ -54,14 +51,14 @@ actuators:
     turbo_open_max_manifold: 0.02
     mass_spec_open_max_cell: 0.1
 
-  device_map:
+  actuator_map:
     v16: [act1-2, ao0]
     RoughPump: [act1-2, ao1]
     H2: [act3-4, ao0]
     H2O: [act3-4, ao1]
     MassSpec: [act5-6, ao0]
     "13CO": [act5-6, ao1]
-    irCell: [act7-8, ao0]
+    irCell: [act7-8, ao0] # [fix] change to HVC_DRM5?
     O2: [act7-8, ao1]
     TurboPump: [act9-10, ao0]
 

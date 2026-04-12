@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from datetime import datetime
 
 from src.core.config import (
     actuator_mass_spec_open_max_cell_torr,
@@ -110,4 +109,4 @@ class ValveController:
     def _log_write(self, actuator_id: str, value: float) -> None:
         """Log actuator write id/value with timestamp."""
 
-        logger.info("%s write value is %s at %s", actuator_id, value, datetime.now())
+        logger.info("%s write value is %s", actuator_id, value)

@@ -370,7 +370,7 @@ class ExperimentSession:
 
                 file.write(line)
 
-    def is_new_sample_experiment(self) -> None:
+    def is_new_sample_experiment(self) -> None: # [fix] this seems fragile!
         """Append ``is_new_sample`` metadata field using legacy share-drive rule."""
 
         if not self.path_readme or not self.folder_name:
