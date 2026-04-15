@@ -13,7 +13,11 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 
-from .kinetics_fitting import append_fit_results, build_cluster_sum, linfunc_no_intercept
+from .kinetics_fitting import (
+    append_fit_results,
+    build_cluster_sum,
+    linfunc_no_intercept,
+)
 
 
 def _coerce_df(value: Any) -> pd.DataFrame:
@@ -231,11 +235,32 @@ def compute_cumulative_peak_area_df(
 
 def compute_peak_area_with_kinetics_df(
     df_cumulative_areas: pd.DataFrame,
+    df_prior_kinetics: pd.DataFrame | None = None,
+    *,
+    latest_only: bool = True,
 ) -> pd.DataFrame:
-    """Compute peak area DataFrame with kinetics fit results (no file I/O)."""
+    """Compute peak area DataFrame with kinetics fit results (no file I/O).
+
+    Parameters
+    ----------
+    df_cumulative_areas : pd.DataFrame
+        Fresh cumulative peak areas (no kinetics columns).
+    df_prior_kinetics : pd.DataFrame | None
+        Previously saved CarbonylPeakArea data containing kinetics
+        columns from earlier runs.  Kinetics rows are carried forward
+        and only the latest time point is re-fitted.
+    latest_only : bool
+        If True (default, real-time mode), only the latest time point
+        is fitted.  If False (batch mode), every time point is fitted.
+    """
     if df_cumulative_areas.empty:
         return cast(pd.DataFrame, df_cumulative_areas)
-    return cast(pd.DataFrame, append_fit_results(df_cumulative_areas))
+    return cast(
+        pd.DataFrame,
+        append_fit_results(
+            df_cumulative_areas, df_prior_kinetics, latest_only=latest_only
+        ),
+    )
 
 
 def save_peak_area_versus_time_df(

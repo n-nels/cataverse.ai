@@ -1012,8 +1012,6 @@ class KineticWriter:
             carry_forward_p0=carry_forward_p0,
         )
 
-
-
     def _select_secondary_p0(
         self,
         time_s: NDArray[np.float64],
@@ -1154,6 +1152,35 @@ class KineticWriter:
         p0: list[float] | None = None,
         carry_forward_p0: bool = True,
     ) -> pd.DataFrame:
+        """Prepare fit-result rows for one DataFrame.
+
+        Parameters
+        ----------
+        model_key : str
+            Which model to fit: ``"pfo"`` or ``"secondary_pfo"``.
+        df : pd.DataFrame
+            CarbonylPeakArea data with ``Peak_Name``, ``Time (s)``,
+            and ``Cumulative_Peak_Area`` columns.
+        min_points : int
+            Minimum data points required before fitting a peak group.
+        peak_names : list[str] | None
+            Restrict fitting to these peak names.  None = all peaks.
+        mode : str
+            ``"rolling"`` — for each time point, fit using all data up
+            to and including that time (expanding window).  Produces one
+            row per time point per peak.
+            ``"full_series"`` — fit once using all data, producing one
+            row per peak at the latest time.
+        p0 : list[float] | None
+            User-supplied initial guess for the optimizer.  None = use
+            built-in defaults.
+        carry_forward_p0 : bool
+            When True (default), the p0 that produced the best r^2 at
+            time point N is used as the starting seed for the p0 search
+            at time point N+1.  When False, each time point starts from
+            ``p0`` (or defaults) independently.  Only affects
+            ``secondary_pfo`` in ``"rolling"`` mode.
+        """
         spec = self.model_specs.get(model_key)
         if spec is None:
             raise ValueError(f"Unknown model_key: {model_key}")
@@ -1195,7 +1222,7 @@ class KineticWriter:
                     time_s,
                     intensity,
                     model_key=model_key,
-                    carry_forward_p0=carry_forward_p0,
+                    use_prior_p0=carry_forward_p0,
                     previous_p0=previous_p0,
                     previous_r2=previous_r2,
                     user_p0=p0,
@@ -1375,6 +1402,36 @@ class KineticWriter:
         p0: list[float] | None = None,
         use_prior_p0: bool = True,
     ) -> Path:
+        """Fit a single kinetics model to one CarbonylPeakArea CSV.
+
+        Reads the CSV, fits the model, merges results back into the
+        legacy data, and writes the output to ``output_folder_name``.
+
+        Parameters
+        ----------
+        model_key : str
+            Which model to fit: ``"pfo"`` or ``"secondary_pfo"``.
+        carbonyl_peak_area_path : str | Path
+            Path to the input ``*_CarbonylPeakArea.csv``.
+        output_folder_name : str
+            Subdirectory name for output CSVs (e.g. ``"_test"``).
+        min_points : int
+            Minimum number of time points required before fitting starts.
+        peak_names : list[str] | None
+            Restrict fitting to these peak names.  None = all peaks.
+        mode : str
+            ``"rolling"`` fits at every time point with an expanding window.
+            ``"full_series"`` fits once using all data.
+        p0 : list[float] | None
+            User-supplied initial guess for the optimizer.  None = use
+            built-in defaults.
+        use_prior_p0 : bool
+            When True (default), the p0 that produced the best r^2 at
+            time point N is used as the starting seed for the p0 search
+            at time point N+1.  When False, each time point starts from
+            ``p0`` (or defaults) independently.  Only affects
+            ``secondary_pfo`` in ``"rolling"`` mode.
+        """
         carbonyl_peak_area_path = Path(carbonyl_peak_area_path)
         df_legacy = pd.read_csv(carbonyl_peak_area_path)
         df_legacy = self.utils.prepare_peak_area_df(df_legacy)
@@ -1416,9 +1473,37 @@ class KineticWriter:
     ) -> Path:
         """Fit monomer and cluster groups with separate model assignments.
 
-        Monomer group uses config-based monomer peaks + ``monomer_sum``.
-        Cluster group uses config-based cluster peaks + ``cluster_sum``.
+        Monomer group uses config-based monomer peaks + ``monomer_sum``,
+        fitted with ``monomer_model_key`` (default: ``secondary_pfo``).
+        Cluster group uses config-based cluster peaks + ``cluster_sum``,
+        fitted with ``cluster_model_key`` (default: ``pfo``).
         Results are merged into one legacy output CSV.
+
+        Parameters
+        ----------
+        carbonyl_peak_area_path : str | Path
+            Path to the input ``*_CarbonylPeakArea.csv``.
+        monomer_model_key : str
+            Model for monomer peaks (default ``"secondary_pfo"``).
+        cluster_model_key : str
+            Model for cluster peaks (default ``"pfo"``).
+        output_folder_name : str
+            Subdirectory name for output CSVs (e.g. ``"_test"``).
+        min_points : int
+            Minimum number of time points required before fitting starts.
+        mode : str
+            ``"rolling"`` fits at every time point with an expanding window.
+            ``"full_series"`` fits once using all data.
+        monomer_p0 : list[float] | None
+            Initial guess for monomer model optimizer.  None = defaults.
+        cluster_p0 : list[float] | None
+            Initial guess for cluster model optimizer.  None = defaults.
+        carry_forward_p0 : bool
+            When True (default), the p0 that produced the best r^2 at
+            time point N is used as the starting seed for the p0 search
+            at time point N+1.  When False, each time point starts from
+            the user p0 (or defaults) independently.  Only affects
+            ``secondary_pfo`` in ``"rolling"`` mode.
         """
         carbonyl_peak_area_path = Path(carbonyl_peak_area_path)
         df_legacy = pd.read_csv(carbonyl_peak_area_path)
@@ -1552,7 +1637,6 @@ class KineticWriter:
                 LOGGER.warning("Failed to clean %s: %s", csv_file, exc)
         return outputs
 
-
     def process_carbonyl_peak_area_files(
         self,
         csv_files: list[Path],
@@ -1564,17 +1648,49 @@ class KineticWriter:
         peak_names: list[str] | None = None,
         mode: str = "rolling",
         p0: list[float] | None = None,
+        carry_forward_p0: bool = True,
     ) -> list[Path]:
+        """Fit kinetics models to a list of CarbonylPeakArea CSV files.
+
+        Parameters
+        ----------
+        csv_files : list[Path]
+            Paths to ``*_CarbonylPeakArea.csv`` files to process.
+        model_key : str
+            Which model to fit: ``"pfo"`` or ``"secondary_pfo"``.
+        output_folder_name : str
+            Subdirectory name for output CSVs (e.g. ``"_test"``).
+        min_points : int
+            Minimum number of time points required before fitting starts.
+        classification_only : bool
+            If True, skip fitting and only write trajectory classification.
+        peak_names : list[str] | None
+            Restrict fitting to these peak names.  None = all peaks.
+        mode : str
+            ``"rolling"`` fits at every time point with an expanding window.
+            ``"full_series"`` fits once using all data.
+        p0 : list[float] | None
+            User-supplied initial guess for the optimizer.  None = use
+            built-in defaults.
+        carry_forward_p0 : bool
+            When True (default), the p0 that produced the best r^2 at
+            time point N is used as the starting seed for the p0 search
+            at time point N+1.  When False, each time point starts from
+            ``p0`` (or defaults) independently.  Only affects
+            ``secondary_pfo`` in ``"rolling"`` mode.
+        """
         outputs: list[Path] = []
         for csv_file in csv_files:
             LOGGER.info("Processing %s...", csv_file)
-            if  "20260315_214542_pd_ceo2_004-008_CarbonylPeakArea" not in str(csv_file):
-                LOGGER.info("Skipping %s based on name filter", csv_file)
-                continue
             try:
                 if not csv_file.name.endswith(str(AREA_SUFFIX)):
                     LOGGER.warning("Skipping non-area CSV: %s", csv_file)
                     continue
+
+                if "20260404_182647_pd_ceo2_004-012" not in str(csv_file):
+                    LOGGER.warning("Skipping known problematic file: %s", csv_file)
+                    continue
+                
                 if classification_only:
                     output_path = self.write_pfo_classification(
                         csv_file,
@@ -1591,6 +1707,7 @@ class KineticWriter:
                         peak_names=peak_names,
                         mode=mode,
                         p0=p0,
+                        use_prior_p0=carry_forward_p0,
                     )
                 outputs.append(output_path)
             except Exception as exc:
@@ -1606,9 +1723,43 @@ class KineticWriter:
         min_points: int = 4,
         classification_only: bool = False,
         peak_names: list[str] | None = None,
-        mode: str = "rolling",
+        mode: str = "full_series",
         p0: list[float] | None = None,
+        carry_forward_p0: bool = True,
     ) -> list[Path]:
+        """Batch-process all CarbonylPeakArea CSVs in a dataset folder.
+
+        Searches ``dataset_folder`` (relative to ``SEARCH_ROOT`` if not
+        absolute) for ``*_CarbonylPeakArea.csv`` files and fits kinetics
+        models to each one.
+
+        Parameters
+        ----------
+        dataset_folder : str | Path
+            Folder name under ``SEARCH_ROOT``, or an absolute path.
+        model_key : str
+            Which model to fit: ``"pfo"`` or ``"secondary_pfo"``.
+        output_folder_name : str
+            Subdirectory name for output CSVs (e.g. ``"_test"``).
+        min_points : int
+            Minimum number of time points required before fitting starts.
+        classification_only : bool
+            If True, skip fitting and only write trajectory classification.
+        peak_names : list[str] | None
+            Restrict fitting to these peak names.  None = all peaks.
+        mode : str
+            ``"rolling"`` fits at every time point with an expanding window.
+            ``"full_series"`` fits once using all data.
+        p0 : list[float] | None
+            User-supplied initial guess for the optimizer.  None = use
+            built-in defaults.
+        carry_forward_p0 : bool
+            When True (default), the p0 that produced the best r^2 at
+            time point N is used as the starting seed for the p0 search
+            at time point N+1.  When False, each time point starts from
+            ``p0`` (or defaults) independently.  Only affects
+            ``secondary_pfo`` in ``"rolling"`` mode.
+        """
         logging.basicConfig(
             level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
         )
@@ -1644,6 +1795,7 @@ class KineticWriter:
             peak_names=peak_names,
             mode=mode,
             p0=p0,
+            carry_forward_p0=carry_forward_p0,
         )
 
 
@@ -1660,4 +1812,6 @@ if __name__ == "__main__":
         model_key="secondary_pfo",
         classification_only=False,
         peak_names=None,
+        mode="rolling",
+        carry_forward_p0=False,
     )

@@ -465,9 +465,7 @@ def fit_secondary_pfo_with_errors(
     def objective(params: NDArray[np.float64]) -> float:
         k_a, q_e, k_s, k_p_ratio, q_inf = params
         k_p = k_a * k_p_ratio
-        states = pfo_with_secondary_states(
-            time_s, k_a, q_e, k_s, k_p, q_inf, q_0_fixed
-        )
+        states = pfo_with_secondary_states(time_s, k_a, q_e, k_s, k_p, q_inf, q_0_fixed)
         if states is None:
             return np.inf
         q_fit, p_fit = states
@@ -526,6 +524,7 @@ def _prepare_pfo_fit_rows(
     *,
     peak_names: list[str] | None = None,
     min_points: int = 4,
+    latest_only: bool = True,
 ) -> pd.DataFrame:
     records: list[dict[str, float | str]] = []
     sum_names = ["cluster_sum"]
@@ -561,20 +560,23 @@ def _prepare_pfo_fit_rows(
             continue
 
         unique_times = sorted(group["Time (s)"].unique())
-        for unique_time in unique_times:
-            mask = group["Time (s)"] <= unique_time
+        fit_times = [unique_times[-1]] if latest_only else unique_times
+
+        for t in fit_times:
+            # Use all data up to time t for fitting
+            mask = group["Time (s)"] <= t
             time_s = group.loc[mask, "Time (s)"].to_numpy(dtype=float)
             intensity = group.loc[mask, "Cumulative_Peak_Area"].to_numpy(dtype=float)
 
             if len(time_s) < min_points:
                 continue
 
-            current_row = group[group["Time (s)"] == unique_time].iloc[0]
+            current_row = group[group["Time (s)"] == t].iloc[0]
             popt, std_errors, r_squared, rmse = fit_and_evaluate(time_s, intensity)
 
             record: dict[str, float | str] = {
                 "Peak_Name": str(current_row["Peak_Name"]),
-                "Time (s)": float(unique_time),
+                "Time (s)": float(t),
                 "pfo_r^2": r_squared,
                 "pfo_rmse": rmse,
                 "classification": classification_value,
@@ -610,6 +612,7 @@ def _prepare_secondary_fit_rows(
     peak_names: list[str] | None = None,
     min_points: int = 4,
     p0: list[float] | None = None,
+    latest_only: bool = True,
 ) -> pd.DataFrame:
     records: list[dict[str, float | str]] = []
     if peak_names is not None:
@@ -621,15 +624,18 @@ def _prepare_secondary_fit_rows(
             continue
 
         unique_times = sorted(group["Time (s)"].unique())
-        for unique_time in unique_times:
-            mask = group["Time (s)"] <= unique_time
+        fit_times = [unique_times[-1]] if latest_only else unique_times
+
+        for t in fit_times:
+            # Use all data up to time t for fitting
+            mask = group["Time (s)"] <= t
             time_s = group.loc[mask, "Time (s)"].to_numpy(dtype=float)
             intensity = group.loc[mask, "Cumulative_Peak_Area"].to_numpy(dtype=float)
 
             if len(time_s) < min_points:
                 continue
 
-            current_row = group[group["Time (s)"] == unique_time].iloc[0]
+            current_row = group[group["Time (s)"] == t].iloc[0]
             effective_p0 = _select_secondary_p0(
                 time_s,
                 intensity,
@@ -645,7 +651,7 @@ def _prepare_secondary_fit_rows(
 
             record: dict[str, float | str] = {
                 "Peak_Name": str(current_row["Peak_Name"]),
-                "Time (s)": float(unique_time),
+                "Time (s)": float(t),
                 "pfo-sec_r^2": r_squared,
                 "pfo-sec_rmse": rmse,
             }
@@ -674,31 +680,28 @@ def _prepare_secondary_fit_rows(
 
 def append_fit_results(
     df_cumulative_peak_area: pd.DataFrame,
+    df_prior_kinetics: pd.DataFrame | None = None,
+    *,
+    latest_only: bool = True,
 ) -> pd.DataFrame:
-    """Safely append kinetics fit results to cumulative peak areas."""
-    if df_cumulative_peak_area.empty:
-        return df_cumulative_peak_area
+    """Append kinetics fit results to cumulative peak areas.
 
-    fit_columns = {
-        "pfo_k_s-1",
-        "pfo_k_stderr",
-        "pfo_q_e_au",
-        "pfo_q_e_stderr",
-        "pfo_q0_au",
-        "pfo_r^2",
-        "pfo_rmse",
-        "pfo-sec_k_a_s-1",
-        "pfo-sec_q_e_au",
-        "pfo-sec_k_s_s-1",
-        "pfo-sec_k_p_s-1",
-        "pfo-sec_q_inf_au",
-        "pfo-sec_q0_au",
-        "pfo-sec_r^2",
-        "pfo-sec_rmse",
-        "classification",
-        "growth_onset_s",
-    }
-    if fit_columns.intersection(df_cumulative_peak_area.columns):
+    Parameters
+    ----------
+    df_cumulative_peak_area : pd.DataFrame
+        Fresh cumulative peak areas (no kinetics columns).
+    df_prior_kinetics : pd.DataFrame | None
+        Previously saved CarbonylPeakArea data containing kinetics
+        columns from earlier runs.  When *latest_only* is True,
+        kinetics rows are carried forward and only the latest time
+        point is re-fitted.
+    latest_only : bool
+        If True (default, real-time mode), only the latest time point
+        per peak group is fitted; prior kinetics results are carried
+        forward.  If False (batch mode), every time point is fitted
+        and *df_prior_kinetics* is ignored.
+    """
+    if df_cumulative_peak_area.empty:
         return df_cumulative_peak_area
 
     df = df_cumulative_peak_area.copy()
@@ -718,13 +721,16 @@ def append_fit_results(
     overlap = set(monomer_peak_names) & set(cluster_peak_names)
     if overlap:
         raise ValueError(
-            "Monomer/cluster peak sets overlap in config: "
-            + ", ".join(sorted(overlap))
+            "Monomer/cluster peak sets overlap in config: " + ", ".join(sorted(overlap))
         )
 
     try:
-        monomer_rows = _prepare_secondary_fit_rows(df, peak_names=monomer_peak_names)
-        cluster_rows = _prepare_pfo_fit_rows(df, peak_names=cluster_peak_names)
+        monomer_rows = _prepare_secondary_fit_rows(
+            df, peak_names=monomer_peak_names, latest_only=latest_only
+        )
+        cluster_rows = _prepare_pfo_fit_rows(
+            df, peak_names=cluster_peak_names, latest_only=latest_only
+        )
     except Exception as exc:
         LOGGER.warning("An error occurred during kinetics fitting: %s", exc)
         return df_cumulative_peak_area
@@ -733,10 +739,40 @@ def append_fit_results(
     if not frames:
         return df_cumulative_peak_area
 
-    df_fit_results = pd.concat(frames, ignore_index=True)
+    df_new_fit = pd.concat(frames, ignore_index=True)
+
+    # Merge prior kinetics rows with new fit rows
+    if df_prior_kinetics is not None and not df_prior_kinetics.empty:
+        # Extract kinetics-only columns from prior results
+        kinetics_cols = [
+            c
+            for c in df_prior_kinetics.columns
+            if c not in df_cumulative_peak_area.columns
+        ]
+        if kinetics_cols:
+            merge_cols = ["Peak_Name", "Time (s)"]
+            df_prior_fit = df_prior_kinetics[merge_cols + kinetics_cols].copy()
+            # Prior CSV can have duplicate (Peak_Name, Time) keys
+            # when multiple Delta_Groups share the same cumulative
+            # time.  Collapse them so the final merge stays 1-to-1.
+            df_prior_fit = df_prior_fit.drop_duplicates(subset=merge_cols, keep="last")
+            # Remove rows that will be replaced by new fit results
+            new_keys = df_new_fit[merge_cols]
+            df_prior_fit = df_prior_fit.merge(
+                new_keys, on=merge_cols, how="left", indicator=True
+            )
+            df_prior_fit = df_prior_fit[df_prior_fit["_merge"] == "left_only"].drop(
+                columns=["_merge"]
+            )
+            df_new_fit = pd.concat([df_prior_fit, df_new_fit], ignore_index=True)
+
+    # Ensure unique keys on right side to prevent many-to-many join
+    df_new_fit = df_new_fit.drop_duplicates(
+        subset=["Peak_Name", "Time (s)"], keep="last"
+    )
     df_merged = pd.merge(
         df_cumulative_peak_area,
-        df_fit_results,
+        df_new_fit,
         on=["Peak_Name", "Time (s)"],
         how="left",
     )

@@ -276,8 +276,14 @@ class DataAnalysisRunner:
             [f"Peak_{peak}" for peak in get_shifted_monomer_peaks(self.voigt_settings)],
         )
         if run_kinetics:
+            # Load prior kinetics results to carry forward
+            peak_area_csv = os.path.join(
+                paths.save_dir,
+                f"{paths.file_name}_CarbonylPeakArea.csv",
+            )
+            df_prior_kinetics = load_peak_parameters(peak_area_csv)
             df_peak_area_output = compute_peak_area_with_kinetics_df(
-                df_cumulative_areas
+                df_cumulative_areas, df_prior_kinetics, latest_only=True
             )
         else:
             df_peak_area_output = df_cumulative_areas
@@ -321,7 +327,11 @@ class DataAnalysisRunner:
         self,
         cumulative_peak_area: str | pd.DataFrame | None,
     ) -> pd.DataFrame | None:
-        """Run kinetics fitting on cumulative peak area outputs."""
+        """Run kinetics fitting on cumulative peak area outputs.
+
+        This is the batch-mode entry point: every time point is fitted
+        from scratch (``latest_only=False``).
+        """
         if cumulative_peak_area is None:
             return None
         if isinstance(cumulative_peak_area, str):
@@ -330,7 +340,7 @@ class DataAnalysisRunner:
             df_cumulative_peak_area = cumulative_peak_area
         if df_cumulative_peak_area is None or df_cumulative_peak_area.empty:
             return df_cumulative_peak_area
-        return append_fit_results(df_cumulative_peak_area)
+        return append_fit_results(df_cumulative_peak_area, latest_only=False)
 
     def run_spectral_peak_heights(self, file_path: str) -> None:
         """Run peak height analysis for a subIFG file."""

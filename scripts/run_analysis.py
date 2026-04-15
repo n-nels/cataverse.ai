@@ -65,7 +65,7 @@ class KineticFit:
 if __name__ == "__main__":
 
     # file_directory = r"C:\Data\OpusConvert_subIFG_lgRfl\nn1120-3_pd_ceo2_004"
-    # name = r"20260315_214542_pd_ceo2_004-008"
+    # name = r"20260329_032106_pd_ceo2_004-010"
 
     # kinetic_fit = KineticFit()
 
@@ -82,15 +82,15 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------------------------------
 
     # kinetic_fit = KineticFit(
-    #     input_path=r"X:\peakFit\20260315_214542_pd_ceo2_004-008_CarbonylPeakArea.csv",
-    #     output_path=r"X:\peakFit\20260315_214542_pd_ceo2_004-008_CarbonylPeakArea_new.csv",
+    #     input_path=r"C:\Data\peakFit\nn1120-3_pd_ceo2_004\20260322_125032_pd_ceo2_004-009_CarbonylPeakArea.csv",
+    #     output_path=r"C:\Data\peakFit\nn1120-3_pd_ceo2_004\20260322_125032_pd_ceo2_004-009_CarbonylPeakArea_new.csv",
     # )
-    # kinetic_fit.run_kinetics_fit()
+    # kinetic_fit.run_kinetics_fit() # batch entry point for kinetics fit (PFO + biexponential)
 
 # ---------------------------------------------------------------------------------------------------
 
     # file_directory = r"C:\Data\OpusConvert_subIFG_lgRfl\nn1120-3_pd_ceo2_004"
-    # name = r"20260315_214542_pd_ceo2_004-008"
+    # name = r"20260329_032106_pd_ceo2_004-010"
 
     # for file_name in os.listdir(file_directory):
     #     if name in file_name:
@@ -105,7 +105,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------------------------------
 
     file_directory = r"C:\Data\OpusConvert_subIFG_lgRfl\nn1120-3_pd_ceo2_004"
-    name = r"20260315_214542_pd_ceo2_004-008"
+    name = r"20260329_032106_pd_ceo2_004-010"
 
     kinetics = KineticFit()
 
