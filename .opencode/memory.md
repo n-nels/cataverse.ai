@@ -319,3 +319,23 @@
     - `python main_v2.py --mock --adsorption` - Run adsorption experiment
     - `python main_v2.py --mock --isotopic` - Run isotopic exchange
   - Can now run in debugger without hardware
+
+## 2026-04-12 (Cutover complete)
+
+- Confirmed mock testing completion and completed physical hardware validation.
+- Executed final cutover to make the new architecture live:
+  - Replaced `main.py` with the v2 workflow (no delegate shim).
+  - Promoted experiment modules to canonical names:
+    - `src/experiments/adsorption_v2.py` -> `src/experiments/adsorption.py`
+    - `src/experiments/isotopic_exchange_v2.py` -> `src/experiments/isotopic_exchange.py`
+  - Removed all remaining `_v2` imports/usages in active code and tests.
+  - Retired legacy stack and old dependencies:
+    - Removed `src/core/`, `src/devices/`, `src/operations/`, `src/utils/`
+    - Removed legacy experiment module `src/experiments/parameters.py`
+  - Removed transitional entrypoint `main_v2.py`.
+- Updated active code paths to use new architecture config/logging wiring only.
+- Updated tests for renamed modules and new constructor signatures.
+- Validation performed in this environment:
+  - `python -m compileall main.py src tests` passed.
+  - `pytest` not available in this shell environment (`No module named pytest`).
+- Project status: architectural restructure and post-validation cutover are complete.

@@ -9,27 +9,41 @@ from __future__ import annotations
 
 import os
 import time
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from src.core.config import data_directory, v_tot
+from src.config_loader import PathsConfig
 from src.hardware.pressure import MKSPressure
+from src.hardware.temperature import WatlowTemperature
 from src.physics import cell_pressure_from_manifold
-from src.utils.data_logging import create_directory, log_actuator_state
-
-from ..core import get_logger
+from src.datalog.file_io import create_directory, log_actuator_state
 from .valves import ValveController
 
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class GasDelivery:
     """Behavior-frozen gas delivery controller using valve and pressure adapters."""
 
-    def __init__(self, valves: ValveController, pressure: MKSPressure) -> None:
+    def __init__(
+        self,
+        valves: ValveController,
+        pressure: MKSPressure,
+        temperature: WatlowTemperature,
+        paths: PathsConfig,
+        total_volume_l: float,
+        temperature_k: float,
+        gas_constant: float,
+    ) -> None:
         self.valves = valves
         self.pressure = pressure
+        self.temperature = temperature
+        self.paths = paths
+        self.total_volume_l = total_volume_l
+        self.temperature_k = temperature_k
+        self.gas_constant = gas_constant
 
     def deliver_gas_to_manifold(
         self,
@@ -67,7 +81,7 @@ class GasDelivery:
                 return float(p_mfld_f)
 
         if filename is not None:
-            dir_actLog = os.path.join(data_directory, str(foldername))
+            dir_actLog = os.path.join(self.paths.data_directory, str(foldername))
             path_actLog = os.path.join(dir_actLog, filename + "_actLog.csv")
             create_directory(dir_actLog)
             """[fix] move elsewhere since they create files?
@@ -913,4 +927,4 @@ class GasDelivery:
     def calc_pressure(self, p1: float, v1: float) -> float:
         """Calculate total pressure in the system using configured total volume."""
 
-        return cell_pressure_from_manifold(p1, v1, v_tot)
+        return cell_pressure_from_manifold(p1, v1, self.total_volume_l)

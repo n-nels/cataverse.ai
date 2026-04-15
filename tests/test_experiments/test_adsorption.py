@@ -1,4 +1,4 @@
-"""Integration tests for adsorption experiment v2.
+"""Integration tests for adsorption experiment.
 
 These tests mock all hardware and verify the correct order of control calls
 and logging start/stops for the adsorption experiment protocol.
@@ -9,8 +9,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch, call
 import pytest
 
-from src.config_loader import load_config
-from src.experiments.adsorption_v2 import AdsorptionExperiment
+from src.experiments.adsorption import AdsorptionExperiment
 from src.experiments.session import ExperimentSession
 
 
@@ -91,13 +90,13 @@ def adsorption_experiment(
 
 
 class TestAdsorptionExperiment:
-    """Test adsorption experiment v2 methods."""
+    """Test adsorption experiment methods."""
 
     def test_acquire_ms_spectra(
         self, adsorption_experiment, mock_gas_controller, mock_devices
     ):
         """Test MS spectra acquisition sequence."""
-        with patch("src.experiments.adsorption_v2.MassSpecLogger") as mock_logger_class:
+        with patch("src.experiments.adsorption.MassSpecLogger") as mock_logger_class:
             mock_logger = MagicMock()
             mock_logger_class.return_value = mock_logger
 
@@ -120,10 +119,10 @@ class TestAdsorptionExperiment:
     ):
         """Test heat under evacuation sequence."""
         adsorption_experiment.heat_under_evacuation(
-            pumpType="RoughPump",
-            targetTemp=500,
-            holdTime=2.0,
-            rampRate=20,
+            pump_type="RoughPump",
+            target_temp=500,
+            hold_time=2.0,
+            ramp_rate=20,
         )
 
         # Verify evacuation called
@@ -142,8 +141,8 @@ class TestAdsorptionExperiment:
         mock_gas_controller.temperature.read_temperature.side_effect = [100, 50, 26, 25]
 
         adsorption_experiment.cool_cell(
-            targetTemp=25,
-            holdTime=0,
+            target_temp=25,
+            hold_time=0,
             variac_cmd=False,
         )
 
@@ -155,7 +154,7 @@ class TestAdsorptionExperiment:
 
     def test_supply_gas_to_mfld(self, adsorption_experiment, mock_gas_controller):
         """Test gas supply to manifold."""
-        adsorption_experiment.supply_gas_to_mfld(gas="CO", targetPressure=1.0)
+        adsorption_experiment.supply_gas_to_mfld(gas="CO", target_pressure=1.0)
 
         # Verify gas delivery called
         mock_gas_controller.deliver_gas_to_manifold.assert_called_once()
@@ -164,7 +163,9 @@ class TestAdsorptionExperiment:
         self, adsorption_experiment, mock_gas_controller
     ):
         """Test second gas supply to manifold."""
-        adsorption_experiment.supply_another_gas_to_mfld(gas="13CO", targetPressure=1.0)
+        adsorption_experiment.supply_another_gas_to_mfld(
+            gas="13CO", target_pressure=1.0
+        )
 
         # Verify valve sequence
         mock_gas_controller.valves.close.assert_called_with("v16")
@@ -196,8 +197,8 @@ class TestAdsorptionExperiment:
     ):
         """Test pretreatment gas introduction."""
         adsorption_experiment.introduce_pretreatment_gas_to_cell(
-            targetTemp=500,
-            holdTime=2.0,
+            target_temp=500,
+            hold_time=2.0,
         )
 
         # Verify gas delivery to cell
@@ -219,11 +220,10 @@ class TestAdsorptionExperiment:
 
     def test_start_pressure_log(self, adsorption_experiment, mock_gas_controller):
         """Test pressure logging thread start."""
-        thread, stop_event = adsorption_experiment.start_pressure_log(0.5, 0.3)
+        pressure_logger = adsorption_experiment.start_pressure_log(0.5, 0.3)
 
-        # Verify thread returned
-        assert thread is not None
-        assert stop_event is not None
+        # Verify logger returned
+        assert pressure_logger is not None
 
     def test_start_temperature_log(self, adsorption_experiment, mock_gas_controller):
         """Test temperature logging thread start."""
@@ -250,27 +250,27 @@ class TestAdsorptionExperimentSequence:
             chiller_cmd=True, variac_cmd=True, variac_vsl_cmd=True
         )
         adsorption_experiment.heat_under_evacuation(
-            pumpType="RoughPump", targetTemp=400, holdTime=0.0, rampRate=20
+            pump_type="RoughPump", target_temp=400, hold_time=0.0, ramp_rate=20
         )
         adsorption_experiment.heat_under_evacuation(
-            pumpType="TurboPump", targetTemp=400, holdTime=2.0, rampRate=0
+            pump_type="TurboPump", target_temp=400, hold_time=2.0, ramp_rate=0
         )
 
         # Oxidize surface
-        adsorption_experiment.supply_gas_to_mfld(gas="O2", targetPressure=5.0)
+        adsorption_experiment.supply_gas_to_mfld(gas="O2", target_pressure=5.0)
         adsorption_experiment.introduce_pretreatment_gas_to_cell(
-            targetTemp=500, holdTime=2
+            target_temp=500, hold_time=2
         )
         adsorption_experiment.heat_under_evacuation(
-            pumpType="TurboPump", targetTemp=500, holdTime=0.5, rampRate=0
+            pump_type="TurboPump", target_temp=500, hold_time=0.5, ramp_rate=0
         )
 
         # Cool and adsorb
-        adsorption_experiment.cool_cell(targetTemp=45, holdTime=0, variac_cmd=False)
+        adsorption_experiment.cool_cell(target_temp=45, hold_time=0, variac_cmd=False)
         adsorption_experiment.chiller_variac_state(
             chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False
         )
-        adsorption_experiment.supply_gas_to_mfld(gas="13CO", targetPressure=1.0)
+        adsorption_experiment.supply_gas_to_mfld(gas="13CO", target_pressure=1.0)
 
         # Verify key calls were made
         assert mock_gas_controller.evacuate_cell.call_count >= 2

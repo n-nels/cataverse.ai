@@ -1,402 +1,492 @@
-"""Adsorption experiment protocol implementation."""
+"""Adsorption experiment protocol using the new architecture layers.
 
-import csv
-import os
+This module provides a v2 adsorption experiment class that coordinates
+session metadata, control-layer operations, and hardware access through the
+new typed interfaces.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
 import shutil
 import threading
 import time
-from datetime import datetime, timedelta
-from typing import Any, List
+import os
+import logging
+from typing import Any
+from typing import cast
+from pathlib import Path
 
-from ..core import get_logger
-from ..core.config import (
-    R,
-    chiller_id,
-    data_directory,
-    share_drive_ms_calibrations_root,
-    share_drive_peak_fit_root,
-    share_drive_pressure_data_root,
-    t_mfld,
-    v_50tube,
-    v_cell,
-    v_m1m2,
-    v_m1m2m3,
-    v_m3,
-    v_tot,
-    variac_id,
-    variac_id_vsl,
-)
-from .parameters import experiment_parameters
-from ..utils.data_logging import copy_to_share_drive
+from src.control.gas_delivery import GasDelivery
+from src.control.spectrometer_control import SpectrometerController
+from src.control.temperature_control import TemperatureController
+from src.datalog.mass_spec_logger import MassSpecLogger
+from src.datalog.pressure_logger import PressureLogger
+from src.experiments.session import ExperimentSession
+from src.hardware.connections import DeviceManager
+from src.physics import cell_pressure_from_manifold
 
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
-def print(*args: Any, **kwargs: Any) -> None:
-    """Module-local print compatibility routed to logging."""
+@dataclass
+class AdsorptionExperiment:
+    """V2 adsorption experiment orchestrator.
 
-    sep = kwargs.get("sep", " ")
-    if sep is None:
-        sep = " "
-    end = kwargs.get("end", "\n")
-    if end is None:
-        end = "\n"
-    message = sep.join(str(arg) for arg in args)
-    if end != "\n":
-        message = f"{message}{end}"
-    logger.info(message)
+    This class will port legacy adsorption protocol methods to the new
+    architecture while preserving operation ordering and timing behavior.
+    """
 
+    session: ExperimentSession
+    devices: DeviceManager
+    gas_controller: GasDelivery
+    temp: TemperatureController
+    spec: SpectrometerController
 
-class adsorption_experiment():
-    def __init__(self, expParams: Any, serial: Any, actuator_control: Any, instrument_operations: Any) -> None:
-        self.expParams = expParams
-        self.serial = serial
-        self.actuator_control = actuator_control
-        self.instrument_operations = instrument_operations
-        self.gas = None
-        self.gas_2 = None
-        self.p_mfld = None
-        self.p_cell_calc = None
-        self.dt = None
-        self.chiller_state = None
+    def __post_init__(self) -> None:
+        self.gas: str | tuple[str, str] | None = None
+        self.gas_2: str | None = None
+        self.p_mfld: float | str | None = None
+        self.p_cell_calc: float | tuple[float, float] | None = None
+        self.dt: Any = None
+        self.chiller_state: bool | None = None
 
-    def heat_under_evacuation(self, pumpType: str, targetTemp: int, holdTime: float, rampRate: int,
-                              enable_ms_stream: bool=False, variac_cmd: bool=True, expParams: bool=True) -> None:
-        """
-        Heats the cell under evacuation. The pumpType is the type of pump used to evacuate the cell.
-        Args:
-            pumpType (str): Type of pump used to evacuate the cell. Can be None to skip evacuation and heat.
-            targetTemp (int): Target temperature in Celsius.
-            holdTime (float): Hold time in hours.
-            rampRate (int): Ramp rate in Celsius per minute.
-            variac_cmd (bool): Whether to keep the variac on even at target temperature.
-            expParams (bool): Whether to log the experimental parameters.
-        Returns:
-            None
-        """
-        if pumpType != None:
-            self.gas = self.instrument_operations.evacuate_cell(pumpType)
-            if holdTime == 0:
+    def acquire_ms_spectra(self) -> MassSpecLogger:
+        """Start mass-spec streaming with legacy valve/sequence ordering."""
+
+        self.gas_controller.valves.close("irCell")
+        self.gas_controller.valves.open("MassSpec")
+        time.sleep(30)
+
+        # Extrel sequence start from config
+        success = cast(Any, self.devices.mass_spec).write_register(
+            address=self.devices.config.extrel_ms.registers.sequence_start_address,
+            value=self.devices.config.extrel_ms.registers.sequence_start_value,
+        )
+        if success:
+            logger.info("Extrel sequence started")
+        else:
+            logger.info("Failed to set Extrel sequence")
+
+        ms_logger = MassSpecLogger(
+            mass_spec=cast(Any, self.devices.mass_spec),
+            path=self._path(cast(str, self.session.path_ms_log)),
+        )
+        ms_logger.start()
+        time.sleep(60)
+        return ms_logger
+
+    def heat_under_evacuation(
+        self,
+        pump_type: str,
+        target_temp: int,
+        hold_time: float,
+        ramp_rate: int,
+        enable_ms_stream: bool = False,
+        variac_cmd: bool = True,
+        log_params: bool = True,
+    ) -> None:
+        """Heat cell under evacuation with optional mass-spec stream sequence."""
+
+        if pump_type is not None:
+            self.gas = self.gas_controller.evacuate_cell(pump_type)
+            if hold_time == 0:
                 time.sleep(60)
 
+        ms_logger: MassSpecLogger | None = None
         if enable_ms_stream:
-            ms_thread, stop_ms = self.acquire_ms_spectra()
+            ms_logger = self.acquire_ms_spectra()
 
-        t_cell, rate, duration = self.instrument_operations.Watlow(self.expParams.file_name,
-                                        self.expParams.folder_name,
-                                        targetTemp,
-                                        holdTime,
-                                        rampRate,
-                                        variac_cmd)
-        if enable_ms_stream:
-            time.sleep(60*15)
-            print()
-            stop_ms.set()
-            ms_thread.join()
-            self.instrument_operations.extrel_sequence('stop')
-            self.actuator_control.actuator_close('MassSpec')
-            self.actuator_control.actuator_open('irCell')
+        t_cell, rate, duration = self.temp.watlow(
+            self.session.file_name,
+            self.session.folder_name,
+            target_temp,
+            hold_time,
+            ramp_rate,
+            variac_cmd,
+        )
 
-        self.dt, self.p_mfld, p_cell = self.serial.read_pressure()
-        if expParams:
-            self.expParams.pretreatment_parameters(gas=self.gas, p_gas_meas=(self.p_mfld, p_cell),
-                                                    t_cell=self.serial.readTemp_ir(), rate=rate, duration=duration,
-                                                    chiller_state=self.chiller_state)
-        return None
+        if enable_ms_stream and ms_logger is not None:
+            time.sleep(60 * 15)  # [fix] Should be arg
+            ms_logger.stop()
 
-    def cool_cell(self, targetTemp: int, holdTime: float, variac_cmd: bool, rampRate: int=0) -> None:
-        """
-        Cools the cell to a target temperature. The variac_cmd is used to keep the cell on even at target temperature.
-        Args:
-            targetTemp (int): Target temperature in Celsius.
-            holdTime (float): Hold time in hours.
-            variac_cmd (bool): Whether to keep the variac on even at target temperature.
-            rampRate (int): Ramp rate in Celsius per minute. Defaults to 0.
-        Returns:
-            None
-        """
-        t_cell, rate, duration = self.instrument_operations.Watlow(self.expParams.file_name,
-                                        self.expParams.folder_name,
-                                        targetTemp,
-                                        holdTime,
-                                        rampRate,
-                                        variac_cmd)
+            # Extrel sequence stop from config
+            success = cast(Any, self.devices.mass_spec).write_register(
+                address=self.devices.config.extrel_ms.registers.sequence_stop_address,
+                value=self.devices.config.extrel_ms.registers.sequence_stop_value,
+            )
+            if success:
+                logger.info("Extrel sequence stopped")
+            else:
+                logger.info("Failed to set Extrel sequence")
+            self.gas_controller.valves.close("MassSpec")
+            self.gas_controller.valves.open("irCell")
+
+        self.dt, self.p_mfld, p_cell = cast(Any, self.devices.pressure).read()
+
+        if log_params:
+            p_mfld_value = cast(float, self.p_mfld)
+            p_cell_value = cast(float, p_cell)
+            t_cell_value = cast(float, t_cell)
+            self.session.log_pretreatment(
+                gas=self.gas,
+                p_gas_meas=(p_mfld_value, p_cell_value),
+                t_cell=t_cell_value,
+                rate=rate,
+                duration=duration,
+                chiller_state=self.chiller_state,
+            )
+
+    def cool_cell(
+        self, target_temp: int, hold_time: float, variac_cmd: bool, ramp_rate: int = 0
+    ) -> None:
+        """Cool the cell to a target temperature. The variac_cmd is used to keep the cell on even at target temperature."""
+        t_cell, rate, duration = self.temp.watlow(
+            self.session.file_name,
+            self.session.folder_name,
+            target_temp,
+            hold_time,
+            ramp_rate,
+            variac_cmd,
+        )
         while True:
-            current_temp = self.serial.readTemp_ir()
-            print(f"Current temperature: {current_temp}\nTarget temperature: {t_cell}\n")
+            current_temp = cast(Any, self.devices.temperature).read_temperature()
+            logger.info(
+                f"Current temperature: {current_temp}\nTarget temperature: {t_cell}\n"
+            )
             try:
                 if t_cell + 1 >= current_temp:
                     break
             except TypeError as e:
-                print(f"Error occurred while reading temperatures: {e}")
+                logger.info(f"Error occurred while reading temperatures: {e}")
             time.sleep(60)
-        dt, self.p_mfld, p_cell = self.serial.read_pressure()
-        return None
+        self.dt, self.p_mfld, p_cell = cast(Any, self.devices.pressure).read()
 
-    def supply_gas_to_mfld(self, gas: str, targetPressure: float) -> None:
-        """
-        Supplies gas to the manifold. The target pressure corresponds to the pressure in the total volume of
-        the system. The pressure should not exceed 7.5 Torr
-        Args:
-            gas (str): Gas identity.
-            targetPressure (float): Target pressure in Torr.
-        """
+    def supply_gas_to_mfld(self, gas: str, target_pressure: float) -> None:
+        """Supply gas to the manifold. The target pressure corresponds to the pressure in the total volume of the system."""
         if self.gas_2:
             self.gas_2 = None
-        val = (v_tot)/(v_m1m2m3+v_50tube) * targetPressure
-        self.gas, self.p_mfld = self.instrument_operations.deliver_gas_to_mfld(self.expParams.file_name,
-                                                    self.expParams.folder_name,
-                                                    id=gas,
-                                                    target=val,
-                                                    openMS=True)
-        self.p_cell_calc = self.instrument_operations.calc_pressure(self.p_mfld, v_m1m2m3+v_50tube)
-        return None
 
-    def supply_another_gas_to_mfld(self, gas: str, targetPressure: float) -> None:
-        """
-        Supplies another gas to the manifold. The gas is delivered to the manifold and the pressure is calculated.
-        Args:
-            gas (str): Gas identity.
-            targetPressure (float): Target pressure in Torr.
-        """
-        self.actuator_control.actuator_close('v16')
-        self.actuator_control.actuator_open('TurboPump')
+        # Calculate target pressure for the manifold based on volume ratios
+        val = (
+            self.session.volumes.total
+            / (self.session.volumes.manifold_m1m2m3 + self.session.volumes.tube_50ml)
+            * target_pressure
+        )
+        self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
+            self.session.file_name,
+            self.session.folder_name,
+            id=gas,
+            target=val,
+            openMS=True,
+        )
+
+        self.p_cell_calc = cell_pressure_from_manifold(
+            self.p_mfld,
+            self.session.volumes.manifold_m1m2m3 + self.session.volumes.tube_50ml,
+            self.session.volumes.total,
+        )
+
+    def supply_another_gas_to_mfld(self, gas: str, target_pressure: float) -> None:
+        """Supply another gas to the manifold. The gas is delivered to the manifold and the pressure is calculated."""
+        self.gas_controller.valves.close("v16")
+        self.gas_controller.valves.open("TurboPump")
         time.sleep(120)
-        self.gas_2, self.p_mfld_2 = self.instrument_operations.deliver_gas_to_mfld(self.expParams.file_name,
-                                            self.expParams.folder_name,
-                                            id=gas,
-                                            target=targetPressure,
-                                            openMS=False)
-        self.p_cell_calc = self.instrument_operations.calc_pressure(self.p_mfld, v_m3)
-        self.p_cell_calc_2 = self.instrument_operations.calc_pressure(self.p_mfld_2, v_m1m2+v_50tube)
-        self.actuator_control.actuator_open('v16')
+        self.gas_2, self.p_mfld_2 = self.gas_controller.deliver_gas_to_manifold(
+            self.session.file_name,
+            self.session.folder_name,
+            id=gas,
+            target=target_pressure,
+            openMS=False,
+        )
+        self.p_cell_calc = cell_pressure_from_manifold(
+            self.p_mfld, self.session.volumes.m3, self.session.volumes.total
+        )
+        self.p_cell_calc_2 = cell_pressure_from_manifold(
+            self.p_mfld_2,
+            self.session.volumes.manifold_m1m2 + self.session.volumes.tube_50ml,
+            self.session.volumes.total,
+        )
+        self.gas_controller.valves.open("v16")
         time.sleep(60)
-        return None
 
-    def supply_gases_to_mfld(self, gas: List[str], targetPressure: List[float]) -> None:
-        """
-        Supplies gas to the manifold. The target pressure corresponds to the pressure in the total volume of
-        the system. The pressure of gas[0] cannot exceed 2.2 Torr. The pressure of gas[1] cannot exceed 9 Torr.
-        Args:
-            gas (str): Gas identity.
-            targetPressure (float): Target pressure in Torr.
-        """
-        val_1 = (v_tot)/v_m3 * targetPressure[0]
-        val_2 = (v_tot)/(v_m1m2+v_50tube) * targetPressure[1]
+    def supply_gases_to_mfld(
+        self, gas: list[str], target_pressure: list[float]
+    ) -> None:
+        """Supply gases to the manifold. The target pressure corresponds to the pressure in the total volume of the system."""
+        # Calculate target pressures for each gas based on volume ratios
+        val_1 = (
+            (self.session.volumes.total) / self.session.volumes.m3 * target_pressure[0]
+        )
+        val_2 = (
+            (self.session.volumes.total)
+            / (self.session.volumes.manifold_m1m2 + self.session.volumes.tube_50ml)
+            * target_pressure[1]
+        )
 
-        # supply first gas to manifold
-        self.gas, self.p_mfld = self.instrument_operations.deliver_gas_to_mfld(self.expParams.file_name,
-                                                    self.expParams.folder_name,
-                                                    id=gas[0],
-                                                    target=val_1,
-                                                    openMS=True)
-        self.actuator_control.actuator_close('v16')
-        dt, self.p_mfld, p_cell = self.serial.read_pressure()
-        self.p_cell_calc = self.instrument_operations.calc_pressure(self.p_mfld, v_m3)
+        # Supply first gas to manifold
+        self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
+            self.session.file_name,
+            self.session.folder_name,
+            id=gas[0],
+            target=val_1,
+            openMS=True,
+        )
+        self.gas_controller.valves.close("v16")
+        self.dt, self.p_mfld, p_cell = self.gas_controller.pressure.read()
+        self.p_cell_calc = cell_pressure_from_manifold(
+            self.p_mfld, self.session.volumes.m3, self.session.volumes.total
+        )
 
-        # supply second gas to manifold
-        self.actuator_control.actuator_open('TurboPump')
+        # Supply second gas to manifold
+        self.gas_controller.valves.open("TurboPump")
         time.sleep(300)
-        self.gas_2, self.p_mfld_2 = self.instrument_operations.deliver_gas_to_mfld(self.expParams.file_name,
-                                            self.expParams.folder_name,
-                                            id=gas[1],
-                                            target=val_2,
-                                            openMS=True)
-        self.p_cell_calc_2 = self.instrument_operations.calc_pressure(self.p_mfld_2, v_m1m2+v_50tube)
-        self.actuator_control.actuator_open('v16')
+        self.gas_2, self.p_mfld_2 = self.gas_controller.deliver_gas_to_manifold(
+            self.session.file_name,
+            self.session.folder_name,
+            id=gas[1],
+            target=val_2,
+            openMS=True,
+        )
+        self.p_cell_calc_2 = cell_pressure_from_manifold(
+            self.p_mfld_2,
+            self.session.volumes.manifold_m1m2 + self.session.volumes.tube_50ml,
+            self.session.volumes.total,
+        )
+        self.gas_controller.valves.open("v16")
         time.sleep(60)
-        return None
 
-    def acquire_spectra(self, repeat: List[int], delay: List[int], all_fileids: bool, do_bckg: bool, do_fit: bool) -> None:
-        """
-        Acquires spectra from the Opus software. The spectra are acquired in a separate thread.
-        Args:
-            repeat (List[int]): List of repeat values for the spectra acquisition.
-            delay (List[int]): List of delay values for the spectra acquisition.
-            all_fileids (bool): Whether to reset spectral processing.
-            do_bckg (bool): Whether to acquire background spectra.
-            do_fit (bool): Whether to fit the spectra.
-        Returns:
-            None
-        """
-        self.instrument_operations.opusAcquire(
-                    self.expParams.file_name,
-                    self.expParams.folder_name,
-                    repeat=[0],
-                    delay=[0],
-                    all_fileids=all_fileids,
-                    do_bckg=do_bckg,
-                    do_fit=do_fit
-                    )
-        opus_thread = threading.Thread(target=self.instrument_operations.opusAcquire, args=(
-                                                            self.expParams.file_name,
-                                                            self.expParams.folder_name,
-                                                            repeat,
-                                                            delay,
-                                                            False, # all fileids
-                                                            False, # do_bckg
-                                                            do_fit # do_fit
-                                        ))
-        dt, p_mfld_initial, p_cell_initial = self.serial.read_pressure()
-        gas_thread = threading.Thread(target=self.instrument_operations.cell_open_admit)
+    def acquire_spectra(
+        self,
+        repeat: list[int],
+        delay: list[int],
+        all_fileids: bool,
+        do_bckg: bool,
+        do_fit: bool,
+    ) -> None:
+        """Acquire spectra from Opus software with threaded acquisition and pressure logging."""
 
+        # Initial Opus acquisition with zero repeat/delay
+        self.spec.opus_vertex80(  # [fix] could use a beter name
+            {
+                "foldername": self.session.folder_name,
+                "filename": self.session.file_name,
+                "do_bckg": do_bckg,
+                "do_fit": do_fit,
+                "reset_fileids": all_fileids,
+            }
+        )
+
+        # Thread for main Opus acquisition
+        opus_thread = threading.Thread(
+            target=self.spec.opus_acquire,
+            args=(
+                self.session.file_name,
+                self.session.folder_name,
+                repeat,
+                delay,
+                all_fileids,
+                do_bckg,
+                do_fit,
+            ),
+        )
+
+        # Read initial pressure
+        dt, p_mfld_initial, p_cell_initial = self.gas_controller.pressure.read()
+
+        # Thread for admitting gas to cell
+        gas_thread = threading.Thread(target=self.gas_controller.cell_open_admit)
+
+        # Start threads
         opus_thread.start()
         gas_thread.start()
 
+        # Wait for gas thread to complete, then short delay
         gas_thread.join()
         time.sleep(20)
-        dt, p_mfld, p_cell = self.serial.read_pressure()
+
+        # Read pressure after gas admission
+        dt, p_mfld, p_cell = self.gas_controller.pressure.read()
+
+        # Log experimental parameters
         if self.gas_2:
-            self.expParams.experimental_parameters(gas=(self.gas, self.gas_2), p_gas_meas=(p_mfld, p_cell),
-                                                   t_cell=self.serial.readTemp_ir(), p_gas_calc=(self.p_cell_calc,self.p_cell_calc_2),
-                                                   chiller_state=self.chiller_state)
+            self.session.log_experimental_parameters(
+                gas=(self.gas, self.gas_2),
+                p_gas_meas=(p_mfld, p_cell),
+                t_cell=self.temp.temperature.read_temperature(),
+                p_gas_calc=(self.p_cell_calc, getattr(self, "p_cell_calc_2", None)),
+                chiller_state=self.chiller_state,
+            )
         else:
-            self.expParams.experimental_parameters(gas=self.gas, p_gas_meas=(p_mfld, p_cell),
-                                               t_cell=self.serial.readTemp_ir(), p_gas_calc=self.p_cell_calc,
-                                               chiller_state=self.chiller_state)
+            self.session.log_experimental_parameters(
+                gas=self.gas,
+                p_gas_meas=(p_mfld, p_cell),
+                t_cell=self.temp.temperature.read_temperature(),
+                p_gas_calc=self.p_cell_calc,
+                chiller_state=self.chiller_state,
+            )
 
-        pressure_thread, stop_pressure_log = self.start_pressure_log(p_mfld_initial, p_cell_initial)
+        # Start pressure logging
+        pressure_logger = self.start_pressure_log(p_mfld_initial, p_cell_initial)
 
+        # Wait for Opus acquisition to complete
         opus_thread.join()
-        stop_pressure_log.set()
-        pressure_thread.join()
+        pressure_logger.stop()
 
-        self.instrument_operations.evacuate_cell('RoughPump')
-        self.instrument_operations.OpusVertex80(message = {
-                        'end_experiment': True,
-                        'foldername': self.expParams.folder_name,
-                        'filename': self.expParams.file_name + "_evacuation",
-                        'do_bckg': False,
-                        'do_fit': False,
-                        'reset_fileids': False # opus waits 10 minutes; need to fix reconnecting socket logic
-                    })
+        # Evacuate cell with rough pump
+        self.gas_controller.evacuate_cell("RoughPump")
 
-        self.expParams.update_experiment_success(success=True)
+        # Opus Vertex80 for evacuation
+        self.spec.opus_vertex80(
+            {
+                "end_experiment": True,
+                "foldername": self.session.folder_name,
+                "filename": self.session.file_name + "_evacuation",
+                "do_bckg": False,
+                "do_fit": False,
+                "reset_fileids": False,
+            }
+        )
+
+        # Mark experiment as successful
+        self.session.mark_success(success=True)
         time.sleep(5)
-        self.expParams.is_new_sample_experiment()
+
+        # Check if new sample experiment
+        self.session.is_new_sample_experiment()
         time.sleep(5)
+
+        # Copy files to share drive
         try:
-            copy_to_share_drive(src_path=self.expParams.path_readme,
-                                dest_folder=os.path.join(share_drive_peak_fit_root, self.expParams.folder_name),
-                                file_name=self.expParams.file_name,
-                                suffix="README.md")
-            copy_to_share_drive(src_path=self.expParams.path_pressure_log,
-                                dest_folder=os.path.join(share_drive_pressure_data_root, self.expParams.folder_name),
-                                file_name=self.expParams.file_name,
-                                suffix="pressureLog.csv")
+            # Copy README file
+            shutil.copy2(
+                self.session.path_readme,
+                os.path.join(
+                    self.session.paths.share_drive_peak_fit_root,
+                    self.session.folder_name,
+                    f"{self.session.file_name}_README.md",
+                ),
+            )
+            # Copy pressure log file
+            shutil.copy2(
+                self.session.path_pressure_log,
+                os.path.join(
+                    self.session.paths.share_drive_pressure_data_root,
+                    self.session.folder_name,
+                    f"{self.session.file_name}_pressureLog.csv",
+                ),
+            )
 
-            self.instrument_operations.OpusVertex80({'readme': True})
+            # Send readme command to Opus
+            self.spec.opus_vertex80({"readme": True})
 
         except Exception as e:
-            print(f"An error occurred while copying the file: {e}")
+            logger.info(f"An error occurred while copying the file: {e}")
 
-        return None
+    def introduce_pretreatment_gas_to_cell(
+        self,
+        target_temp: int,
+        hold_time: float,
+        ramp_rate: int = 0,
+        variac_cmd: bool = True,
+    ) -> None:
+        """Introduce pretreatment gas to the cell and apply temperature ramp/hold."""
+        # Deliver gas to cell
+        self.gas_controller.deliver_gas_to_cell()
 
-    def introduce_pretreatment_gas_to_cell(self, targetTemp: int, holdTime: float, rampRate: int=0, variac_cmd: bool=True) -> None:
-        """
-        Introduces the pretreatment gas to the cell. The gas is delivered to the cell and the pressure is calculated.
-        Args:
-            targetTemp (int): Target temperature in Celsius.
-            holdTime (float): Hold time in hours.
-            rampRate (int): Ramp rate in Celsius per minute. Defaults to 0.
-            variac_cmd (bool): Whether to keep the variac on even at target temperature.
-        Returns:
-            None
-        """
-        self.instrument_operations.deliver_gas_to_cell()
-        t_cell, rate, duration = self.instrument_operations.Watlow(self.expParams.file_name,
-                                self.expParams.folder_name,
-                                targetTemp,
-                                holdTime,
-                                rampRate,
-                                variac_cmd)
-        self.dt, self.p_mfld, p_cell = self.serial.read_pressure()
+        # Apply temperature ramp/hold using Watlow controller
+        t_cell, rate, duration = self.temp.watlow(
+            self.session.file_name,
+            self.session.folder_name,
+            target_temp,
+            hold_time,
+            ramp_rate,
+            variac_cmd,
+        )
+
+        # Read pressure after gas delivery and temperature stabilization
+        self.dt, self.p_mfld, p_cell = self.gas_controller.pressure.read()
+
+        # Log pretreatment parameters
         if self.gas_2:
-            self.expParams.pretreatment_parameters(gas=(self.gas, self.gas_2), p_gas_meas=(self.p_mfld, p_cell),
-                                                   t_cell=self.serial.readTemp_ir(), rate=rate, duration=duration,
-                                                   p_gas_calc=(self.p_cell_calc,self.p_cell_calc_2),
-                                                   chiller_state=self.chiller_state)
+            self.session.log_pretreatment(
+                gas=(self.gas, self.gas_2),
+                p_gas_meas=(self.p_mfld, p_cell),
+                t_cell=t_cell,
+                rate=rate,
+                duration=duration,
+                p_gas_calc=(self.p_cell_calc, getattr(self, "p_cell_calc_2", None)),
+                chiller_state=self.chiller_state,
+            )
         else:
-            self.expParams.pretreatment_parameters(gas=self.gas, p_gas_meas=(self.p_mfld, p_cell),
-                                                t_cell=self.serial.readTemp_ir(), rate=rate, duration=duration, p_gas_calc=self.p_cell_calc,
-                                                chiller_state=self.chiller_state)
-        return None
+            self.session.log_pretreatment(
+                gas=self.gas,
+                p_gas_meas=(self.p_mfld, p_cell),
+                t_cell=t_cell,
+                rate=rate,
+                duration=duration,
+                p_gas_calc=self.p_cell_calc,
+                chiller_state=self.chiller_state,
+            )
 
-    def chiller_variac_state(self, chiller_cmd: bool, variac_cmd: bool, variac_vsl_cmd: bool) -> None:
-        """
-        Sets the state of the chiller and variac. The chiller_cmd is used to set the state of the chiller and
-        the variac_cmd is used to set the state of the variac.
-        Args:
-            chiller_cmd (bool): Whether to turn on the chiller. Can be None to skip.
-            variac_cmd (bool): Whether to turn on the variac. Can be None to skip.
-            variac_vsl_cmd (bool): Whether to turn on the variac for the VSL. Can be None to skip.
-        Returns:
-            None
-        """
+    def chiller_variac_state(
+        self, chiller_cmd: bool, variac_cmd: bool, variac_vsl_cmd: bool
+    ) -> None:
+        """Set the state of the chiller and variac. The chiller_cmd is used to set the state of the chiller and the variac_cmd is used to set the state of the variac."""
         if chiller_cmd is not None:
             self.chiller_state = chiller_cmd
-            self.instrument_operations.kasaPlug_state(chiller_id, chiller_cmd)
-            # self.instrument_operations.chiller_state(chiller_cmd)
+            self.temp.chiller_state(chiller_cmd)
         if variac_cmd is not None:
-            self.instrument_operations.kasaPlug_state(variac_id, variac_cmd)
-            # self.instrument_operations.variac_state(variac_cmd)
+            self.temp.variac_state(variac_cmd)
         if variac_vsl_cmd is not None:
-            self.instrument_operations.kasaPlug_state(variac_id_vsl, variac_vsl_cmd)
-            # self.instrument_operations.variac_state(variac_vsl_cmd)
-        return None
+            self.temp.kasa_plug_state("variac_id_vsl", variac_vsl_cmd)
+        """
+        [fix] These are devices controlled by Kasa plugs. Two plugs control the variac and one a chiller.
+            We should just use kasa_plug_state.
+        """
 
-    def start_pressure_log(self, p_mfld_initial: Any, p_cell_initial: Any) -> tuple[threading.Thread, threading.Event]:
-        """
-        Starts the pressure logging thread and returns the thread and stop event.
-        Returns:
-            (threading.Thread, threading.Event): The pressure logging thread and stop event.
-        """
-        stop_pressure_log = threading.Event()
-        log_path = self.expParams.path_pressure_log
-        pressure_thread = threading.Thread(
-            target=self.instrument_operations.pressure_log,
-            args=(log_path, stop_pressure_log, p_mfld_initial, p_cell_initial)
+    def start_pressure_log(
+        self, p_mfld_initial: Any, p_cell_initial: Any
+    ) -> PressureLogger:
+        """Start pressure logging and return the logger handle."""
+        log_path = self.session.path_pressure_log
+        pressure_logger = PressureLogger(
+            pressure=self.gas_controller.pressure,
+            physics=self.session.volumes,
+            path=log_path,
+            p_mfld_initial=p_mfld_initial,
+            p_cell_initial=p_cell_initial,
+            mass_g=self.session.sample.mass_g,
+            metal_load_wt_percent=self.session.sample.metal_load_wt_percent,
+            metal_molar_mass_g_mol=self.session.sample.metal_molar_mass_g_mol,
+            temperature_k=self.gas_controller.temperature_k,
+            gas_constant=self.gas_controller.gas_constant,
         )
-        pressure_thread.start()
-        return pressure_thread, stop_pressure_log
+        pressure_logger.start()
+
+        return pressure_logger
 
     def start_temperature_log(self) -> tuple[threading.Thread, threading.Event]:
-        """
-        Starts the temperature logging thread and returns the thread and stop event.
-        Returns:
-            (threading.Thread, threading.Event): The temperature logging thread and stop event.
-        """
+        """Start the temperature logging thread and return the thread and stop event."""
         stop_temp_log = threading.Event()
-        log_path = os.path.join(
-            data_directory,
-            self.expParams.folder_name,
-            f"{self.expParams.file_name}_tempLog.csv",
+        log_path = (
+            Path(self.session.paths.data_directory)
+            / self.session.folder_name
+            / f"{self.session.file_name}_tempLog.csv"
         )
-        temp_thread = threading.Thread(
-            target=self.instrument_operations.temperature_log,
-            args=(log_path, stop_temp_log)
-        )
-        temp_thread.start()
-        return temp_thread, stop_temp_log
+        from src.datalog.temperature_logger import TemperatureLogger
 
-    def acquire_ms_spectra(self) -> tuple[threading.Thread, threading.Event]:
-        """
-        Acquires spectra from the Mass Spectrometer software. The spectra are acquired in a separate thread.
-        Returns:
-            (threading.Thread, threading.Event): The mass spectrometer logging thread and stop event.
-        """
-        self.actuator_control.actuator_close('irCell')
-        self.actuator_control.actuator_open('MassSpec')
-        time.sleep(30)
-
-        self.instrument_operations.extrel_sequence('start')
-        stop_ms_log = threading.Event()
-        log_path = self.expParams.path_ms_log
-        ms_thread = threading.Thread(
-            target=self.instrument_operations.extrel_stream,
-            args=(log_path, stop_ms_log)
+        temp_logger = TemperatureLogger(
+            temperature=self.gas_controller.temperature,
+            path=log_path,
+            read_interval_s=5,
         )
-        ms_thread.start()
-        time.sleep(60)
-        return ms_thread, stop_ms_log
+        temp_logger.start()
+        return temp_logger._thread, stop_temp_log
+
+    @staticmethod
+    def _path(value: str) -> "Any":
+        from pathlib import Path
+
+        return Path(value)

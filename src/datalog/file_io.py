@@ -11,14 +11,20 @@ import glob
 import os
 import shutil
 import time
+import logging
 from datetime import datetime
 from typing import Any
 
-from src.core import get_logger
-from src.core.config import data_directory, metal, notebook, support
+from src.config_loader import PathsConfig, SampleConfig
 
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+
+
+def material_prefix(sample: SampleConfig) -> str:
+    """Build standard sample folder prefix."""
+
+    return f"{sample.notebook}_{sample.metal}_{sample.support}_"
 
 
 def create_directory(directory_path: str) -> None:
@@ -161,7 +167,9 @@ def _increment(
 
     if os.path.exists(dir_path):
         existing_folders = [
-            folder for folder in os.listdir(dir_path) if folder.startswith(base_folder_name)
+            folder
+            for folder in os.listdir(dir_path)
+            if folder.startswith(base_folder_name)
         ]
         if folder_name:
             existing_files = glob.glob(f"{os.path.join(dir_path, folder_name)}/*")
@@ -179,11 +187,15 @@ def _increment(
 
         if existing_folders:
             if new_folder:
-                fld_iter = max([int(folder.split("_")[-1]) for folder in existing_folders]) + 1
+                fld_iter = (
+                    max([int(folder.split("_")[-1]) for folder in existing_folders]) + 1
+                )
                 exp_iter = 0
                 return fld_iter, exp_iter
             else:
-                fld_iter = max(int(folder.split("_")[-1]) for folder in existing_folders)
+                fld_iter = max(
+                    int(folder.split("_")[-1]) for folder in existing_folders
+                )
 
             last_folder = None
             filtered_folders = [
@@ -212,14 +224,16 @@ def _increment(
 
 
 def generate_experiment_id(
+    sample: SampleConfig,
+    paths: PathsConfig,
     file_name: str,
     folder_name: str,
     new_sample: bool,
 ) -> tuple[str, str]:
     """Generate experiment file/folder names from current directory state."""
 
-    dir_path = data_directory
-    base_folder_name = f"{notebook}_{metal}_{support}_"
+    dir_path = paths.data_directory
+    base_folder_name = material_prefix(sample)
 
     if file_name and folder_name:
         return file_name, folder_name
@@ -227,7 +241,9 @@ def generate_experiment_id(
     elif file_name:
         fld_iter = _increment(dir_path, base_folder_name)[0]
         fld_iter_str = f"{fld_iter:03}"
-        folder_name = f"{notebook}_{metal}_{support}_{fld_iter_str}"
+        folder_name = (
+            f"{sample.notebook}_{sample.metal}_{sample.support}_{fld_iter_str}"
+        )
 
     elif folder_name:
         fld_iter_str = folder_name.split("_")[-1]
@@ -235,16 +251,20 @@ def generate_experiment_id(
         now = datetime.now()
         formatted_time = now.strftime("%Y%m%d_%H%M%S_")
         exp_iter_str = f"{exp_iter:03}"
-        file_name = f"{formatted_time}{metal}_{support}_{fld_iter_str}-{exp_iter_str}"
+        file_name = f"{formatted_time}{sample.metal}_{sample.support}_{fld_iter_str}-{exp_iter_str}"
     else:
-        fld_iter, exp_iter = _increment(dir_path, base_folder_name, new_folder=new_sample)
+        fld_iter, exp_iter = _increment(
+            dir_path, base_folder_name, new_folder=new_sample
+        )
         now = datetime.now()
         formatted_time = now.strftime("%Y%m%d_%H%M%S_")
         fld_iter_str = f"{fld_iter:03}"
         exp_iter_str = f"{exp_iter:03}"
 
-        file_name = f"{formatted_time}{metal}_{support}_{fld_iter_str}-{exp_iter_str}"
-        folder_name = f"{notebook}_{metal}_{support}_{fld_iter_str}"
+        file_name = f"{formatted_time}{sample.metal}_{sample.support}_{fld_iter_str}-{exp_iter_str}"
+        folder_name = (
+            f"{sample.notebook}_{sample.metal}_{sample.support}_{fld_iter_str}"
+        )
 
     return file_name, folder_name
 

@@ -8,21 +8,16 @@ from __future__ import annotations
 
 import os
 import time
+import logging
 from datetime import datetime
 
-from src.core import get_logger
-from src.core.config import (
-    chiller_id,
-    data_directory,
-    variac_id,
-    variac_id_vsl,
-)
+from src.config_loader import KasaConfig, PathsConfig
 from src.hardware.power import KasaPower
 from src.hardware.temperature import WatlowTemperature
-from src.utils.data_logging import create_directory, log_temperature
+from src.datalog.file_io import create_directory, log_temperature
 
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # Legacy global path variables used by watlow() branches.
 dir_tempLog: str
@@ -32,9 +27,17 @@ path_tempLog: str
 class TemperatureController:
     """Control Watlow temperature ramps and Kasa power states."""
 
-    def __init__(self, temperature: WatlowTemperature, power: KasaPower) -> None:
+    def __init__(
+        self,
+        temperature: WatlowTemperature,
+        power: KasaPower,
+        paths: PathsConfig,
+        kasa: KasaConfig,
+    ) -> None:
         self.temperature = temperature
         self.power = power
+        self.paths = paths
+        self.kasa = kasa
 
     def watlow(
         self,
@@ -93,7 +96,7 @@ class TemperatureController:
             return
 
         if filename is not None:
-            dir_tempLog = os.path.join(data_directory, str(foldername))
+            dir_tempLog = os.path.join(self.paths.data_directory, str(foldername))
             path_tempLog = os.path.join(dir_tempLog, f"{filename}_tempLog.csv")
             create_directory(dir_tempLog)
             """[fix] Should these paths be created elsewhere?"""
@@ -156,7 +159,7 @@ class TemperatureController:
             self.temperature.set_temperature(target_temp)
             state_chg = False
             if not variac_cmd:  # shut off heating to vessel
-                self.kasa_plug_state(variac_id_vsl, variac_cmd)
+                self.kasa_plug_state(self.kasa.variac_id_vsl, variac_cmd)
             while current_temp > target_temp + 5:
                 current_temp = self.temperature.read_temperature()
                 if (
@@ -164,7 +167,7 @@ class TemperatureController:
                     and (variac_cmd is False)
                     and (state_chg is False)
                 ):
-                    self.kasa_plug_state(variac_id, False)
+                    self.kasa_plug_state(self.kasa.variac_id, False)
                     state_chg = True
                 logger.info(
                     "Current temperature: %s C\nTarget temperature: %s C\n",
@@ -177,11 +180,11 @@ class TemperatureController:
 
         else:
             if not variac_cmd:  # shut off heating to vessel
-                self.kasa_plug_state(variac_id_vsl, variac_cmd)
+                self.kasa_plug_state(self.kasa.variac_id_vsl, variac_cmd)
                 if (
                     self.temperature.read_temperature() <= 1.75 * (target_temp) + 1.25
                 ):  # shut off variac line
-                    self.kasa_plug_state(variac_id, variac_cmd)
+                    self.kasa_plug_state(self.kasa.variac_id, variac_cmd)
             write_temps = [target_temp]
             hold_temp(path_tempLog)
 
@@ -190,12 +193,12 @@ class TemperatureController:
     def chiller_state(self, cmd: bool) -> None:
         """Set chiller smart-plug state by configured device id."""
 
-        self.power.set_state(chiller_id, cmd)
+        self.power.set_state(self.kasa.chiller_id, cmd)
 
     def variac_state(self, cmd: bool) -> None:
         """Set primary variac smart-plug state by configured device id."""
 
-        self.power.set_state(variac_id, cmd)
+        self.power.set_state(self.kasa.variac_id, cmd)
 
     def kasa_plug_state(self, plug_id: str, cmd: bool) -> None:
         """Set arbitrary Kasa smart-plug state by plug id."""

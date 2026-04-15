@@ -7,14 +7,14 @@ using the hardware `OpusSpectrometer` adapter.
 from __future__ import annotations
 
 import time
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from src.core import get_logger
 from src.hardware.spectrometer import OpusSpectrometer
 
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class SpectrometerController:

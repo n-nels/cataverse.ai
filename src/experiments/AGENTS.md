@@ -8,20 +8,20 @@ See root `AGENTS.md` for global safety constraints and behavior-preservation rul
 
 This module defines experiment protocols and automation workflows (e.g., adsorption and isotopic exchange), including:
 
-- Experiment parameter handling
-- Protocol orchestration across operations/devices
-- Data/log file setup and experiment metadata writing
+- Experiment/session parameter handling
+- Protocol orchestration across control/hardware
+- Data/log file setup and experiment metadata writing via datalog/session
 - Threaded acquisition/monitoring coordination
 
 Current structure:
-- `parameters.py` — `experiment_parameters`
-- `adsorption.py` — `adsorption_experiment`
-- `isotopic_exchange.py` — `isotopic_exchange_calibration`
+- `session.py` — `ExperimentSession`
+- `adsorption.py` — `AdsorptionExperiment`
+- `isotopic_exchange.py` — `IsotopicExchangeCalibration`
 - `automation/` — automation package scaffold
 
 ## Dependencies
 
-**Depends on:** `operations`, `core`, `utils`
+**Depends on:** `control`, `datalog`, `hardware`, `config_loader`, `physics`
 
 **Depended on by:** top-level scripts (e.g., `main.py`)
 

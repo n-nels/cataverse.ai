@@ -10,15 +10,7 @@ import logging
 import sys
 import time
 
-from src.core.config import (
-    actuator_mass_spec_open_max_cell_torr,
-    actuator_post_write_sleep_s,
-    actuator_turbo_open_max_manifold_torr,
-    actuator_turbo_pressure_poll_s,
-    actuator_voltage_closed,
-    actuator_voltage_max_write,
-    actuator_voltage_open,
-)
+from src.config_loader import ActuatorConfig
 from src.hardware.analog_io import AnalogIO
 from src.hardware.pressure import MKSPressure
 
@@ -29,15 +21,18 @@ logger = logging.getLogger(__name__)
 class ValveController:
     """Behavior-frozen valve controller using hardware-layer adapters."""
 
-    def __init__(self, analog_io: AnalogIO, pressure: MKSPressure) -> None:
+    def __init__(
+        self, analog_io: AnalogIO, pressure: MKSPressure, config: ActuatorConfig
+    ) -> None:
         self.analog_io = analog_io
         self.pressure = pressure
+        self.config = config
 
     def write(self, actuator_id: str, voltage: float) -> tuple[str, float]:
         """Write raw voltage to one actuator channel."""
 
-        if voltage > actuator_voltage_max_write:
-            self.analog_io.write(actuator_id, actuator_voltage_closed)
+        if voltage > self.config.voltage_max_write:
+            self.analog_io.write(actuator_id, self.config.voltage_closed)
             # TODO: consider custom exception
             sys.exit("Gas bulb empty")
 
@@ -47,10 +42,10 @@ class ValveController:
     def close(self, actuator_id: str) -> tuple[str, float]:
         """Close one actuator and apply post-write delay."""
 
-        voltage = actuator_voltage_closed
+        voltage = self.config.voltage_closed
         actuator_id, write_value = self.write(actuator_id, voltage)
         self._log_write(actuator_id, write_value)
-        time.sleep(actuator_post_write_sleep_s)
+        time.sleep(self.config.post_write_sleep_s)
         return actuator_id, float(voltage)
 
     def close_all(self, device_map: dict[str, tuple[str, str]]) -> None:
@@ -73,21 +68,21 @@ class ValveController:
         if actuator_id in safety_checks:
             safety_checks[actuator_id]()
 
-        voltage = actuator_voltage_open
+        voltage = self.config.voltage_open
         actuator_id, write_value = self.write(actuator_id, voltage)
         self._log_write(actuator_id, write_value)
-        time.sleep(actuator_post_write_sleep_s)
+        time.sleep(self.config.post_write_sleep_s)
         return actuator_id, float(voltage)
 
     def safe_turbo_open(self) -> None:
         """Run safety sequence before opening TurboPump."""
 
         dt, p_mfld, p_cell = self.pressure.read()
-        if p_mfld > actuator_turbo_open_max_manifold_torr:
+        if p_mfld > self.config.turbo_open_max_manifold_torr:
             self.open("RoughPump")
 
-            while p_mfld > actuator_turbo_open_max_manifold_torr:
-                time.sleep(actuator_turbo_pressure_poll_s)
+            while p_mfld > self.config.turbo_open_max_manifold_torr:
+                time.sleep(self.config.turbo_pressure_poll_s)
                 dt, p_mfld, p_cell = self.pressure.read()
                 logger.info("Manifold pressure is %s", p_mfld)
 
@@ -101,7 +96,7 @@ class ValveController:
 
         self.close("irCell")
         dt, p_mfld, p_cell = self.pressure.read()
-        if p_cell > actuator_mass_spec_open_max_cell_torr:
+        if p_cell > self.config.mass_spec_open_max_cell_torr:
             # TODO: consider custom exception
             sys.exit("Pressure of cell above limit to open safely")
         return None

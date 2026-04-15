@@ -17,7 +17,7 @@ This is the highest-risk layer because it directly controls sequencing that affe
 
 ## Dependencies
 
-**Depends on:** `hardware`, `core` logging utilities
+**Depends on:** `hardware`, `config_loader`, Python `logging`
 
 **Depended on by:** `experiments`, top-level execution scripts
 

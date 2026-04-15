@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 from typing import cast
 
-from src.core.config import R, t_mfld
 from src.hardware.pressure import MKSPressure
 from src.physics import SystemVolumes, amount_adsorbed
 
@@ -34,7 +33,8 @@ class PressureLogger:
         mass_g: float,
         metal_load_wt_percent: float,
         metal_molar_mass_g_mol: float = 106.42,
-        temperature_k: float = t_mfld,
+        temperature_k: float = 298.0,
+        gas_constant: float = 62.363577,
         read_interval_s: float = 5,
     ) -> None:
         self.pressure = pressure
@@ -46,6 +46,7 @@ class PressureLogger:
         self.metal_load_wt_percent = metal_load_wt_percent
         self.metal_molar_mass_g_mol = metal_molar_mass_g_mol
         self.temperature_k = temperature_k
+        self.gas_constant = gas_constant
         self.read_interval_s = read_interval_s
 
         self._stop = threading.Event()
@@ -75,15 +76,15 @@ class PressureLogger:
         source_volume_l = self.physics.manifold_m1m2m3 + self.physics.tube_50ml
         total_volume_l = self.physics.total
 
-        n_initial = (self.p_mfld_initial * source_volume_l) / (R * self.temperature_k)  # mol
+        n_initial = (self.p_mfld_initial * source_volume_l) / (
+            self.gas_constant * self.temperature_k
+        )  # mol
         p_initial = (
             (self.p_mfld_initial * source_volume_l)
             + (self.p_cell_initial * self.physics.cell)
         ) / total_volume_l
         pd_umol_g = (
-            (self.metal_load_wt_percent / 100)
-            * (1 / self.metal_molar_mass_g_mol)
-            * 1e6
+            (self.metal_load_wt_percent / 100) * (1 / self.metal_molar_mass_g_mol) * 1e6
         )
 
         t0 = None
@@ -118,7 +119,7 @@ class PressureLogger:
                         relative_time_s = (dt - t0).total_seconds() if t0 else None
 
                         n_adsorbed_initial = (p_initial * total_volume_l) / (
-                            R * self.temperature_k
+                            self.gas_constant * self.temperature_k
                         )
                         amount_adsorbed_umol_g = amount_adsorbed(
                             n_initial_mol=n_adsorbed_initial,
@@ -126,10 +127,14 @@ class PressureLogger:
                             total_volume_l=total_volume_l,
                             temperature_k=self.temperature_k,
                             mass_g=self.mass_g,
-                            gas_constant=R,
+                            gas_constant=self.gas_constant,
                         )
 
-                        n_current = p_mfld_value * total_volume_l / (R * self.temperature_k)
+                        n_current = (
+                            p_mfld_value
+                            * total_volume_l
+                            / (self.gas_constant * self.temperature_k)
+                        )
                         apparent_conversion = (n_initial - n_current) / n_initial * 100
                         apparent_coverage = amount_adsorbed_umol_g / pd_umol_g
                     else:

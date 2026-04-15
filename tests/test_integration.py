@@ -16,8 +16,9 @@ from src.control.spectrometer_control import SpectrometerController
 from src.control.temperature_control import TemperatureController
 from src.control.valves import ValveController
 from src.experiments.session import ExperimentSession
-from src.experiments.adsorption_v2 import AdsorptionExperiment
-from src.experiments.isotopic_exchange_v2 import IsotopicExchangeCalibration
+from src.experiments.adsorption import AdsorptionExperiment
+from src.experiments.isotopic_exchange import IsotopicExchangeCalibration
+from src.physics import SystemVolumes
 
 
 @pytest.fixture
@@ -54,6 +55,7 @@ def valve_controller(mock_device_manager, app_config):
     """Create valve controller with mock device manager."""
     return ValveController(
         analog_io=mock_device_manager.analog_io,
+        pressure=mock_device_manager.pressure,
         config=app_config.hardware.actuator,
     )
 
@@ -65,7 +67,15 @@ def gas_controller(valve_controller, mock_device_manager, app_config):
         valves=valve_controller,
         pressure=mock_device_manager.pressure,
         temperature=mock_device_manager.temperature,
-        config=app_config.hardware.actuator,
+        paths=app_config.paths,
+        total_volume_l=(
+            app_config.system.manifold_m1m2m3_volume_l
+            + app_config.system.cell_volume_l
+            + app_config.system.valve_volume_l
+            + app_config.system.tube_50ml_volume_l
+        ),
+        temperature_k=app_config.system.manifold_temperature_k,
+        gas_constant=app_config.system.gas_constant,
     )
 
 
@@ -75,7 +85,8 @@ def temp_controller(mock_device_manager, app_config):
     return TemperatureController(
         temperature=mock_device_manager.temperature,
         power=mock_device_manager.power,
-        config=app_config.hardware.kasa,
+        paths=app_config.paths,
+        kasa=app_config.hardware.kasa,
     )
 
 
@@ -92,7 +103,15 @@ def experiment_session(app_config):
     """Create experiment session."""
     return ExperimentSession(
         sample=app_config.sample,
-        volumes=app_config.system,
+        volumes=SystemVolumes(
+            vessel=app_config.system.vessel_volume_l,
+            valve=app_config.system.valve_volume_l,
+            cell=app_config.system.cell_volume_l,
+            manifold_m1m2=app_config.system.manifold_m1m2_volume_l,
+            manifold_m1m2m3=app_config.system.manifold_m1m2m3_volume_l,
+            tube_50ml=app_config.system.tube_50ml_volume_l,
+            flask=app_config.system.flask_volume_l,
+        ),
         paths=app_config.paths,
     )
 
@@ -189,17 +208,17 @@ class TestMinimalExperimentExecution:
     def test_adsorption_heat_under_evacuation(self, adsorption_experiment):
         """Test heat under evacuation runs without exceptions."""
         adsorption_experiment.heat_under_evacuation(
-            pumpType="RoughPump",
-            targetTemp=400,
-            holdTime=0.0,
-            rampRate=20,
+            pump_type="RoughPump",
+            target_temp=400,
+            hold_time=0.0,
+            ramp_rate=20,
         )
 
     def test_adsorption_cool_cell(self, adsorption_experiment):
         """Test cool cell runs without exceptions."""
         adsorption_experiment.cool_cell(
-            targetTemp=45,
-            holdTime=0,
+            target_temp=45,
+            hold_time=0,
             variac_cmd=False,
         )
 
@@ -207,7 +226,7 @@ class TestMinimalExperimentExecution:
         """Test gas supply runs without exceptions."""
         adsorption_experiment.supply_gas_to_mfld(
             gas="CO",
-            targetPressure=1.0,
+            target_pressure=1.0,
         )
 
     def test_adsorption_chiller_variac(self, adsorption_experiment):
@@ -254,14 +273,14 @@ class TestCallOrdering:
         """Test adsorption sequence calls devices in correct order."""
         # Run a simplified sequence
         adsorption_experiment.heat_under_evacuation(
-            pumpType="RoughPump",
-            targetTemp=400,
-            holdTime=0.0,
-            rampRate=20,
+            pump_type="RoughPump",
+            target_temp=400,
+            hold_time=0.0,
+            ramp_rate=20,
         )
         adsorption_experiment.supply_gas_to_mfld(
             gas="O2",
-            targetPressure=5.0,
+            target_pressure=5.0,
         )
 
         # Verify calls were made
@@ -287,18 +306,18 @@ class TestCallOrdering:
         assert mock_device_manager.pressure.read.call_count >= 1
 
 
-class TestMainV2Integration:
-    """Test main_v2.py integration."""
+class TestMainIntegration:
+    """Test main.py integration."""
 
-    def test_main_v2_imports(self):
-        """Test main_v2.py imports without errors."""
-        import main_v2
+    def test_main_imports(self):
+        """Test main.py imports without errors."""
+        import main
 
-        assert main_v2 is not None
+        assert main is not None
 
-    def test_main_v2_has_main_function(self):
-        """Test main_v2.py has main function."""
-        import main_v2
+    def test_main_has_main_function(self):
+        """Test main.py has main function."""
+        import main
 
-        assert hasattr(main_v2, "main")
-        assert callable(main_v2.main)
+        assert hasattr(main, "main")
+        assert callable(main.main)

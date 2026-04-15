@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import src.core.config as core_config
 from src.config_loader import (
     DEFAULT_METAL_MOLAR_MASS,
     AppConfig,
@@ -166,5 +165,17 @@ def test_system_volumes_from_loaded_config_match_core_config_derived_values() ->
         flask=cfg.system.flask_volume_l,
     )
 
-    assert volumes.m3 == core_config.v_m3
-    assert volumes.total == core_config.v_tot
+    expected_v_m3 = (
+        cfg.system.manifold_m1m2m3_volume_l
+        - cfg.system.manifold_m1m2_volume_l
+        - cfg.system.valve_volume_l
+    )
+    expected_v_tot = (
+        cfg.system.manifold_m1m2m3_volume_l
+        + cfg.system.cell_volume_l
+        + cfg.system.valve_volume_l
+        + cfg.system.tube_50ml_volume_l
+    )
+
+    assert volumes.m3 == expected_v_m3
+    assert volumes.total == expected_v_tot

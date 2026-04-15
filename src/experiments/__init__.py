@@ -1,15 +1,11 @@
-"""
-Experiment management module.
+"""Experiment protocol exports for the active architecture."""
 
-Contains experiment protocols, automation systems, and catalysis experiment frameworks.
-"""
-
-from .adsorption import adsorption_experiment
-from .isotopic_exchange import isotopic_exchange_calibration
-from .parameters import experiment_parameters
+from .adsorption import AdsorptionExperiment
+from .isotopic_exchange import IsotopicExchangeCalibration
+from .session import ExperimentSession
 
 __all__ = [
-    "experiment_parameters",
-    "isotopic_exchange_calibration",
-    "adsorption_experiment",
+    "AdsorptionExperiment",
+    "IsotopicExchangeCalibration",
+    "ExperimentSession",
 ]

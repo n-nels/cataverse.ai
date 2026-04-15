@@ -1,8 +1,8 @@
 """Top-level package metadata for CataVerse."""
 
-import src.core.logging as _core_logging
+import src.datalog as _datalog
 
-_core_logging.configure_logging()
+_datalog.configure_logging()
 
 __version__ = "1.0.0"
 __author__ = "nick nelson"

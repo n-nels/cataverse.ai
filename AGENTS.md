@@ -26,15 +26,15 @@ Before ending a session, update the following as needed:
 
 **Phases 0–6 (structural refactor) are complete.** See `docs/refactor_plan.md` for historical reference.
 
-**The active work is an architectural restructure.** New packages (`hardware/`, `control/`, `datalog/`, `config_loader.py`, `physics.py`) are being built alongside the legacy code. The legacy packages (`core/`, `devices/`, `operations/`, `utils/`) are not modified or deleted until the new code is validated on physical hardware.
+The architectural restructure is complete. The active runtime architecture is `experiments -> control + datalog -> hardware -> config/physics`.
 
-See `docs/restructure_execution_plan.md` for the chunk-by-chunk plan. See `docs/architecture_rethink.md` for the design rationale.
+See `docs/refactor_plan-5.md` for final execution history and completion status.
 
 ## Package Structure
 
 See `docs/directory_structure.md` for the full file listing.
 
-The legacy dependency flow is: **experiments → operations → devices → core**, with `utils` used by operations and experiments. The new architecture replaces this with: **experiments → control + datalog → hardware → config/physics**. Each new package has its own `AGENTS.md` with module-specific context.
+The active dependency flow is: **experiments -> control + datalog -> hardware -> config/physics**. Package-level `AGENTS.md` files document module-specific constraints where present.
 
 ## Critical: Preserve Behavior
 
