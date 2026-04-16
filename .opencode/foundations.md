@@ -11,3 +11,7 @@ This document contains foundational principles and permanent rules that must be 
 
 - Modules are typically executed directly from VSCode (interactive runs) instead of CLI.
 
+## 3. Import context
+
+- Do not do local imports. Import at the top.
+

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is **CataVerse** — a Python system that controls laboratory instruments for catalysis experiments. It manages gas flow, pressure, temperature, and spectral acquisition for adsorption and isotopic exchange studies on supported metal catalysts.
+This is **Cataverse** — a Python system that controls laboratory instruments for catalysis experiments. It manages gas flow, pressure, temperature, and spectral acquisition for adsorption and isotopic exchange studies on supported metal catalysts.
 
 The system controls real physical hardware. Changes to this code can open valves, pressurize vessels, and heat samples. **Read safety constraints before modifying any device or operations code.**
 
@@ -11,7 +11,7 @@ The system controls real physical hardware. Changes to this code can open valves
 Before writing any code, read the following in order:
 
 1. `.opencode/memory.md` — Recent session context and outstanding items.
-2. `docs/refactor_plan-X.md` — The active work plan. Identify which chunk and task you are on.
+2. `docs/clean_up_plan.md` — The active work plan. Identify which phase and task you are on.
 3. The `AGENTS.md` in whatever module directory you will be working in.
 
 ## On Close
@@ -19,16 +19,12 @@ Before writing any code, read the following in order:
 Before ending a session, update the following as needed:
 
 1. `.opencode/memory.md` — Log what was done, decisions made, and anything unfinished.
-2. `docs/refactor_plan-X.md` — Mark completed tasks, note the current chunk.
+2. `docs/clean_up_plan.md` — Mark completed tasks, note the current phase.
 3. Any `AGENTS.md` files in modules that were modified — keep them accurate.
 
 ## Current State
 
-**Phases 0–6 (structural refactor) are complete.** See `docs/refactor_plan.md` for historical reference.
-
-The architectural restructure is complete. The active runtime architecture is `experiments -> control + datalog -> hardware -> config/physics`.
-
-See `docs/refactor_plan-5.md` for final execution history and completion status.
+**Phase 1: Task 1.1
 
 ## Package Structure
 

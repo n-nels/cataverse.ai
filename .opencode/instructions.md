@@ -18,19 +18,13 @@ When instructions conflict, follow the nearest file to the root. `AGENTS.md` ove
 
 ## Work Protocol
 
-The active plan lives in `docs/refactor_plan-X.md`. The old refactor plan (`docs/refactor_plan.md`) is historical reference only.
+The active plan lives in `docs/clean_up_plan.md`.
 
-**Before:** Read the chunk instructions, the target module's `AGENTS.md`, and any legacy file you are porting from.
+**Before:** Read the phase instructions, the target module's `AGENTS.md`, and any legacy file you are porting from.
 
-**During:** One task per commit. Build new modules alongside legacy code — do not modify legacy files. If you're unsure whether a change alters behavior, don't make it.
+**During:** One task per commit. If you're unsure whether a change alters behavior, don't make it and ask the user.
 
 **After:** Verify imports resolve, tests pass. Mark the task complete in the execution plan.
-
----
-
-## Two-Codebase Rule
-
-Legacy packages (`core/`, `devices/`, `operations/`, `utils/`, old `experiments/` files) are **read-only reference**. New code goes in new packages (`config_loader.py`, `physics.py`, `hardware/`, `control/`, `datalog/`, new experiment files). Both coexist until hardware validation.
 
 ---
 

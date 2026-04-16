@@ -32,10 +32,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AdsorptionExperiment:
-    """V2 adsorption experiment orchestrator.
+    """Orchestrates the adsorption experiment protocol workflow.
 
-    This class will port legacy adsorption protocol methods to the new
-    architecture while preserving operation ordering and timing behavior.
+    Coordinates session metadata, gas delivery, temperature control,
+    spectrometer operations, and logging while preserving protocol sequencing.
     """
 
     session: ExperimentSession
