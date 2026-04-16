@@ -528,9 +528,3 @@ class IsotopicExchangeCalibration:
             shutil.copy(file_path, path_copy)
         except IOError as e:
             logger.info(f"An error occurred while copying the file: {e}")
-
-    @staticmethod
-    def _path(value: str) -> "Any":
-        from pathlib import Path
-
-        return Path(value)

@@ -30,11 +30,11 @@ Targeted fixes for dead code, late imports, and a misplaced helper.
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 2.1 | Remove `_path` staticmethod from `AdsorptionExperiment`. It wraps `pathlib.Path` which is already imported at the top of the file. Replace each `self._path(x)` call with `Path(x)`. | `src/experiments/adsorption.py` | [ ] |
-| 2.2 | Check `IsotopicExchangeCalibration` for an equivalent `_path` helper. If present, apply the same fix. | `src/experiments/isotopic_exchange.py` | [ ] |
-| 2.3 | Move all local/deferred imports to module top. Specifically: the `from src.datalog.temperature_logger import TemperatureLogger` inside `AdsorptionExperiment.start_temperature_log`. Grep both experiment modules for other `from ... import ...` statements inside function bodies and hoist them. | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` | [ ] |
-| 2.4 | Move imports in `src/datalog/__init__.py` to the top of the file, above function definitions. Verify no circular import is introduced — if one exists, document it as the reason for the current ordering and leave it alone. | `src/datalog/__init__.py` | [ ] |
-| 2.5 | Delete `src/experiments/automation/`. The `__init__.py` advertises `ActiveLearningEngine`, `DataProcessor`, `run` in `__all__` but none of these exist anywhere in the package. | `src/experiments/automation/` | [ ] |
+| 2.1 | Remove `_path` staticmethod from `AdsorptionExperiment`. It wraps `pathlib.Path` which is already imported at the top of the file. Replace each `self._path(x)` call with `Path(x)`. | `src/experiments/adsorption.py` | [x] |
+| 2.2 | Check `IsotopicExchangeCalibration` for an equivalent `_path` helper. If present, apply the same fix. | `src/experiments/isotopic_exchange.py` | [x] |
+| 2.3 | Move all local/deferred imports to module top. Specifically: the `from src.datalog.temperature_logger import TemperatureLogger` inside `AdsorptionExperiment.start_temperature_log`. Grep both experiment modules for other `from ... import ...` statements inside function bodies and hoist them. | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` | [x] |
+| 2.4 | Move imports in `src/datalog/__init__.py` to the top of the file, above function definitions. Verify no circular import is introduced — if one exists, document it as the reason for the current ordering and leave it alone. | `src/datalog/__init__.py` | [x] |
+| 2.5 | Delete `src/experiments/automation/`. The `__init__.py` advertises `ActiveLearningEngine`, `DataProcessor`, `run` in `__all__` but none of these exist anywhere in the package. | `src/experiments/automation/` | [x] |
 
 **Validation:** `pytest tests/ -v` passes. No new warnings. Smoke-import `src.experiments.adsorption` and `src.experiments.isotopic_exchange`.
 

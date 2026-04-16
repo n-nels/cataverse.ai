@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import logging
 
+from .mass_spec_logger import MassSpecLogger
+from .pressure_logger import PressureLogger
+from .temperature_logger import TemperatureLogger
+
 
 _LOGGING_CONFIGURED = False
 
@@ -37,10 +41,6 @@ def get_logger(name: str) -> logging.Logger:
 
     return logging.getLogger(name)
 
-
-from .mass_spec_logger import MassSpecLogger
-from .pressure_logger import PressureLogger
-from .temperature_logger import TemperatureLogger
 
 __all__ = [
     "PressureLogger",

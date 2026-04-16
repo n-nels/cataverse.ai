@@ -22,6 +22,7 @@ from src.control.spectrometer_control import SpectrometerController
 from src.control.temperature_control import TemperatureController
 from src.datalog.mass_spec_logger import MassSpecLogger
 from src.datalog.pressure_logger import PressureLogger
+from src.datalog.temperature_logger import TemperatureLogger
 from src.experiments.session import ExperimentSession
 from src.hardware.connections import DeviceManager
 from src.physics import cell_pressure_from_manifold
@@ -71,7 +72,7 @@ class AdsorptionExperiment:
 
         ms_logger = MassSpecLogger(
             mass_spec=cast(Any, self.devices.mass_spec),
-            path=self._path(cast(str, self.session.path_ms_log)),
+            path=Path(cast(str, self.session.path_ms_log)),
         )
         ms_logger.start()
         time.sleep(60)
@@ -475,8 +476,6 @@ class AdsorptionExperiment:
             / self.session.folder_name
             / f"{self.session.file_name}_tempLog.csv"
         )
-        from src.datalog.temperature_logger import TemperatureLogger
-
         temp_logger = TemperatureLogger(
             temperature=self.gas_controller.temperature,
             path=log_path,
@@ -484,9 +483,3 @@ class AdsorptionExperiment:
         )
         temp_logger.start()
         return temp_logger._thread, stop_temp_log
-
-    @staticmethod
-    def _path(value: str) -> "Any":
-        from pathlib import Path
-
-        return Path(value)
