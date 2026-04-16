@@ -119,8 +119,8 @@ Right now `main.py` recomputes the total volume inline when wiring `GasDelivery`
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 5.1 | In `main.py`, construct `SystemVolumes` **before** constructing `GasDelivery`. Pass `volumes.total` as `total_volume_l` to `GasDelivery`. Pass the same `volumes` to `ExperimentSession` (this is already the case — just reorder). | `main.py` | [ ] |
-| 5.2 | Verify that `SystemVolumes.total` formula matches the inline computation being replaced: `manifold_m1m2m3 + cell + valve + tube_50ml`. If it does not, STOP and ask the human — this would indicate a physics mismatch, not a cleanup. | `src/physics.py`, `main.py` | [ ] |
+| 5.1 | In `main.py`, construct `SystemVolumes` **before** constructing `GasDelivery`. Pass `volumes.total` as `total_volume_l` to `GasDelivery`. Pass the same `volumes` to `ExperimentSession` (this is already the case — just reorder). | `main.py` | [x] |
+| 5.2 | Verify that `SystemVolumes.total` formula matches the inline computation being replaced: `manifold_m1m2m3 + cell + valve + tube_50ml`. If it does not, STOP and ask the human — this would indicate a physics mismatch, not a cleanup. | `src/physics.py`, `main.py` | [x] |
 
 **Validation:** `python main.py --mock --adsorption` runs end-to-end with no changes in behavior. The numeric value of `total_volume_l` passed to `GasDelivery` is identical before and after.
 

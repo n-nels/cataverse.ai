@@ -27,7 +27,6 @@ from src.experiments.adsorption import AdsorptionExperiment
 from src.experiments.isotopic_exchange import IsotopicExchangeCalibration
 
 
-
 logger = get_logger(__name__)
 
 
@@ -96,16 +95,21 @@ def main():
     valves = ValveController(
         devices.analog_io, devices.pressure, config.hardware.actuator
     )
+    volumes = SystemVolumes(
+        vessel=config.system.vessel_volume_l,
+        valve=config.system.valve_volume_l,
+        cell=config.system.cell_volume_l,
+        manifold_m1m2=config.system.manifold_m1m2_volume_l,
+        manifold_m1m2m3=config.system.manifold_m1m2m3_volume_l,
+        tube_50ml=config.system.tube_50ml_volume_l,
+        flask=config.system.flask_volume_l,
+    )
+
     gas_controller = GasDelivery(
         valves=valves,
         pressure=devices.pressure,
         paths=config.paths,
-        total_volume_l=(
-            config.system.manifold_m1m2m3_volume_l
-            + config.system.cell_volume_l
-            + config.system.valve_volume_l
-            + config.system.tube_50ml_volume_l
-        ),
+        total_volume_l=volumes.total,
         temperature_k=config.system.manifold_temperature_k,
         gas_constant=config.system.gas_constant,
     )
@@ -119,15 +123,7 @@ def main():
 
     session = ExperimentSession(
         sample=config.sample,
-        volumes=SystemVolumes(
-            vessel=config.system.vessel_volume_l,
-            valve=config.system.valve_volume_l,
-            cell=config.system.cell_volume_l,
-            manifold_m1m2=config.system.manifold_m1m2_volume_l,
-            manifold_m1m2m3=config.system.manifold_m1m2m3_volume_l,
-            tube_50ml=config.system.tube_50ml_volume_l,
-            flask=config.system.flask_volume_l,
-        ),
+        volumes=volumes,
         paths=config.paths,
     )
 
