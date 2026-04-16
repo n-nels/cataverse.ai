@@ -146,10 +146,10 @@ The concern: `stop_temp_log` is created locally, never wired to the logger, and 
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 6.1 | Grep the full repo (including tests) for callers of `start_temperature_log`. Record each caller's use of the returned `(thread, stop_event)` tuple. Report findings to the human before changing anything. | all | [ ] |
-| 6.2 | Inspect `TemperatureLogger`'s own start/stop interface. Confirm whether it has its own internal stop mechanism (analogous to `PressureLogger.stop()`). | `src/datalog/temperature_logger.py` | [ ] |
-| 6.3 | Based on 6.1 and 6.2, the human will decide the fix. Likely outcomes: (a) return the `TemperatureLogger` instance and let callers call `.stop()` on it, mirroring the `PressureLogger` pattern; (b) actually wire `stop_temp_log` into `TemperatureLogger`'s constructor and use it; (c) current behavior is somehow fine and only the return type annotation is wrong. DO NOT pick an option unilaterally. | — | [ ] |
-| 6.4 | Implement the human's chosen fix. Update all callers found in 6.1. Update the return type annotation to match. | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` (if applicable), callers | [ ] |
+| 6.1 | Grep the full repo (including tests) for callers of `start_temperature_log`. Record each caller's use of the returned `(thread, stop_event)` tuple. Report findings to the human before changing anything. | all | [x] |
+| 6.2 | Inspect `TemperatureLogger`'s own start/stop interface. Confirm whether it has its own internal stop mechanism (analogous to `PressureLogger.stop()`). | `src/datalog/temperature_logger.py` | [x] |
+| 6.3 | Based on 6.1 and 6.2, the human will decide the fix. Likely outcomes: (a) return the `TemperatureLogger` instance and let callers call `.stop()` on it, mirroring the `PressureLogger` pattern; (b) actually wire `stop_temp_log` into `TemperatureLogger`'s constructor and use it; (c) current behavior is somehow fine and only the return type annotation is wrong. DO NOT pick an option unilaterally. | — | [x] |
+| 6.4 | Implement the human's chosen fix. Update all callers found in 6.1. Update the return type annotation to match. | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` (if applicable), callers | [x] |
 
 **Validation:** Every caller of `start_temperature_log` can successfully stop the logger and the worker thread exits. Add a test under `tests/test_experiments/` if one does not already exist.
 
@@ -163,18 +163,18 @@ After Phase 3 completes, experiments no longer reach into `self.devices.pressure
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 7a.1 | Grep both experiment classes for every remaining `self.devices.*` reference. Expected result after Phase 3: only `self.devices.mass_spec.*` and `self.devices.config.extrel_ms.registers.*`. If anything else appears (`pressure`, `temperature`, `analog_io`, `spectrometer`, `power`), STOP and report — Phase 3 missed a call site and must be revisited before Phase 7 proceeds. | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` | [ ] |
+| 7a.1 | Grep both experiment classes for every remaining `self.devices.*` reference. Expected result after Phase 3: only `self.devices.mass_spec.*` and `self.devices.config.extrel_ms.registers.*`. If anything else appears (`pressure`, `temperature`, `analog_io`, `spectrometer`, `power`), STOP and report — Phase 3 missed a call site and must be revisited before Phase 7 proceeds. | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` | [x] |
 
 ### Phase 7b — Replace `DeviceManager` with narrow fields
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 7b.1 | Change `AdsorptionExperiment` dataclass fields: replace `devices: DeviceManager` with `mass_spec: ExtrelMassSpec` and `extrel_registers: ExtrelRegisterConfig`. Import types from `src.hardware.mass_spec` and `src.config_loader`. Update `self.devices.mass_spec.foo(...)` → `self.mass_spec.foo(...)` and `self.devices.config.extrel_ms.registers.X` → `self.extrel_registers.X` throughout. | `src/experiments/adsorption.py` | [ ] |
-| 7b.2 | Apply the same change to `IsotopicExchangeCalibration`. | `src/experiments/isotopic_exchange.py` | [ ] |
-| 7b.3 | Update `main.py` to pass `mass_spec=devices.mass_spec` and `extrel_registers=config.hardware.extrel_ms.registers` to both experiment constructors. Remove `devices=devices` from those calls. | `main.py` | [ ] |
-| 7b.4 | Update `tests/test_experiments/test_adsorption.py`. The `mock_devices` fixture currently sets `devices.config.extrel_ms.registers.sequence_start_address = 1` etc. — replace with separate `mock_mass_spec` and `mock_extrel_registers` fixtures. Update the `adsorption_experiment` fixture to use them. | `tests/test_experiments/test_adsorption.py` | [ ] |
-| 7b.5 | Update `tests/test_experiments/test_session.py` if it touches the experiment constructor signature. | `tests/test_experiments/test_session.py` | [ ] |
-| 7b.6 | Update `tests/test_integration.py`. Its `TestMainIntegration` only tests that `main.py` imports, so may not need changes, but verify. Other integration tests that construct experiments must be updated. | `tests/test_integration.py` | [ ] |
+| 7b.1 | Add a thin `MassSpecController` in `src/control/` that wraps `ExtrelMassSpec` register access. Keep behavior minimal (pass-through `write_register` and optional `read_registers`) with no sequencing/timing logic. | `src/control/mass_spec_control.py` (or equivalent) | [x] |
+| 7b.2 | If needed, move Extrel register start/stop addressing into controller-level API (e.g., `start_sequence()` / `stop_sequence()`), but keep values and call order identical to current `AdsorptionExperiment` behavior. | `src/control/mass_spec_control.py`, `src/experiments/adsorption.py` | [x] |
+| 7b.3 | Change experiment constructors to accept narrow controller dependencies instead of `devices: DeviceManager`. Preserve symmetry: experiments should depend on control-layer types (`gas`, `temp`, `spec`, `mass_spec_controller`) rather than hardware adapters. | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` | [x] |
+| 7b.4 | Update `main.py` wiring to construct and pass `MassSpecController` (and any required Extrel register config) to experiments. Remove `devices=devices` from experiment constructors once no longer needed. | `main.py` | [x] |
+| 7b.5 | Update tests that construct experiments/controllers (`test_adsorption.py`, `test_session.py`, `test_integration.py`, and any others) to use the new constructor signatures and mock controller dependency. | `tests/` | [x] |
+| 7b.6 | Grep both experiment classes to confirm only narrow dependencies remain (no `self.devices.*` references). | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` | [x] |
 | 7b.7 | Run full test suite: `pytest tests/ -v`. All pre-existing passing tests must still pass. | — | [ ] |
 
 **Validation:** Full test suite green. Smoke-run `python main.py --mock --adsorption` and `python main.py --mock --isotopic` — both must complete without exceptions.
@@ -188,6 +188,8 @@ After Phase 3 completes, experiments no longer reach into `self.devices.pressure
 The human plans a separate pass to walk each module and apply targeted improvements (the `[fix]` comments sprinkled in code, misc. refinements). That is a different kind of work than this structural cleanup and belongs in its own plan document.
 
 Potential Phase 8 follow-up: move logger construction/start-stop orchestration behind control-layer APIs so experiment modules do not pass hardware adapters (`pressure`, `temperature`) directly to logger classes.
+
+Potential Phase 8 follow-up: move `TemperatureLogger` construction/lifecycle ownership into `src/control/temperature_control.py` so experiments request temperature logging through the control layer rather than creating logger instances directly.
 
 Do not start Phase 8 work as part of this plan.
 

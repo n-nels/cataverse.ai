@@ -19,12 +19,12 @@ from typing import Any
 from pathlib import Path
 
 from src.control.gas_delivery import GasDelivery
+from src.control.mass_spec_control import MassSpecController
 from src.control.spectrometer_control import SpectrometerController
 from src.control.temperature_control import TemperatureController
 from src.datalog.mass_spec_logger import MassSpecLogger
 from src.datalog.pressure_logger import PressureLogger
 from src.experiments.session import ExperimentSession
-from src.hardware.connections import DeviceManager
 from src.physics import cell_pressure_from_manifold
 
 
@@ -40,10 +40,10 @@ class IsotopicExchangeCalibration:
     """
 
     session: ExperimentSession
-    devices: DeviceManager
     gas_controller: GasDelivery
     temp: TemperatureController
-    spec: SpectrometerController
+    ftir: SpectrometerController
+    mass_spec: MassSpecController
 
     def __post_init__(self) -> None:
         self.gas: str | tuple[str, str] | None = None

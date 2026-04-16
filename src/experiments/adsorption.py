@@ -18,13 +18,13 @@ from typing import cast
 from pathlib import Path
 
 from src.control.gas_delivery import GasDelivery
+from src.control.mass_spec_control import MassSpecController
 from src.control.spectrometer_control import SpectrometerController
 from src.control.temperature_control import TemperatureController
 from src.datalog.mass_spec_logger import MassSpecLogger
 from src.datalog.pressure_logger import PressureLogger
 from src.datalog.temperature_logger import TemperatureLogger
 from src.experiments.session import ExperimentSession
-from src.hardware.connections import DeviceManager
 from src.physics import cell_pressure_from_manifold
 
 
@@ -40,10 +40,10 @@ class AdsorptionExperiment:
     """
 
     session: ExperimentSession
-    devices: DeviceManager
     gas_controller: GasDelivery
     temp: TemperatureController
-    spec: SpectrometerController
+    ftir: SpectrometerController
+    mass_spec: MassSpecController
 
     def __post_init__(self) -> None:
         self.gas: str | tuple[str, str] | None = None
@@ -61,17 +61,14 @@ class AdsorptionExperiment:
         time.sleep(30)
 
         # Extrel sequence start from config
-        success = cast(Any, self.devices.mass_spec).write_register(
-            address=self.devices.config.extrel_ms.registers.sequence_start_address,
-            value=self.devices.config.extrel_ms.registers.sequence_start_value,
-        )
+        success = self.mass_spec.start_sequence()
         if success:
             logger.info("Extrel sequence started")
         else:
             logger.info("Failed to set Extrel sequence")
 
         ms_logger = MassSpecLogger(
-            mass_spec=cast(Any, self.devices.mass_spec),
+            mass_spec=self.mass_spec.mass_spec_adapter(),
             path=Path(cast(str, self.session.path_ms_log)),
         )
         ms_logger.start()
@@ -113,10 +110,7 @@ class AdsorptionExperiment:
             ms_logger.stop()
 
             # Extrel sequence stop from config
-            success = cast(Any, self.devices.mass_spec).write_register(
-                address=self.devices.config.extrel_ms.registers.sequence_stop_address,
-                value=self.devices.config.extrel_ms.registers.sequence_stop_value,
-            )
+            success = self.mass_spec.stop_sequence()
             if success:
                 logger.info("Extrel sequence stopped")
             else:
@@ -269,7 +263,7 @@ class AdsorptionExperiment:
         """Acquire spectra from Opus software with threaded acquisition and pressure logging."""
 
         # Initial Opus acquisition with zero repeat/delay
-        self.spec.opus_vertex80(  # [fix] could use a beter name
+        self.ftir.opus_vertex80(  # [fix] could use a beter name
             {
                 "foldername": self.session.folder_name,
                 "filename": self.session.file_name,
@@ -281,7 +275,7 @@ class AdsorptionExperiment:
 
         # Thread for main Opus acquisition
         opus_thread = threading.Thread(
-            target=self.spec.opus_acquire,
+            target=self.ftir.opus_acquire,
             args=(
                 self.session.file_name,
                 self.session.folder_name,
@@ -339,7 +333,7 @@ class AdsorptionExperiment:
         self.gas_controller.evacuate_cell("RoughPump")
 
         # Opus Vertex80 for evacuation
-        self.spec.opus_vertex80(
+        self.ftir.opus_vertex80(
             {
                 "end_experiment": True,
                 "foldername": self.session.folder_name,
@@ -380,7 +374,7 @@ class AdsorptionExperiment:
             )
 
             # Send readme command to Opus
-            self.spec.opus_vertex80({"readme": True})
+            self.ftir.opus_vertex80({"readme": True})
 
         except Exception as e:
             logger.info(f"An error occurred while copying the file: {e}")
@@ -468,9 +462,8 @@ class AdsorptionExperiment:
 
         return pressure_logger
 
-    def start_temperature_log(self) -> tuple[threading.Thread, threading.Event]:
-        """Start the temperature logging thread and return the thread and stop event."""
-        stop_temp_log = threading.Event()
+    def start_temperature_log(self) -> TemperatureLogger:
+        """Start temperature logging and return the logger handle."""
         log_path = (
             Path(self.session.paths.data_directory)
             / self.session.folder_name
@@ -482,4 +475,4 @@ class AdsorptionExperiment:
             read_interval_s=5,
         )
         temp_logger.start()
-        return temp_logger._thread, stop_temp_log
+        return temp_logger

@@ -9,22 +9,37 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch, call
 import pytest
 
+from src.control.mass_spec_control import MassSpecController
 from src.experiments.adsorption import AdsorptionExperiment
 from src.experiments.session import ExperimentSession
 
 
 @pytest.fixture
-def mock_devices():
-    """Create mock device manager."""
-    devices = MagicMock()
-    devices.pressure.read.return_value = (MagicMock(), 0.5, 0.3)
-    devices.temperature.read_temperature.return_value = 25.0
-    devices.mass_spec.write_register.return_value = True
-    devices.config.extrel_ms.registers.sequence_start_address = 1
-    devices.config.extrel_ms.registers.sequence_start_value = 2
-    devices.config.extrel_ms.registers.sequence_stop_address = 1
-    devices.config.extrel_ms.registers.sequence_stop_value = 9
-    return devices
+def mock_mass_spec_adapter():
+    """Create mock Extrel hardware adapter."""
+    adapter = MagicMock()
+    adapter.write_register.return_value = True
+    return adapter
+
+
+@pytest.fixture
+def mock_extrel_registers():
+    """Create mock Extrel register config."""
+    registers = MagicMock()
+    registers.sequence_start_address = 1
+    registers.sequence_start_value = 2
+    registers.sequence_stop_address = 1
+    registers.sequence_stop_value = 9
+    return registers
+
+
+@pytest.fixture
+def mock_mass_spec_controller(mock_mass_spec_adapter, mock_extrel_registers):
+    """Create mass-spec controller with mocked dependencies."""
+    return MassSpecController(
+        mass_spec=mock_mass_spec_adapter,
+        registers=mock_extrel_registers,
+    )
 
 
 @pytest.fixture
@@ -33,8 +48,7 @@ def mock_gas_controller():
     gas_controller = MagicMock()
     gas_controller.evacuate_cell.return_value = "RoughPump"
     gas_controller.deliver_gas_to_manifold.return_value = ("CO", 1.0)
-    gas_controller.pressure.read.return_value = (MagicMock(), 0.5, 0.3)
-    gas_controller.temperature.read_temperature.return_value = 25.0
+    gas_controller.read_pressure.return_value = (MagicMock(), 0.5, 0.3)
     return gas_controller
 
 
@@ -64,6 +78,9 @@ def mock_session():
     session.path_pressure_log = "/tmp/test_pressure.csv"
     session.path_ms_log = "/tmp/test_ms.csv"
     session.path_readme = "/tmp/test_readme.md"
+    session.paths.data_directory = "/tmp"
+    session.paths.share_drive_peak_fit_root = "/tmp"
+    session.paths.share_drive_pressure_data_root = "/tmp"
     session.sample.mass_g = 0.01
     session.sample.metal_load_wt_percent = 5.0
     session.sample.metal_molar_mass_g_mol = 106.42
@@ -74,7 +91,7 @@ def mock_session():
 @pytest.fixture
 def adsorption_experiment(
     mock_session,
-    mock_devices,
+    mock_mass_spec_controller,
     mock_gas_controller,
     mock_temp_controller,
     mock_spec_controller,
@@ -82,10 +99,10 @@ def adsorption_experiment(
     """Create adsorption experiment instance with mocked dependencies."""
     return AdsorptionExperiment(
         session=mock_session,
-        devices=mock_devices,
         gas_controller=mock_gas_controller,
         temp=mock_temp_controller,
-        spec=mock_spec_controller,
+        ftir=mock_spec_controller,
+        mass_spec=mock_mass_spec_controller,
     )
 
 
@@ -93,7 +110,7 @@ class TestAdsorptionExperiment:
     """Test adsorption experiment methods."""
 
     def test_acquire_ms_spectra(
-        self, adsorption_experiment, mock_gas_controller, mock_devices
+        self, adsorption_experiment, mock_gas_controller, mock_mass_spec_adapter
     ):
         """Test MS spectra acquisition sequence."""
         with patch("src.experiments.adsorption.MassSpecLogger") as mock_logger_class:
@@ -107,7 +124,7 @@ class TestAdsorptionExperiment:
             mock_gas_controller.valves.open.assert_called_with("MassSpec")
 
             # Verify Extrel sequence start
-            mock_devices.mass_spec.write_register.assert_called_with(address=1, value=2)
+            mock_mass_spec_adapter.write_register.assert_called_with(address=1, value=2)
 
             # Verify MS logger started
             mock_logger.start.assert_called_once()
@@ -132,13 +149,13 @@ class TestAdsorptionExperiment:
         mock_temp_controller.watlow.assert_called_once()
 
         # Verify pressure read
-        mock_gas_controller.pressure.read.assert_called()
+        mock_gas_controller.read_pressure.assert_called()
 
     def test_cool_cell(
         self, adsorption_experiment, mock_temp_controller, mock_gas_controller
     ):
         """Test cool cell sequence."""
-        mock_gas_controller.temperature.read_temperature.side_effect = [100, 50, 26, 25]
+        mock_temp_controller.read_temperature.side_effect = [100, 50, 26, 25]
 
         adsorption_experiment.cool_cell(
             target_temp=25,
@@ -150,7 +167,7 @@ class TestAdsorptionExperiment:
         mock_temp_controller.watlow.assert_called_once()
 
         # Verify temperature readings
-        assert mock_gas_controller.temperature.read_temperature.call_count >= 1
+        assert mock_temp_controller.read_temperature.call_count >= 1
 
     def test_supply_gas_to_mfld(self, adsorption_experiment, mock_gas_controller):
         """Test gas supply to manifold."""
@@ -190,7 +207,7 @@ class TestAdsorptionExperiment:
         mock_spec_controller.opus_acquire.assert_called()
 
         # Verify pressure logging started
-        mock_gas_controller.pressure.read.assert_called()
+        mock_gas_controller.read_pressure.assert_called()
 
     def test_introduce_pretreatment_gas_to_cell(
         self, adsorption_experiment, mock_gas_controller, mock_temp_controller
@@ -216,7 +233,11 @@ class TestAdsorptionExperiment:
         )
 
         # Verify Kasa plug states set
-        assert mock_temp_controller.kasa_plug_state.call_count >= 2
+        mock_temp_controller.chiller_state.assert_called_once_with(True)
+        mock_temp_controller.variac_state.assert_called_once_with(True)
+        mock_temp_controller.kasa_plug_state.assert_called_once_with(
+            "variac_id_vsl", False
+        )
 
     def test_start_pressure_log(self, adsorption_experiment, mock_gas_controller):
         """Test pressure logging thread start."""
@@ -227,11 +248,10 @@ class TestAdsorptionExperiment:
 
     def test_start_temperature_log(self, adsorption_experiment, mock_gas_controller):
         """Test temperature logging thread start."""
-        thread, stop_event = adsorption_experiment.start_temperature_log()
+        temp_logger = adsorption_experiment.start_temperature_log()
 
-        # Verify thread returned
-        assert thread is not None
-        assert stop_event is not None
+        # Verify logger returned
+        assert temp_logger is not None
 
 
 class TestAdsorptionExperimentSequence:

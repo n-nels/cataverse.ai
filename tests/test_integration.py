@@ -1,4 +1,4 @@
-"""Full-stack integration tests for the v2 architecture.
+"""Full-stack integration tests for the current architecture.
 
 These tests load config, create mock DeviceManager, build all controllers,
 and run minimal experiments to verify no exceptions and correct call ordering.
@@ -12,6 +12,7 @@ import pytest
 from src.config_loader import load_config, AppConfig
 from src.hardware.connections import DeviceManager
 from src.control.gas_delivery import GasDelivery
+from src.control.mass_spec_control import MassSpecController
 from src.control.spectrometer_control import SpectrometerController
 from src.control.temperature_control import TemperatureController
 from src.control.valves import ValveController
@@ -98,6 +99,15 @@ def spec_controller(mock_device_manager):
 
 
 @pytest.fixture
+def mass_spec_controller(mock_device_manager, app_config):
+    """Create mass-spec register controller."""
+    return MassSpecController(
+        mass_spec=mock_device_manager.mass_spec,
+        registers=app_config.hardware.extrel_ms.registers,
+    )
+
+
+@pytest.fixture
 def experiment_session(app_config):
     """Create experiment session."""
     return ExperimentSession(
@@ -118,36 +128,36 @@ def experiment_session(app_config):
 @pytest.fixture
 def adsorption_experiment(
     experiment_session,
-    mock_device_manager,
     gas_controller,
     temp_controller,
     spec_controller,
+    mass_spec_controller,
 ):
     """Create adsorption experiment with all dependencies."""
     return AdsorptionExperiment(
         session=experiment_session,
-        devices=mock_device_manager,
         gas_controller=gas_controller,
         temp=temp_controller,
-        spec=spec_controller,
+        ftir=spec_controller,
+        mass_spec=mass_spec_controller,
     )
 
 
 @pytest.fixture
 def isotopic_exchange_experiment(
     experiment_session,
-    mock_device_manager,
     gas_controller,
     temp_controller,
     spec_controller,
+    mass_spec_controller,
 ):
     """Create isotopic exchange experiment with all dependencies."""
     return IsotopicExchangeCalibration(
         session=experiment_session,
-        devices=mock_device_manager,
         gas_controller=gas_controller,
         temp=temp_controller,
         spec=spec_controller,
+        mass_spec=mass_spec_controller,
     )
 
 
@@ -186,19 +196,19 @@ class TestFullStackIntegration:
         """Test adsorption experiment creates with all dependencies."""
         assert adsorption_experiment is not None
         assert adsorption_experiment.session is not None
-        assert adsorption_experiment.devices is not None
         assert adsorption_experiment.gas_controller is not None
         assert adsorption_experiment.temp is not None
         assert adsorption_experiment.spec is not None
+        assert adsorption_experiment.mass_spec is not None
 
     def test_isotopic_exchange_experiment_creates(self, isotopic_exchange_experiment):
         """Test isotopic exchange experiment creates with all dependencies."""
         assert isotopic_exchange_experiment is not None
         assert isotopic_exchange_experiment.session is not None
-        assert isotopic_exchange_experiment.devices is not None
         assert isotopic_exchange_experiment.gas_controller is not None
         assert isotopic_exchange_experiment.temp is not None
         assert isotopic_exchange_experiment.spec is not None
+        assert isotopic_exchange_experiment.mass_spec is not None
 
 
 class TestMinimalExperimentExecution:

@@ -82,4 +82,4 @@ CataVerse-refactor/
 
 ### Migration Status
 - Hardware validation completed.
-- Legacy packages and transitional v2 entrypoints removed.
+- Legacy packages and transitional entrypoints removed.

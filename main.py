@@ -20,6 +20,7 @@ from src.physics import SystemVolumes
 from src.experiments.session import ExperimentSession
 from src.hardware.connections import DeviceManager
 from src.control.spectrometer_control import SpectrometerController
+from src.control.mass_spec_control import MassSpecController
 from src.control.temperature_control import TemperatureController
 from src.control.valves import ValveController
 from src.control.gas_delivery import GasDelivery
@@ -119,7 +120,12 @@ def main():
         paths=config.paths,
         kasa=config.hardware.kasa,
     )
-    spec_controller = SpectrometerController(devices.spectrometer)
+    ftir_controller = SpectrometerController(devices.spectrometer)
+
+    ms_controller = MassSpecController(
+        mass_spec=devices.mass_spec,
+        registers=config.hardware.extrel_ms.registers,
+    )
 
     session = ExperimentSession(
         sample=config.sample,
@@ -129,18 +135,18 @@ def main():
 
     ads_exp = AdsorptionExperiment(
         session=session,
-        devices=devices,
         gas_controller=gas_controller,
         temp=temp_controller,
-        spec=spec_controller,
+        ftir=ftir_controller,
+        mass_spec=ms_controller,
     )
 
     iso_exp = IsotopicExchangeCalibration(
         session=session,
-        devices=devices,
         gas_controller=gas_controller,
         temp=temp_controller,
-        spec=spec_controller,
+        ftir=ftir_controller,
+        mass_spec=ms_controller,
     )
 
     def run_adsorption_experiment():
@@ -183,23 +189,23 @@ def main():
             chiller_cmd=True, variac_cmd=True, variac_vsl_cmd=True
         )
         iso_exp.heat_under_evacuation(
-            pumpType="RoughPump", targetTemp=500, holdTime=0.0, rampRate=20
+            pump_type="RoughPump", target_temp=500, hold_time=0.0, ramp_rate=20
         )
         iso_exp.heat_under_evacuation(
-            pumpType="TurboPump", targetTemp=500, holdTime=2.0, rampRate=0
+            pump_type="TurboPump", target_temp=500, hold_time=2.0, ramp_rate=0
         )
         logger.info("Pretreating surface...")
-        iso_exp.supply_gas_to_mfld(gas="O2", targetPressure=5.0)
-        iso_exp.introduce_pretreatment_gas_to_cell(targetTemp=500, holdTime=2)
+        iso_exp.supply_gas_to_mfld(gas="O2", target_pressure=5.0)
+        iso_exp.introduce_pretreatment_gas_to_cell(target_temp=500, hold_time=2)
         iso_exp.heat_under_evacuation(
-            pumpType="TurboPump", targetTemp=500, holdTime=0.5, rampRate=0
+            pump_type="TurboPump", target_temp=500, hold_time=0.5, ramp_rate=0
         )
         logger.info("Adsorbing 13CO...")
-        iso_exp.cool_cell(targetTemp=45, holdTime=0, variac_cmd=False)
+        iso_exp.cool_cell(target_temp=45, hold_time=0, variac_cmd=False)
         iso_exp.chiller_variac_state(
             chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False
         )
-        iso_exp.supply_gas_to_mfld(gas="13CO", targetPressure=1.0)
+        iso_exp.supply_gas_to_mfld(gas="13CO", target_pressure=1.0)
         iso_exp.acquire_spectra(
             repeat=[10, 5, 15, 60],
             delay=[60, 300, 600, 1800],
@@ -212,33 +218,33 @@ def main():
         iso_exp.chiller_variac_state(
             chiller_cmd=True, variac_cmd=False, variac_vsl_cmd=False
         )
-        iso_exp.cool_cell(targetTemp=25, holdTime=0, variac_cmd=False)
+        iso_exp.cool_cell(target_temp=25, hold_time=0, variac_cmd=False)
         iso_exp.chiller_variac_state(
             chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False
         )
         logger.info("Running isotopic exchange...")
         iso_exp.isoX_calib_main(
-            xchgTime=[2, 4, 6, 8, 9, 10, 11, 12, 14, 16], sleepTime=2
+            xchg_time=[2, 4, 6, 8, 9, 10, 11, 12, 14, 16], sleep_time=2
         )
         logger.info("Final cleaning...")
         iso_exp.chiller_variac_state(
             chiller_cmd=True, variac_cmd=True, variac_vsl_cmd=True
         )
         iso_exp.heat_under_evacuation(
-            pumpType="RoughPump",
-            targetTemp=400,
-            holdTime=0,
-            rampRate=20,
-            expParams=False,
+            pump_type="RoughPump",
+            target_temp=400,
+            hold_time=0,
+            ramp_rate=20,
+            exp_params=False,
         )
         iso_exp.heat_under_evacuation(
-            pumpType="TurboPump",
-            targetTemp=400,
-            holdTime=0.25,
-            rampRate=0,
-            expParams=False,
+            pump_type="TurboPump",
+            target_temp=400,
+            hold_time=0.25,
+            ramp_rate=0,
+            exp_params=False,
         )
-        iso_exp.cool_cell(targetTemp=25, holdTime=0, variac_cmd=False)
+        iso_exp.cool_cell(target_temp=25, hold_time=0, variac_cmd=False)
         iso_exp.chiller_variac_state(
             chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False
         )
