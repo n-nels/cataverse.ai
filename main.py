@@ -1,8 +1,8 @@
 """
-New main entry point using the v2 architecture.
+Main entry point for CataVerse instrument control.
 
-This file demonstrates how to use the refactored instrument control system
-with the new architecture layers (config, hardware, control, datalog, experiments).
+This file demonstrates how to run the instrument control system
+across its architecture layers (config, hardware, control, datalog, experiments).
 
 Usage:
     python main.py              # Run with real hardware
@@ -65,8 +65,8 @@ def create_real_devices(config):
 
 
 def main():
-    """Main entry point for the v2 architecture."""
-    parser = argparse.ArgumentParser(description="CataVerse v2 Architecture")
+    """Main entry point for CataVerse instrument control."""
+    parser = argparse.ArgumentParser(description="CataVerse instrument control")
     parser.add_argument(
         "--mock", action="store_true", help="Use mock hardware for testing"
     )
@@ -251,7 +251,6 @@ def main():
         elif args.isotopic:
             run_isotopic_exchange_calibration()
         else:
-            print("v2 architecture initialized successfully.")
             print("Use --adsorption or --isotopic to run experiments.")
             print("Use --mock to run without hardware.")
     finally:

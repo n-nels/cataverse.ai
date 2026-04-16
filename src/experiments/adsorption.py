@@ -1,6 +1,6 @@
 """Adsorption experiment protocol using the new architecture layers.
 
-This module provides a v2 adsorption experiment class that coordinates
+This module provides an adsorption experiment class that coordinates
 session metadata, control-layer operations, and hardware access through the
 new typed interfaces.
 """

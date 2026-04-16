@@ -1,6 +1,6 @@
 """Isotopic exchange calibration experiment protocol using the new architecture layers.
 
-This module provides a v2 isotopic exchange calibration experiment class that coordinates
+This module provides an isotopic exchange calibration experiment class that coordinates
 session metadata, control-layer operations, and hardware access through the
 new typed interfaces.
 """
@@ -34,10 +34,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class IsotopicExchangeCalibration:
-    """V2 isotopic exchange calibration experiment orchestrator.
+    """Orchestrates the isotopic-exchange calibration experiment workflow.
 
-    This class will port legacy isotopic exchange calibration protocol methods to the new
-    architecture while preserving operation ordering and timing behavior.
+    Coordinates session metadata, gas delivery, temperature control,
+    spectrometer operations, and logging while preserving protocol sequencing.
     """
 
     session: ExperimentSession

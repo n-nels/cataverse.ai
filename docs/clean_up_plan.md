@@ -14,11 +14,11 @@ The refactor is complete. Remove transitional vocabulary that implies work-in-pr
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 1.1 | Rewrite `AdsorptionExperiment` class docstring. Replace "V2 adsorption experiment orchestrator. This class will port legacy adsorption protocol methods to the new architecture..." with a description of what the class *is*, not what it *will become*. | `src/experiments/adsorption.py` | [ ] |
-| 1.2 | Rewrite `IsotopicExchangeCalibration` class docstring. Same fix as 1.1. | `src/experiments/isotopic_exchange.py` | [ ] |
-| 1.3 | Update `main.py` module docstring: remove "v2 architecture" language. The file is the entry point, full stop. Keep the mock/real hardware explanation. | `main.py` | [ ] |
-| 1.4 | Update `argparse` description in `main.py` from `"CataVerse v2 Architecture"` to `"CataVerse instrument control"`. | `main.py` | [ ] |
-| 1.5 | Grep the repo for remaining occurrences of "v2", "V2", "will port", "legacy" (outside of `.opencode/memory.md` and `docs/refactor_plan*.md`, which are historical). Report findings before editing so the human can decide per-occurrence. | all `src/`, all `docs/`, all `tests/` | [ ] |
+| 1.1 | Rewrite `AdsorptionExperiment` class docstring. Replace "V2 adsorption experiment orchestrator. This class will port legacy adsorption protocol methods to the new architecture..." with a description of what the class *is*, not what it *will become*. | `src/experiments/adsorption.py` | [x] |
+| 1.2 | Rewrite `IsotopicExchangeCalibration` class docstring. Same fix as 1.1. | `src/experiments/isotopic_exchange.py` | [x] |
+| 1.3 | Update `main.py` module docstring: remove "v2 architecture" language. The file is the entry point, full stop. Keep the mock/real hardware explanation. | `main.py` | [x] |
+| 1.4 | Update `argparse` description in `main.py` from `"CataVerse v2 Architecture"` to `"CataVerse instrument control"`. | `main.py` | [x] |
+| 1.5 | Grep the repo for remaining occurrences of "v2", "V2", "will port", "legacy" (outside of `.opencode/memory.md` and `docs/refactor_plan*.md`, which are historical). Report findings before editing so the human can decide per-occurrence. | all `src/`, all `docs/`, all `tests/` | [x] |
 
 **Validation:** `pytest` still passes. No functional changes.
 
