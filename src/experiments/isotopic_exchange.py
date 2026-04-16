@@ -16,7 +16,6 @@ import time
 import logging
 from datetime import datetime, timedelta
 from typing import Any
-from typing import cast
 from pathlib import Path
 
 from src.control.gas_delivery import GasDelivery
@@ -105,9 +104,9 @@ class IsotopicExchangeCalibration:
             ms_thread.start()
 
             while True:
-                dt, p_mfld, p_cell_i = self.gas_controller.pressure.read()
+                dt, p_mfld, p_cell_i = self.gas_controller.read_pressure()
                 time.sleep(10)
-                dt, p_mfld, p_cell_f = self.gas_controller.pressure.read()
+                dt, p_mfld, p_cell_f = self.gas_controller.read_pressure()
                 try:
                     if abs(p_cell_f - p_cell_i) > 0.005:
                         break
@@ -115,9 +114,9 @@ class IsotopicExchangeCalibration:
                     logger.info(e)
 
             while True:
-                dt, p_mfld, p_cell_i = self.gas_controller.pressure.read()
+                dt, p_mfld, p_cell_i = self.gas_controller.read_pressure()
                 time.sleep(6)
-                dt, p_mfld, p_cell_f = self.gas_controller.pressure.read()
+                dt, p_mfld, p_cell_f = self.gas_controller.read_pressure()
                 logger.info(f"p_cell_f: {p_cell_f}, p_cell_i: {p_cell_i}")
                 if abs(p_cell_f - p_cell_i) <= 0.00015:
                     break
@@ -177,12 +176,12 @@ class IsotopicExchangeCalibration:
             rampRate,
             variac_cmd,
         )
-        self.dt, self.p_mfld, p_cell = self.gas_controller.pressure.read()
+        self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
         if expParams:
             self.session.log_pretreatment(
                 gas=self.gas,
                 p_gas_meas=(self.p_mfld, p_cell),
-                t_cell=self.gas_controller.temperature.read_temperature(),
+                t_cell=self.temp.read_temperature(),
                 rate=rate,
                 duration=duration,
             )
@@ -200,14 +199,14 @@ class IsotopicExchangeCalibration:
             variac_cmd,
         )
         while True:
-            current_temp = self.gas_controller.temperature.read_temperature()
+            current_temp = self.temp.read_temperature()
             logger.info(
                 f"Current temperature: {current_temp}\nTarget temperature: {t_cell}\n"
             )
             if t_cell + 1 >= current_temp:
                 break
             time.sleep(60)
-        self.dt, self.p_mfld, p_cell = self.gas_controller.pressure.read()
+        self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
 
     def supply_gas_to_mfld(self, gas: str, targetPressure: float) -> None:
         """Supply gas to the manifold. The target pressure corresponds to the pressure in the total volume of the system."""
@@ -284,24 +283,24 @@ class IsotopicExchangeCalibration:
         gas_thread.join()
         time.sleep(20)
 
-        dt, p_mfld, p_cell = self.gas_controller.pressure.read()
+        dt, p_mfld, p_cell = self.gas_controller.read_pressure()
         if self.gas_2:
             self.session.log_experimental_parameters(
                 gas=(self.gas, self.gas_2),
                 p_gas_meas=(p_mfld, p_cell),
-                t_cell=self.gas_controller.temperature.read_temperature(),
+                t_cell=self.temp.read_temperature(),
                 p_gas_calc=(self.p_cell_calc, self.p_cell_calc_2),
             )
         else:
             self.session.log_experimental_parameters(
                 gas=self.gas,
                 p_gas_meas=(p_mfld, p_cell),
-                t_cell=self.gas_controller.temperature.read_temperature(),
+                t_cell=self.temp.read_temperature(),
                 p_gas_calc=self.p_cell_calc,
             )
 
         pressure_logger = PressureLogger(
-            pressure=self.gas_controller.pressure,
+            pressure=self.gas_controller.pressure_adapter(),
             physics=self.session.volumes,
             path=Path(self.session.path_pressure_log),
             p_mfld_initial=p_mfld,
@@ -334,12 +333,12 @@ class IsotopicExchangeCalibration:
             rampRate,
             variac_cmd,
         )
-        self.dt, self.p_mfld, p_cell = self.gas_controller.pressure.read()
+        self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
         if self.gas_2:
             self.session.log_pretreatment(
                 gas=(self.gas, self.gas_2),
                 p_gas_meas=(self.p_mfld, p_cell),
-                t_cell=self.gas_controller.temperature.read_temperature(),
+                t_cell=self.temp.read_temperature(),
                 rate=rate,
                 duration=duration,
                 p_gas_calc=(self.p_cell_calc, self.p_cell_calc_2),
@@ -348,7 +347,7 @@ class IsotopicExchangeCalibration:
             self.session.log_pretreatment(
                 gas=self.gas,
                 p_gas_meas=(self.p_mfld, p_cell),
-                t_cell=self.gas_controller.temperature.read_temperature(),
+                t_cell=self.temp.read_temperature(),
                 rate=rate,
                 duration=duration,
                 p_gas_calc=self.p_cell_calc,

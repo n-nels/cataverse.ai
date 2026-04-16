@@ -15,7 +15,6 @@ from typing import Any
 
 from src.config_loader import PathsConfig
 from src.hardware.pressure import MKSPressure
-from src.hardware.temperature import WatlowTemperature
 from src.physics import cell_pressure_from_manifold
 from src.datalog.file_io import create_directory, log_actuator_state
 from .valves import ValveController
@@ -31,7 +30,6 @@ class GasDelivery:
         self,
         valves: ValveController,
         pressure: MKSPressure,
-        temperature: WatlowTemperature,
         paths: PathsConfig,
         total_volume_l: float,
         temperature_k: float,
@@ -39,11 +37,26 @@ class GasDelivery:
     ) -> None:
         self.valves = valves
         self.pressure = pressure
-        self.temperature = temperature
         self.paths = paths
         self.total_volume_l = total_volume_l
         self.temperature_k = temperature_k
         self.gas_constant = gas_constant
+
+    def read_pressure(self) -> tuple[Any, Any, Any]:
+        """Read pressure via controller API.
+
+        Exists so experiment protocols do not reach through to adapter fields.
+        """
+
+        return self.pressure.read()
+
+    def pressure_adapter(self) -> MKSPressure:
+        """Return pressure adapter via controller API.
+
+        Exists so experiment protocols do not reach through to adapter fields.
+        """
+
+        return self.pressure
 
     def deliver_gas_to_manifold(
         self,

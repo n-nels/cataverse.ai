@@ -124,7 +124,7 @@ class AdsorptionExperiment:
             self.gas_controller.valves.close("MassSpec")
             self.gas_controller.valves.open("irCell")
 
-        self.dt, self.p_mfld, p_cell = cast(Any, self.devices.pressure).read()
+        self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
 
         if log_params:
             p_mfld_value = cast(float, self.p_mfld)
@@ -152,7 +152,7 @@ class AdsorptionExperiment:
             variac_cmd,
         )
         while True:
-            current_temp = cast(Any, self.devices.temperature).read_temperature()
+            current_temp = self.temp.read_temperature()
             logger.info(
                 f"Current temperature: {current_temp}\nTarget temperature: {t_cell}\n"
             )
@@ -162,7 +162,7 @@ class AdsorptionExperiment:
             except TypeError as e:
                 logger.info(f"Error occurred while reading temperatures: {e}")
             time.sleep(60)
-        self.dt, self.p_mfld, p_cell = cast(Any, self.devices.pressure).read()
+        self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
 
     def supply_gas_to_mfld(self, gas: str, target_pressure: float) -> None:
         """Supply gas to the manifold. The target pressure corresponds to the pressure in the total volume of the system."""
@@ -235,7 +235,7 @@ class AdsorptionExperiment:
             openMS=True,
         )
         self.gas_controller.valves.close("v16")
-        self.dt, self.p_mfld, p_cell = self.gas_controller.pressure.read()
+        self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
         self.p_cell_calc = cell_pressure_from_manifold(
             self.p_mfld, self.session.volumes.m3, self.session.volumes.total
         )
@@ -294,7 +294,7 @@ class AdsorptionExperiment:
         )
 
         # Read initial pressure
-        dt, p_mfld_initial, p_cell_initial = self.gas_controller.pressure.read()
+        dt, p_mfld_initial, p_cell_initial = self.gas_controller.read_pressure()
 
         # Thread for admitting gas to cell
         gas_thread = threading.Thread(target=self.gas_controller.cell_open_admit)
@@ -308,14 +308,14 @@ class AdsorptionExperiment:
         time.sleep(20)
 
         # Read pressure after gas admission
-        dt, p_mfld, p_cell = self.gas_controller.pressure.read()
+        dt, p_mfld, p_cell = self.gas_controller.read_pressure()
 
         # Log experimental parameters
         if self.gas_2:
             self.session.log_experimental_parameters(
                 gas=(self.gas, self.gas_2),
                 p_gas_meas=(p_mfld, p_cell),
-                t_cell=self.temp.temperature.read_temperature(),
+                t_cell=self.temp.read_temperature(),
                 p_gas_calc=(self.p_cell_calc, getattr(self, "p_cell_calc_2", None)),
                 chiller_state=self.chiller_state,
             )
@@ -323,7 +323,7 @@ class AdsorptionExperiment:
             self.session.log_experimental_parameters(
                 gas=self.gas,
                 p_gas_meas=(p_mfld, p_cell),
-                t_cell=self.temp.temperature.read_temperature(),
+                t_cell=self.temp.read_temperature(),
                 p_gas_calc=self.p_cell_calc,
                 chiller_state=self.chiller_state,
             )
@@ -407,7 +407,7 @@ class AdsorptionExperiment:
         )
 
         # Read pressure after gas delivery and temperature stabilization
-        self.dt, self.p_mfld, p_cell = self.gas_controller.pressure.read()
+        self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
 
         # Log pretreatment parameters
         if self.gas_2:
@@ -453,7 +453,7 @@ class AdsorptionExperiment:
         """Start pressure logging and return the logger handle."""
         log_path = self.session.path_pressure_log
         pressure_logger = PressureLogger(
-            pressure=self.gas_controller.pressure,
+            pressure=self.gas_controller.pressure_adapter(),
             physics=self.session.volumes,
             path=log_path,
             p_mfld_initial=p_mfld_initial,
@@ -477,7 +477,7 @@ class AdsorptionExperiment:
             / f"{self.session.file_name}_tempLog.csv"
         )
         temp_logger = TemperatureLogger(
-            temperature=self.gas_controller.temperature,
+            temperature=self.temp.temperature_adapter(),
             path=log_path,
             read_interval_s=5,
         )

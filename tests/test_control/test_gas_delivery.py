@@ -31,7 +31,6 @@ def test_deliver_gas_to_manifold_executes_expected_valve_write_sequence() -> Non
     gas = GasDelivery(
         valves=valves,
         pressure=pressure,
-        temperature=MagicMock(),
         paths=_CFG.paths,
         total_volume_l=_CFG.system.manifold_m1m2m3_volume_l
         + _CFG.system.cell_volume_l
@@ -93,7 +92,6 @@ def test_evacuate_cell_uses_roughpump_sequence_then_opens_turbopump() -> None:
     gas = GasDelivery(
         valves=valves,
         pressure=pressure,
-        temperature=MagicMock(),
         paths=_CFG.paths,
         total_volume_l=_CFG.system.manifold_m1m2m3_volume_l
         + _CFG.system.cell_volume_l

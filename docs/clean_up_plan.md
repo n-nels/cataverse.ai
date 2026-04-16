@@ -64,27 +64,27 @@ This is a small, well-bounded change but it is the single biggest layering-quali
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 3b.1 | Add `GasDelivery.read_pressure(self) -> tuple` method that returns `self.pressure.read()`. Thin pass-through. Docstring explains it exists so callers don't reach through the controller. | `src/control/gas_delivery.py` | [ ] |
-| 3b.2 | Add `TemperatureController.read_temperature(self) -> float` method that returns `self.temperature.read_temperature()`. Thin pass-through. Same docstring pattern. | `src/control/temperature_control.py` | [ ] |
+| 3b.1 | Add `GasDelivery.read_pressure(self) -> tuple` method that returns `self.pressure.read()`. Thin pass-through. Docstring explains it exists so callers don't reach through the controller. | `src/control/gas_delivery.py` | [x] |
+| 3b.2 | Add `TemperatureController.read_temperature(self) -> float` method that returns `self.temperature.read_temperature()`. Thin pass-through. Same docstring pattern. | `src/control/temperature_control.py` | [x] |
 
 ### Phase 3c — Route experiments through the new methods
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 3c.1 | In `adsorption.py`, replace every `cast(Any, self.devices.pressure).read()` with `self.gas_controller.read_pressure()`. Remove `cast` and `Any` imports if no longer needed. | `src/experiments/adsorption.py` | [ ] |
-| 3c.2 | In `adsorption.py`, replace every `cast(Any, self.devices.temperature).read_temperature()` with `self.temp.read_temperature()`. | `src/experiments/adsorption.py` | [ ] |
-| 3c.3 | In `isotopic_exchange.py`, replace every `self.gas_controller.pressure.read()` with `self.gas_controller.read_pressure()`. | `src/experiments/isotopic_exchange.py` | [ ] |
-| 3c.4 | In `isotopic_exchange.py`, replace every `self.gas_controller.temperature.read_temperature()` with `self.temp.read_temperature()`. | `src/experiments/isotopic_exchange.py` | [ ] |
-| 3c.5 | Confirm both experiment files no longer reference `self.devices.pressure`, `self.devices.temperature`, `self.gas_controller.pressure`, or `self.gas_controller.temperature` anywhere. Grep to verify. | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` | [ ] |
+| 3c.1 | In `adsorption.py`, replace every `cast(Any, self.devices.pressure).read()` with `self.gas_controller.read_pressure()`. Remove `cast` and `Any` imports if no longer needed. | `src/experiments/adsorption.py` | [x] |
+| 3c.2 | In `adsorption.py`, replace every `cast(Any, self.devices.temperature).read_temperature()` with `self.temp.read_temperature()`. | `src/experiments/adsorption.py` | [x] |
+| 3c.3 | In `isotopic_exchange.py`, replace every `self.gas_controller.pressure.read()` with `self.gas_controller.read_pressure()`. | `src/experiments/isotopic_exchange.py` | [x] |
+| 3c.4 | In `isotopic_exchange.py`, replace every `self.gas_controller.temperature.read_temperature()` with `self.temp.read_temperature()`. | `src/experiments/isotopic_exchange.py` | [x] |
+| 3c.5 | Confirm both experiment files no longer reference `self.devices.pressure`, `self.devices.temperature`, `self.gas_controller.pressure`, or `self.gas_controller.temperature` anywhere. Grep to verify. | `src/experiments/adsorption.py`, `src/experiments/isotopic_exchange.py` | [x] |
 
 ### Phase 3d — Drop the unused injection
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 3d.1 | Remove `temperature: WatlowTemperature` from `GasDelivery.__init__`. Remove `self.temperature = temperature`. Remove the `WatlowTemperature` import if no longer used in the file. | `src/control/gas_delivery.py` | [ ] |
-| 3d.2 | Update `main.py`: drop `temperature=devices.temperature` from the `GasDelivery(...)` constructor call. | `main.py` | [ ] |
-| 3d.3 | Update `tests/test_control/test_gas_delivery.py`: remove `temperature=MagicMock()` from `GasDelivery(...)` construction. | `tests/test_control/test_gas_delivery.py` | [ ] |
-| 3d.4 | Grep tests broadly for any other `GasDelivery(` construction sites that need updating. | `tests/` | [ ] |
+| 3d.1 | Remove `temperature: WatlowTemperature` from `GasDelivery.__init__`. Remove `self.temperature = temperature`. Remove the `WatlowTemperature` import if no longer used in the file. | `src/control/gas_delivery.py` | [x] |
+| 3d.2 | Update `main.py`: drop `temperature=devices.temperature` from the `GasDelivery(...)` constructor call. | `main.py` | [x] |
+| 3d.3 | Update `tests/test_control/test_gas_delivery.py`: remove `temperature=MagicMock()` from `GasDelivery(...)` construction. | `tests/test_control/test_gas_delivery.py` | [x] |
+| 3d.4 | Grep tests broadly for any other `GasDelivery(` construction sites that need updating. | `tests/` | [x] |
 
 **Validation:**
 - `pytest tests/ -v` passes.
@@ -101,9 +101,9 @@ This is a small, well-bounded change but it is the single biggest layering-quali
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 4.1 | Add `from src.datalog import configure_logging, get_logger` and `logger = get_logger(__name__)` at the top of `main.py`. Call `configure_logging()` as the first line of `main()`. | `main.py` | [ ] |
-| 4.2 | Replace the three `print(...)` calls in `main()` and inside `run_adsorption_experiment()` with `logger.info(...)`. | `main.py` | [ ] |
-| 4.3 | Grep `main.py` for any remaining `print(` calls and convert them to `logger.info`. Leave `argparse` help output (handled by argparse itself) untouched. | `main.py` | [ ] |
+| 4.1 | Add `from src.datalog import configure_logging, get_logger` and `logger = get_logger(__name__)` at the top of `main.py`. Call `configure_logging()` as the first line of `main()`. | `main.py` | [x] |
+| 4.2 | Replace the three `print(...)` calls in `main()` and inside `run_adsorption_experiment()` with `logger.info(...)`. | `main.py` | [x] |
+| 4.3 | Grep `main.py` for any remaining `print(` calls and convert them to `logger.info`. Leave `argparse` help output (handled by argparse itself) untouched. | `main.py` | [x] |
 
 **Validation:** Run `python main.py --mock --adsorption` and confirm:
 - "Running in MOCK mode" appears in stdout with a timestamp and log level prefix.
@@ -186,6 +186,8 @@ After Phase 3 completes, experiments no longer reach into `self.devices.pressure
 ## Phase 8 — Reserved for future module-by-module improvements
 
 The human plans a separate pass to walk each module and apply targeted improvements (the `[fix]` comments sprinkled in code, misc. refinements). That is a different kind of work than this structural cleanup and belongs in its own plan document.
+
+Potential Phase 8 follow-up: move logger construction/start-stop orchestration behind control-layer APIs so experiment modules do not pass hardware adapters (`pressure`, `temperature`) directly to logger classes.
 
 Do not start Phase 8 work as part of this plan.
 
