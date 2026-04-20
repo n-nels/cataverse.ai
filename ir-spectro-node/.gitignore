@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.env.local
+*.log
+.ssh
+
+# IDE and editor files
+.vscode/
+
+# Windows reserved device names
+nul
+null
+
+# Files
+arxiv/
+docs/
+sandbox/
+
+# Personal terminal history
+.lesshst

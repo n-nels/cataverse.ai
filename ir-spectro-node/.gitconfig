@@ -1,0 +1,7 @@
+[credential "helperselector"]
+	selected = manager
+[user]
+	name = n-nels
+	email = nelsonnicholasc@gmail.com
+[credential "https://tanuki.pnnl.gov"]
+	provider = generic
