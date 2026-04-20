@@ -1,6 +1,6 @@
 # IR Spectroscopy Node
 
-Instrument node for controlling a Bruker FTIR spectrometer and performing real-time spectral analysis. This repository is one node in the [CataVerse] project -- a distributed system for catalysis research instrumentation.
+Instrument node for controlling a Bruker FTIR spectrometer and performing real-time spectral analysis. This repository is one node in the cataverse.ai project.
 
 The node handles the full lifecycle of an IR spectroscopy experiment: instrument control via the OPUS named pipe, interferogram acquisition, subtracted-interferogram processing, Voigt-profile spectral fitting, kinetics fitting (PFO and coupled-ODE secondary PFO models), and trajectory classification.
 
@@ -26,7 +26,7 @@ python scripts\run_norhoff.py
 
 ## Architecture
 
-The node exposes a ZMQ server that accepts commands from the CataVerse orchestrator. Incoming messages trigger instrument operations (background/sample measurements) and queue analysis work that runs asynchronously on single-threaded dispatch queues.
+The node exposes a ZMQ server that accepts commands from the cataverse.ai orchestrator. Incoming messages trigger instrument operations (background/sample measurements) and queue analysis work that runs asynchronously on single-threaded dispatch queues.
 
 ```
 Orchestrator (ZMQ)
