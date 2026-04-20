@@ -60,15 +60,12 @@ def handle_readme() -> str:
 
 def handle_end_experiment() -> str:
     state = get_state()
-    paths = ensure_paths(state)
     for fileid in state.all_fileids[-11:]:
         try:
             unload_file(fileid)
         except Exception as exc:
             print(f"Failed to unload {fileid}: {exc}")
-    now = datetime.now() + timedelta(minutes=10)
-    print(f"Waiting until {now} before copying files to cloud...")
-    time.sleep(10 * 60)
+
     if state.all_fileids:
         file_path: str | None = None
         folder_name: str | None = None
@@ -88,7 +85,7 @@ def handle_end_experiment() -> str:
             plot_kinetic_fit(str(csv))
             plot_params_folder(csv)
             if folder_name:
-                plot_params_all(folder_name)
+                plot_params_all()
                 plot_monomer_max(folder_name=folder_name)
         except Exception as exc:
             print(
@@ -96,8 +93,11 @@ def handle_end_experiment() -> str:
                 f"file_path={file_path} folder_name={folder_name} "
                 f"base_name={base_name}: {exc}"
             )
+    # now = datetime.now() + timedelta(minutes=10)
+    # print(f"Waiting until {now} before copying files to cloud...")
+    # time.sleep(10 * 60)
     # subprocess.run([paths.cloud_script], shell=True, check=True)
-    return "End of experiment, files copied to cloud"
+    return True
 
 
 def handle_message(message: dict) -> Optional[str]:

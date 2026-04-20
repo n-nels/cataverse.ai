@@ -400,7 +400,7 @@ def plot_params_folder(
     peak_names: list[str] | None = None,
     parameters: list[str] | None = None,
     delta_group: str | None = DEFAULT_DELTA_GROUP,
-    model: Literal["pfo", "secondary"] = "pfo",
+    model: Literal["pfo", "secondary"] = "secondary",
 ) -> None:
     """Plot parameter trends for a single folder."""
     file_path_obj = Path(file_path)
@@ -458,15 +458,14 @@ def plot_params_folder(
 
 
 def plot_params_all(
-    folder: str,
     *,
     peak_names: list[str] | None = None,
     parameters: list[str] | None = None,
     delta_group: str | None = DEFAULT_DELTA_GROUP,
-    model: Literal["pfo", "secondary"] = "pfo",
+    model: Literal["pfo", "secondary"] = "secondary",
 ) -> None:
-    """Plot parameter trends for every peak-area CSV in a dataset folder."""
-    dataset_paths = _resolve_dataset_paths(dataset_folders=[folder])
+    """Plot parameter trends across all dataset folders in the data root."""
+    dataset_paths = _resolve_dataset_paths(dataset_folders=[], scan_parent=True)
     if not dataset_paths:
         LOGGER.warning("No dataset folders found to plot.")
         return
@@ -491,7 +490,7 @@ def plot_params_all(
         peak_names or DEFAULT_PEAK_NAMES,
         parameters,
         output_dir,
-        folder,
+        "all_datasets",
         delta_group=delta_group,
         model=model,
     )
@@ -540,5 +539,5 @@ def main(
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    main()
-    # plot_params_parent()
+    # main()
+    plot_params_all()
