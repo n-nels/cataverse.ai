@@ -13,10 +13,10 @@
             "justMyCode": true
         },
         {
-            "name": "Debug main_v2.py (Mock)",
+            "name": "Debug main.py (Mock)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/main_v2.py",
+            "program": "${workspaceFolder}/main.py",
             "args": ["--mock", "--adsorption"],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",

@@ -14,6 +14,7 @@ dependencies = [
     "nidaqmx",
     "matplotlib",
     "python-kasa",  # Don't forget the Kasa library!
+    "python-dotenv"
 ]
 
 [project.scripts]
