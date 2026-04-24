@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from src.config_loader import PathsConfig, SampleConfig
+from src.core.config_loader import PathsConfig, SampleConfig
 from src.experiments.session import ExperimentSession
-from src.physics import SystemVolumes
+from src.core.physics import SystemVolumes
 
 
 def _sample_config() -> SampleConfig:

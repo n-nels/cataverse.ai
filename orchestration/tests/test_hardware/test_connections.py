@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from src.config_loader import (
+from src.core.config_loader import (
     ActuatorConfig,
     HardwareConfig,
     KasaConfig,

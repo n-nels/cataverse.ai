@@ -9,7 +9,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch, call
 import pytest
 
-from src.config_loader import load_config, AppConfig
+from src.core.config_loader import load_config, AppConfig
 from src.hardware.connections import DeviceManager
 from src.control.gas_delivery import GasDelivery
 from src.control.mass_spec_control import MassSpecController
@@ -19,7 +19,7 @@ from src.control.valves import ValveController
 from src.experiments.session import ExperimentSession
 from src.experiments.adsorption import AdsorptionExperiment
 from src.experiments.isotopic_exchange import IsotopicExchangeCalibration
-from src.physics import SystemVolumes
+from src.core.physics import SystemVolumes
 
 
 @pytest.fixture

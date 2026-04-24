@@ -20,8 +20,11 @@ cataverse.ai/orchestration/
 │   └── directory_structure.md
 ├── src/
 │   ├── __init__.py
-│   ├── config_loader.py       # typed config loader
-│   ├── physics.py             # centralized physics calculations
+│   ├── core/
+│   │   ├── AGENTS.md
+│   │   ├── __init__.py
+│   │   ├── config_loader.py       # typed config loader
+│   │   └── physics.py             # centralized physics calculations
 │   ├── control/
 │   │   ├── AGENTS.md
 │   │   ├── __init__.py
@@ -68,8 +71,8 @@ cataverse.ai/orchestration/
 ## Notes
 
 ### Active Architecture
-- **config_loader.py**: Typed YAML configuration loader with frozen dataclasses
-- **physics.py**: Centralized physics calculations (moles, pressures, adsorption)
+- **core/config_loader.py**: Typed YAML configuration loader with frozen dataclasses
+- **core/physics.py**: Centralized physics calculations (moles, pressures, adsorption)
 - **hardware/**: Low-level device adapters (pressure, temperature, mass spec, analog I/O, spectrometer, power)
 - **control/**: Control layer (valves, gas delivery, temperature control, spectrometer control, mass spec control)
 - **datalog/**: Data logging (pressure, temperature, mass spec loggers, file I/O)

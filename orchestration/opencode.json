@@ -1,11 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-opus-4-7",
+  "model": "github-copilot/claude-opus-4.6",
   "agent": {
     "coder": {
       "description": "Writes publication-ready open-source code based on project context",
       "mode": "primary",
-      "model": "anthropic/claude-opus-4-6",
+      "model": "github-copilot/claude-opus-4.6",
       "instructions": ".opencode/agent/coder.md",
       "temperature": 0.2,
       "tools": { "write": true, "edit": true, "bash": true }
@@ -13,7 +13,7 @@
     "architect": {
       "description": "Designs systems and plans major features",
       "mode": "primary",
-      "model": "anthropic/claude-opus-4-6",
+      "model": "github-copilot/claude-opus-4.6",
       "instructions": ".opencode/agent/architect.md",
       "temperature": 0.3,
       "tools": { "write": false, "edit": false, "bash": false }
@@ -21,7 +21,7 @@
     "reviewer": {
       "description": "Reviews code for quality, correctness, and conventions",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-6",
+      "model": "github-copilot/claude-sonnet-4.6",
       "instructions": ".opencode/agent/reviewer.md",
       "temperature": 0.1,
       "tools": { "write": false, "edit": false, "bash": false }
@@ -29,7 +29,7 @@
     "debugger": {
       "description": "Investigates errors and identifies root causes",
       "mode": "subagent",
-      "model": "anthropic/claude-opus-4-6",
+      "model": "github-copilot/claude-opus-4.6",
       "instructions": ".opencode/agent/debugger.md",
       "temperature": 0.0,
       "tools": { "write": false, "edit": false, "bash": true }
@@ -37,7 +37,7 @@
     "validator": {
       "description": "Verifies a task's implementation against its stated validation criteria",
       "mode": "subagent",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "github-copilot/claude-haiku-4.5",
       "instructions": ".opencode/agent/validator.md",
       "temperature": 0.0,
       "tools": { "write": false, "edit": false, "bash": true }
@@ -45,7 +45,7 @@
     "historian": {
       "description": "Summarizes learnings and updates memory/foundations",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-6",
+      "model": "github-copilot/claude-sonnet-4.6",
       "instructions": ".opencode/agent/historian.md",
       "temperature": 0.0,
       "tools": { "write": true, "edit": true, "bash": false }
@@ -53,7 +53,7 @@
     "lint": {
       "description": "Formats code and fixes import order with ruff",
       "mode": "subagent",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "github-copilot/claude-haiku-4.5",
       "instructions": ".opencode/agent/lint.md",
       "temperature": 0.0,
       "tools": { "write": false, "edit": true, "bash": true }

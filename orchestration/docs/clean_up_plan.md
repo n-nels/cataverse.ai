@@ -29,13 +29,13 @@ The two foundation modules (`config_loader.py`, `physics.py`) currently float at
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 8.1.1 | Create `src/core/` directory with `__init__.py`. | `src/core/__init__.py` | [ ] |
-| 8.1.2 | Move `src/config_loader.py` → `src/core/config_loader.py`. | — | [ ] |
-| 8.1.3 | Move `src/physics.py` → `src/core/physics.py`. | — | [ ] |
-| 8.1.4 | Update all imports across the codebase: `from src.config_loader` → `from src.core.config_loader`, `from src.physics` → `from src.core.physics`. Grep exhaustively under `src/`, `tests/`, and `main.py`. | all | [ ] |
-| 8.1.5 | Write `src/core/AGENTS.md` describing the package's purpose and scope-creep guard: "This package contains typed configuration loading and pure physics calculations. It depends on nothing internal. New modules belong in `hardware/`, `control/`, `datalog/`, or `experiments/` unless they are genuinely foundational and have no dependencies on any other internal package." | `src/core/AGENTS.md` | [ ] |
-| 8.1.6 | Update `docs/directory_structure.md` to reflect the new location. | `docs/directory_structure.md` | [ ] |
-| 8.1.7 | Optionally update `src/core/__init__.py` to re-export the most-used names (`AppConfig`, `load_config`, `SystemVolumes`, `moles_from_pressure`, etc.) so callers can write `from src.core import AppConfig`. Or leave `__init__.py` empty and require explicit submodule imports. Human to decide before 8.1.4. | `src/core/__init__.py` | [ ] |
+| 8.1.1 | Create `src/core/` directory with `__init__.py`. | `src/core/__init__.py` | [x] |
+| 8.1.2 | Move `src/config_loader.py` → `src/core/config_loader.py`. | — | [x] |
+| 8.1.3 | Move `src/physics.py` → `src/core/physics.py`. | — | [x] |
+| 8.1.4 | Update all imports across the codebase: `from src.config_loader` → `from src.core.config_loader`, `from src.physics` → `from src.core.physics`. Grep exhaustively under `src/`, `tests/`, and `main.py`. | all | [x] |
+| 8.1.5 | Write `src/core/AGENTS.md` describing the package's purpose and scope-creep guard: "This package contains typed configuration loading and pure physics calculations. It depends on nothing internal. New modules belong in `hardware/`, `control/`, `datalog/`, or `experiments/` unless they are genuinely foundational and have no dependencies on any other internal package." | `src/core/AGENTS.md` | [x] |
+| 8.1.6 | Update `docs/directory_structure.md` to reflect the new location. | `docs/directory_structure.md` | [x] |
+| 8.1.7 | Optionally update `src/core/__init__.py` to re-export the most-used names (`AppConfig`, `load_config`, `SystemVolumes`, `moles_from_pressure`, etc.) so callers can write `from src.core import AppConfig`. Or leave `__init__.py` empty and require explicit submodule imports. Human to decide before 8.1.4. **Decision: explicit submodule imports; `__init__.py` stays empty.** | `src/core/__init__.py` | [x] |
 
 **Validation:** `pytest tests/ -v` passes. `python main.py --mock --adsorption` runs clean. Grep confirms no remaining `from src.config_loader` or `from src.physics` anywhere except inside `src/core/` itself.
 

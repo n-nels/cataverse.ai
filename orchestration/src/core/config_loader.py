@@ -175,7 +175,7 @@ def _resolve_config_dir(config_dir: Path | None) -> Path:
         if env_config_dir:
             resolved = Path(env_config_dir)
         else:
-            repo_root = Path(__file__).resolve().parents[1]
+            repo_root = Path(__file__).resolve().parents[2]
             resolved = repo_root / "config"
 
     if not resolved.exists():

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.physics import (
+from src.core.physics import (
     DEFAULT_GAS_CONSTANT_L_TORR_PER_K_MOL,
     SystemVolumes,
     amount_adsorbed,

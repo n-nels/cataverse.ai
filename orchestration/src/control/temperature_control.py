@@ -11,7 +11,7 @@ import time
 import logging
 from datetime import datetime
 
-from src.config_loader import KasaConfig, PathsConfig
+from src.core.config_loader import KasaConfig, PathsConfig
 from src.hardware.power import KasaPower
 from src.hardware.temperature import WatlowTemperature
 from src.datalog.file_io import create_directory, log_temperature

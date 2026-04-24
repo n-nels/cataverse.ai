@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, call, patch
 
 import src.control.temperature_control as temperature_control_module
-from src.config_loader import load_config
+from src.core.config_loader import load_config
 from src.control.temperature_control import TemperatureController
 
 

@@ -14,9 +14,9 @@ Usage:
 import argparse
 from unittest.mock import MagicMock
 
-from src.config_loader import load_config
+from src.core.config_loader import load_config
 from src.datalog import get_logger, configure_logging
-from src.physics import SystemVolumes
+from src.core.physics import SystemVolumes
 from src.experiments.session import ExperimentSession
 from src.hardware.connections import DeviceManager
 from src.control.spectrometer_control import SpectrometerController

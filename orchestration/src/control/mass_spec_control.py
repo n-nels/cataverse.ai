@@ -6,7 +6,7 @@ preserving the existing low-level register write behavior.
 
 from __future__ import annotations
 
-from src.config_loader import ExtrelRegisterConfig
+from src.core.config_loader import ExtrelRegisterConfig
 from src.hardware.mass_spec import ExtrelMassSpec
 
 

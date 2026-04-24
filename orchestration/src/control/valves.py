@@ -10,7 +10,7 @@ import logging
 import sys
 import time
 
-from src.config_loader import ActuatorConfig
+from src.core.config_loader import ActuatorConfig
 from src.hardware.analog_io import AnalogIO
 from src.hardware.pressure import MKSPressure
 

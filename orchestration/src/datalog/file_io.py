@@ -15,7 +15,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from src.config_loader import PathsConfig, SampleConfig
+from src.core.config_loader import PathsConfig, SampleConfig
 
 
 logger = logging.getLogger(__name__)

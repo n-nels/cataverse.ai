@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from src.config_loader import load_config
+from src.core.config_loader import load_config
 from src.control.gas_delivery import GasDelivery
 
 

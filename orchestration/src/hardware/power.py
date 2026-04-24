@@ -12,7 +12,7 @@ from typing import Any
 
 import requests
 
-from src.config_loader import KasaConfig
+from src.core.config_loader import KasaConfig
 
 
 logger = logging.getLogger(__name__)

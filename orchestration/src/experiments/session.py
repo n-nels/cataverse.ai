@@ -14,13 +14,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from src.config_loader import PathsConfig, SampleConfig
+from src.core.config_loader import PathsConfig, SampleConfig
 from src.datalog.file_io import (
     create_directory,
     log_experiment_parameters,
     write_material_parameters,
 )
-from src.physics import SystemVolumes
+from src.core.physics import SystemVolumes
 
 
 @dataclass

@@ -25,7 +25,7 @@ from src.control.temperature_control import TemperatureController
 from src.datalog.mass_spec_logger import MassSpecLogger
 from src.datalog.pressure_logger import PressureLogger
 from src.experiments.session import ExperimentSession
-from src.physics import cell_pressure_from_manifold
+from src.core.physics import cell_pressure_from_manifold
 
 
 logger = logging.getLogger(__name__)

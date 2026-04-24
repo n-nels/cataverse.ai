@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import cast
 
 from src.hardware.pressure import MKSPressure
-from src.physics import SystemVolumes, amount_adsorbed
+from src.core.physics import SystemVolumes, amount_adsorbed
 
 
 logger = logging.getLogger(__name__)

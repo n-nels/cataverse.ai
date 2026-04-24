@@ -13,9 +13,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from src.config_loader import PathsConfig
+from src.core.config_loader import PathsConfig
 from src.hardware.pressure import MKSPressure
-from src.physics import cell_pressure_from_manifold
+from src.core.physics import cell_pressure_from_manifold
 from src.datalog.file_io import create_directory, log_actuator_state
 from .valves import ValveController
 

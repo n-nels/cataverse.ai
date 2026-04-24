@@ -13,7 +13,7 @@ import serial
 import zmq
 from pymodbus.client import ModbusSerialClient as ModbusClient
 
-from src.config_loader import HardwareConfig
+from src.core.config_loader import HardwareConfig
 
 from .analog_io import AnalogIO
 from .mass_spec import ExtrelMassSpec

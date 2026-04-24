@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.datalog.pressure_logger import PressureLogger
-from src.physics import SystemVolumes
+from src.core.physics import SystemVolumes
 
 
 def _read_csv_rows(path: Path) -> list[list[str]]:

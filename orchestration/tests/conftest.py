@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.config_loader import (
+from src.core.config_loader import (
     ActuatorConfig,
     HardwareConfig,
     KasaConfig,
@@ -18,7 +18,7 @@ from src.config_loader import (
     SampleConfig,
     SerialDeviceConfig,
 )
-from src.physics import SystemVolumes
+from src.core.physics import SystemVolumes
 
 
 @pytest.fixture

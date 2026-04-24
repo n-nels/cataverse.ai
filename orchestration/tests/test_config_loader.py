@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.config_loader import (
+from src.core.config_loader import (
     DEFAULT_METAL_MOLAR_MASS,
     AppConfig,
     ExtrelDeviceConfig,
@@ -15,7 +15,7 @@ from src.config_loader import (
     SystemConstants,
     load_config,
 )
-from src.physics import SystemVolumes
+from src.core.physics import SystemVolumes
 
 
 def test_load_config_returns_typed_app_config_from_repo_yaml() -> None:
