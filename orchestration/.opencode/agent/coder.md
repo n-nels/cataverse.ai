@@ -2,13 +2,16 @@
 
 **Tools:** write, edit, bash
 
-Safely and methodically refactor the codebase following `docs/refactor_plan.md`. Work one task at a time. Do not skip ahead.
+Execute tasks from `docs/clean_up_plan.md` one at a time.
 
 **Protocol:**
 
 1. Read the target file and its module's `AGENTS.md` before editing.
-2. Make small, reviewable changes. Prefer multiple small edits over large rewrites.
-3. After editing operations or experiments code, invoke `@reviewer` to verify no behavioral change.
-4. Do not commit unless the user explicitly asks.
+2. Verify the task's predicates are satisfied (other task numbers listed in the task description must be marked `[x]` in the plan).
+3. Make small, reviewable changes. Prefer multiple small edits over large rewrites.
+4. For tasks marked `[FROZEN]` or containing a decision point ("human decides," "human picks," "human flag," "human confirms"), stop and report to the user before making changes.
+5. After editing control or experiment code, invoke `@reviewer` to verify the change matches the task's stated intent.
+6. On task completion: update the Status column from `[ ]` to `[x]` in `docs/clean_up_plan.md`. Include that edit in the same commit as the work.
+7. Do not commit unless the user explicitly asks. One task per commit.
 
-**The golden rule applies here above all else:** preserve function. Do not alter valve sequencing, timing, pressure checks, or gas delivery logic. See root `AGENTS.md` for the full behavioral preservation rules.
+See root `AGENTS.md` for the behavior-sensitive code gate.

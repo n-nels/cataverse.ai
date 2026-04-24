@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is **Cataverse** — a Python system that controls laboratory instruments for catalysis experiments. It manages gas flow, pressure, temperature, and spectral acquisition for adsorption and isotopic exchange studies on supported metal catalysts.
+This is **cataverse.ai** — a Python system that controls laboratory instruments for catalysis experiments. It manages gas flow, pressure, temperature, and spectral acquisition for adsorption and isotopic exchange studies on supported metal catalysts.
 
 The system controls real physical hardware. Changes to this code can open valves, pressurize vessels, and heat samples. **Read safety constraints before modifying any device or operations code.**
 
@@ -22,28 +22,23 @@ Before ending a session, update the following as needed:
 2. `docs/clean_up_plan.md` — Mark completed tasks, note the current phase.
 3. Any `AGENTS.md` files in modules that were modified — keep them accurate.
 
-## Current State
-
-**Phase 1: Task 1.1
-
 ## Package Structure
 
 See `docs/directory_structure.md` for the full file listing.
 
 The active dependency flow is: **experiments -> control + datalog -> hardware -> config/physics**. Package-level `AGENTS.md` files document module-specific constraints where present.
 
-## Critical: Preserve Behavior
+## Behavior-Sensitive Code
 
-This system was developed by a scientist iterating directly with physical hardware. The specific order of operations, delay values, voltage thresholds, and safety checks exist because they were validated against the real system. They are not arbitrary.
+The control and experiment layers contain sequences of valve operations, pressure checks, timing delays, and temperature ramps that were validated against real hardware. These values are not arbitrary.
 
-**Valve sequences and gas delivery logic are behavior-frozen.** When porting code from legacy packages to new packages, copy the control flow verbatim. You may change dependency wiring (e.g., `self.serial.read_pressure()` → `self.pressure.read()`), replace `print()` with `logger.info()`, and add type hints — but the sequence of calls, the values passed, the sleep durations, and the branching logic must remain identical.
+Changes to these sequences are permitted in this cleanup pass, but are gated. Tasks in `docs/clean_up_plan.md` that touch behavior-sensitive code are marked `[FROZEN]`. When executing a `[FROZEN]` task:
 
-When working on any control or hardware code, verify:
+1. Stop before making changes, summarize what will change and why, and wait for explicit human go-ahead.
+2. Validate the change against existing tests and, where the task requires it, plan a real-hardware revalidation.
+3. If you encounter an unintended behavior change in a task *not* marked `[FROZEN]` — different timing, different valve order, different pressure threshold — STOP and report. Do not "fix" it silently.
 
-- The same functions are called in the same order with the same arguments.
-- No safety checks, pressure readings, or state verifications are removed or reordered.
-- Timing (`time.sleep()` calls, delays, hold times) is preserved exactly.
-- Error handling behavior (what happens on failure) does not change.
+Hardware Safety Rules (below) are never changed regardless of phase.
 
 ### Hardware Safety Rules
 

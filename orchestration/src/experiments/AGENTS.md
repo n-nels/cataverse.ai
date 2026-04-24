@@ -1,39 +1,34 @@
 # experiments/ — Experiment Protocol Layer
 
-See root `AGENTS.md` for global safety constraints and behavior-preservation rules.
+See root `AGENTS.md` for global safety constraints. See `docs/clean_up_plan.md` for the active work plan.
 
 ---
 
 ## Purpose
 
-This module defines experiment protocols and automation workflows (e.g., adsorption and isotopic exchange), including:
+Defines experiment protocols and session metadata management. Orchestrates calls across the control, datalog, and hardware layers to run adsorption and related experiments end-to-end.
 
-- Experiment/session parameter handling
-- Protocol orchestration across control/hardware
-- Data/log file setup and experiment metadata writing via datalog/session
-- Threaded acquisition/monitoring coordination
+Responsibilities:
+- Experiment/session metadata (README generation, experiment-ID naming, share-drive copies)
+- Protocol orchestration (valve sequences, temperature ramps, gas delivery, spectrum acquisition)
+- Threaded acquisition coordination (OPUS, pressure logger, temperature logger, mass-spec logger)
 
 Current structure:
-- `session.py` — `ExperimentSession`
-- `adsorption.py` — `AdsorptionExperiment`
-- `isotopic_exchange.py` — `IsotopicExchangeCalibration`
-- `automation/` — automation package scaffold
+- `session.py` — `ExperimentSession`: metadata, naming, README, end-of-experiment finalization
+- `adsorption.py` — `AdsorptionExperiment`: active adsorption protocol
+
+**Deprecated (excluded from Phase 8 work):**
+- `isotopic_exchange.py` — `IsotopicExchangeCalibration`: scheduled for revisit in a future phase. Do not modify as part of the current cleanup plan.
 
 ## Dependencies
 
-**Depends on:** `control`, `datalog`, `hardware`, `config_loader`, `physics`
+**Depends on:** `control`, `datalog`, `hardware`, `core`
 
-**Depended on by:** top-level scripts (e.g., `main.py`)
+**Depended on by:** `main.py`
 
-## Critical Constraints
+## Module-Specific Notes
 
-- Protocol behavior is frozen: preserve sequence/order of operation calls.
-- Preserve pressure/temperature checks, delay values, and hold times exactly.
-- Preserve thread lifecycle behavior and synchronization semantics.
-- Preserve public class/function interfaces used by existing scripts.
-
-## Refactor Scope
-
-Allowed: structural cleanup, module split/extraction, docstrings, type hints, path/config centralization (per plan), and logging improvements.
-
-Not allowed: changing experiment control flow, timing, or device command ordering.
+- Protocol methods in `adsorption.py` are behavior-sensitive. Changes are permitted but gated by the `[FROZEN]` marker in the cleanup plan — see root `AGENTS.md` for the gate procedure.
+- `ExperimentSession` owns path construction and README field writes. Plumbing methods that construct and start threaded loggers live here (not on the experiment class).
+- `AdsorptionExperiment.finalize(success: bool)` is the end-of-experiment cleanup entry point. It must run on both happy path and abort. `main.py` wraps each experiment run in `try/finally` to guarantee this.
+- Threaded loggers (`PressureLogger`, `TemperatureLogger`, `MassSpecLogger`) hold their CSV files open for the duration of the logger. Call `logger.stop()` before any `shutil.copy2` of those files, or the copy will fail on Windows.

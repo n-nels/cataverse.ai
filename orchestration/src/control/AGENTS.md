@@ -1,36 +1,33 @@
-# control/ — Instrument Operations and Actuator Sequencing (New Architecture)
+# control/ — Instrument Operations and Actuator Sequencing
 
-For project-wide safety rules, behavioral preservation, and hardware constraints, see root `AGENTS.md`.
+See root `AGENTS.md` for global safety constraints. See `docs/clean_up_plan.md` for the active work plan.
 
 ---
 
 ## Purpose
 
-This module implements high-level instrument operations by coordinating hardware-layer calls:
+Coordinates hardware-layer calls into operational sequences. Controllers own timing, ordering, and safety checks; adapters own protocol details.
 
-- Valve/actuator open/close/write behavior
-- Gas delivery to manifold/cell
-- Evacuation and pressure-based control flow
-- Spectrometer and acquisition-related operational sequences
+Responsibilities:
+- Valve and actuator open/close/write sequencing (`valves.py`)
+- Gas delivery to manifold and cell with pressure-based feedback (`gas_delivery.py`)
+- Temperature ramp, hold, and cooling sequences (`temperature_control.py`)
+- Spectrometer request/retry and acquisition coordination (`spectrometer_control.py`)
+- Mass-spec register sequence start/stop (`mass_spec_control.py`)
 
-This is the highest-risk layer because it directly controls sequencing that affects gas flow, pressure, and pump safety.
+This is the highest-risk layer in the codebase. Sequencing errors here can open valves against closed pumps, overpressure the manifold, or expose the turbo to atmosphere.
 
 ## Dependencies
 
-**Depends on:** `hardware`, `config_loader`, Python `logging`
+**Depends on:** `hardware`, `core`, Python `logging`
 
-**Depended on by:** `experiments`, top-level execution scripts
+**Depended on by:** `experiments`, `main.py`
 
-## Critical Constraints
+## Module-Specific Notes
 
-- Treat actuator and valve logic as behavior-frozen.
-- Preserve exact call order, pressure checks, branching behavior, and timing (`time.sleep`).
-- Preserve valve semantics: default closed = `1.0 V`, open = `5.0 V`.
-- Never remove, weaken, or reorder safety checks (turbo/roughing, pressure limits, downstream path assumptions).
-- Preserve error-handling behavior: failures must trigger the same control responses as legacy logic.
-
-## Refactor Scope
-
-Allowed: naming cleanup, type hints, docstrings, logging improvements, small extraction/refactors that keep identical behavior.
-
-Not allowed: logic optimizations or sequence changes that alter physical behavior.
+- Valve defaults: closed = `1.0 V`, open = `5.0 V`. If unsure, close.
+- Pressure and safety limits live in `core.config`. Controllers read them; they do not define their own.
+- Unrecoverable failures (connection loss, safety-limit exceeded, thermocouple fault) raise distinctive exceptions from the hardware/control error hierarchy. Controllers do not call `sys.exit` and do not swallow errors into sentinel returns.
+- Controllers expose `read_pressure()` and `read_temperature()` pass-through methods so experiments never reach through the controller to the adapter. The adapter itself is not a public attribute.
+- Behavior-sensitive sequences (gas delivery timing, ramp/cool/hold branching in `watlow()`, valve ordering in `deliver_gas_to_manifold`) are gated by the `[FROZEN]` marker in the cleanup plan. Changes require explicit go-ahead per the root `AGENTS.md` gate procedure.
+- `GasDelivery.deliver_gas_to_manifold` currently contains a 400+ line behavior-frozen port. Do not refactor it without an explicit plan task and hardware revalidation.

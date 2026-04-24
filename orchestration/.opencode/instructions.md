@@ -4,9 +4,11 @@ For project context, safety rules, and the boot/shutdown sequence, see `AGENTS.m
 
 ---
 
-## Golden Rule
+## Active Plan
 
-**Preserve function.** The valve sequences, gas delivery logic, pressure checks, and timing were validated against real hardware by the experimentalist. When porting code from legacy packages to new packages, copy control flow verbatim. You may change dependency wiring, replace `print()` with `logger.info()`, and add types — but the sequence of calls, values, sleeps, and branching must remain identical.
+The active work plan is `docs/clean_up_plan.md`. On invocation, read the plan end-to-end, find the first task with Status `[ ]`, verify its predicates are `[x]`, and report the task to the user before making changes. Do not proceed without explicit go-ahead.
+
+The earlier `docs/refactor_plan*.md` files are historical reference only. Do not edit them.
 
 ---
 
@@ -16,15 +18,22 @@ When instructions conflict, follow the nearest file to the root. `AGENTS.md` ove
 
 ---
 
-## Work Protocol
+## Working Protocol
 
-The active plan lives in `docs/clean_up_plan.md`.
+**Before starting a task:**
+- Read the target file, its siblings in the same package, and the package's `AGENTS.md`.
+- Confirm the task's predicates are satisfied (other task numbers marked `[x]` in the plan).
+- If the task is marked `[FROZEN]` or contains a decision point ("human decides," "human picks," "human flag," "human confirms"), stop and wait for explicit go-ahead before changing code.
 
-**Before:** Read the phase instructions, the target module's `AGENTS.md`, and any legacy file you are porting from.
+**During:**
+- One task per commit. No squashing.
+- Keep changes small and reviewable.
+- If a change you were not expecting to make appears necessary, stop and report before making it.
 
-**During:** One task per commit. If you're unsure whether a change alters behavior, don't make it and ask the user.
-
-**After:** Verify imports resolve, tests pass. Mark the task complete in the execution plan.
+**After:**
+- Verify imports resolve. Run `pytest tests/ -v` for phase-boundary validation.
+- Update the task's Status column from `[ ]` to `[x]` in `docs/clean_up_plan.md`. Include this edit in the same commit as the work.
+- Stop and wait for the next invocation.
 
 ---
 
