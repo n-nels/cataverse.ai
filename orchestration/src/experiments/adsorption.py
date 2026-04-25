@@ -166,7 +166,7 @@ class AdsorptionExperiment:
         # Calculate target pressure for the manifold based on volume ratios
         val = (
             self.session.volumes.total
-            / (self.session.volumes.manifold_m1m2m3 + self.session.volumes.tube_50ml)
+            / (self.session.volumes.source_m1m2m3)
             * target_pressure
         )
         self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
@@ -179,7 +179,7 @@ class AdsorptionExperiment:
 
         self.p_cell_calc = cell_pressure_from_manifold(
             self.p_mfld,
-            self.session.volumes.manifold_m1m2m3 + self.session.volumes.tube_50ml,
+            self.session.volumes.source_m1m2m3,
             self.session.volumes.total,
         )
 
@@ -200,7 +200,7 @@ class AdsorptionExperiment:
         )
         self.p_cell_calc_2 = cell_pressure_from_manifold(
             self.p_mfld_2,
-            self.session.volumes.manifold_m1m2 + self.session.volumes.tube_50ml,
+            self.session.volumes.source_m1m2,
             self.session.volumes.total,
         )
         self.gas_controller.valves.open("v16")
@@ -216,7 +216,7 @@ class AdsorptionExperiment:
         )
         val_2 = (
             (self.session.volumes.total)
-            / (self.session.volumes.manifold_m1m2 + self.session.volumes.tube_50ml)
+            / (self.session.volumes.source_m1m2)
             * target_pressure[1]
         )
 
@@ -246,7 +246,7 @@ class AdsorptionExperiment:
         )
         self.p_cell_calc_2 = cell_pressure_from_manifold(
             self.p_mfld_2,
-            self.session.volumes.manifold_m1m2 + self.session.volumes.tube_50ml,
+            self.session.volumes.source_m1m2,
             self.session.volumes.total,
         )
         self.gas_controller.valves.open("v16")

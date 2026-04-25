@@ -219,7 +219,7 @@ class IsotopicExchangeCalibration:
         )
         self.p_cell_calc = cell_pressure_from_manifold(
             self.p_mfld,
-            self.session.volumes.manifold_m1m2m3 + self.session.volumes.tube_50ml,
+            self.session.volumes.source_m1m2m3,
             self.session.volumes.total,
         )
 
@@ -240,7 +240,7 @@ class IsotopicExchangeCalibration:
         )
         self.p_cell_calc_2 = cell_pressure_from_manifold(
             self.p_mfld_2,
-            self.session.volumes.manifold_m1m2 + self.session.volumes.tube_50ml,
+            self.session.volumes.source_m1m2,
             self.session.volumes.total,
         )
         self.gas_controller.valves.open("v16")
@@ -380,9 +380,8 @@ class IsotopicExchangeCalibration:
         R = self.gas_controller.gas_constant
         t_mfld = self.gas_controller.temperature_k
         v_m3 = self.session.volumes.m3
-        v_m1m2 = self.session.volumes.manifold_m1m2
-        v_m1m2m3 = self.session.volumes.manifold_m1m2m3
-        v_50tube = self.session.volumes.tube_50ml
+        v_source_m1m2 = self.session.volumes.source_m1m2
+        v_source_m1m2m3 = self.session.volumes.source_m1m2m3
         v_cell = self.session.volumes.cell
         v_tot = self.session.volumes.total
         data_directory = self.session.paths.data_directory
@@ -401,8 +400,8 @@ class IsotopicExchangeCalibration:
         filename = f"{self.session.file_name}_msCalib_moles.csv"
         file_path = os.path.join(data_directory, self.session.folder_name, filename)
 
-        dilution_factor = v_m3 / (v_m1m2m3 + v_50tube)
-        minimum_mfld_moles = 3 * (v_m1m2m3 + v_50tube) / (R * t_mfld)  # 3 Torr minimum
+        dilution_factor = v_m3 / v_source_m1m2m3
+        minimum_mfld_moles = 3 * v_source_m1m2m3 / (R * t_mfld)  # 3 Torr minimum
         i = 0
 
         # collect calibration data
@@ -421,11 +420,11 @@ class IsotopicExchangeCalibration:
             for _ in range(n_dilutions):
                 initial_mfld_moles /= dilution_factor  # Reverse the effects of dilution
 
-            p_mfld_calc = (initial_mfld_moles * R * t_mfld) / (v_m1m2m3 + v_50tube)
+            p_mfld_calc = (initial_mfld_moles * R * t_mfld) / v_source_m1m2m3
             id, p_mfld = self.gas_controller.deliver_gas_to_manifold(
                 filename=None, foldername=None, id="13CO", target=p_mfld_calc
             )
-            moles = p_mfld * (v_m1m2m3 + v_50tube) / (R * t_mfld)
+            moles = p_mfld * v_source_m1m2m3 / (R * t_mfld)
 
             j = 0
             while True:
@@ -464,7 +463,7 @@ class IsotopicExchangeCalibration:
                 filename=None,
                 foldername=None,
                 id="CO",
-                target=(v_m1m2m3 + v_50tube) / (v_m1m2 + v_50tube),
+                target=v_source_m1m2m3 / v_source_m1m2,
             )
             self.gas_controller.valves.open("v16")
             moles = moles * dilution_factor

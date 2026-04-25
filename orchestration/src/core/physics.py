@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 
 DEFAULT_GAS_CONSTANT_L_TORR_PER_K_MOL = 62.363577
+DEFAULT_TEMPERATURE_K = 298.0
 AVOGADRO_NUMBER_PER_MOL = 6.023e23
 
 
@@ -31,6 +32,18 @@ class SystemVolumes:
         """Volume of manifold section m3 [L]."""
 
         return self.manifold_m1m2m3 - self.manifold_m1m2 - self.valve
+
+    @property
+    def source_m1m2(self) -> float:
+        """Source volume for gas delivery via m1+m2 manifold sections [L]."""
+
+        return self.manifold_m1m2 + self.tube_50ml
+
+    @property
+    def source_m1m2m3(self) -> float:
+        """Source volume for gas delivery via full manifold [L]."""
+
+        return self.manifold_m1m2m3 + self.tube_50ml
 
     @property
     def total(self) -> float:
@@ -78,6 +91,54 @@ def amount_adsorbed(
     )
     n_adsorbed = n_initial_mol - n_equilibrium
     return n_adsorbed * 1e6 / mass_g
+
+
+def amount_adsorbed_from_pressures(
+    p_initial_torr: float,
+    source_volume_l: float,
+    p_equilibrium_torr: float,
+    total_volume_l: float,
+    temperature_k: float,
+    mass_g: float,
+    gas_constant: float = DEFAULT_GAS_CONSTANT_L_TORR_PER_K_MOL,
+) -> float:
+    """Return adsorbed amount in µmol/g from initial and equilibrium pressures.
+
+    Convenience wrapper around :func:`amount_adsorbed` that computes the
+    initial moles internally, so the caller does not need to call
+    :func:`moles_from_pressure` separately with a different volume.
+
+    Parameters
+    ----------
+    p_initial_torr : float
+        Manifold pressure before expansion into the cell.
+    source_volume_l : float
+        Volume of the gas source (manifold + tube) used for the initial dose.
+    p_equilibrium_torr : float
+        Pressure after equilibration across the total volume.
+    total_volume_l : float
+        Total connected volume (manifold + cell + tube + valve).
+    temperature_k : float
+        Gas temperature in Kelvin.
+    mass_g : float
+        Catalyst sample mass in grams.
+    gas_constant : float
+        Gas constant in L·Torr·K⁻¹·mol⁻¹.
+    """
+    n_initial = moles_from_pressure(
+        pressure_torr=p_initial_torr,
+        volume_l=source_volume_l,
+        temperature_k=temperature_k,
+        gas_constant=gas_constant,
+    )
+    return amount_adsorbed(
+        n_initial_mol=n_initial,
+        pressure_equilibrium_torr=p_equilibrium_torr,
+        total_volume_l=total_volume_l,
+        temperature_k=temperature_k,
+        mass_g=mass_g,
+        gas_constant=gas_constant,
+    )
 
 
 def metal_surface_density(

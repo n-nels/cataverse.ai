@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import cast
 
 from src.hardware.pressure import MKSPressure
-from src.core.physics import SystemVolumes, amount_adsorbed
+from src.core.physics import (
+    DEFAULT_TEMPERATURE_K,
+    SystemVolumes,
+    amount_adsorbed,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -33,7 +37,7 @@ class PressureLogger:
         mass_g: float,
         metal_load_wt_percent: float,
         metal_molar_mass_g_mol: float = 106.42,
-        temperature_k: float = 298.0,
+        temperature_k: float = DEFAULT_TEMPERATURE_K,
         gas_constant: float = 62.363577,
         read_interval_s: float = 5,
     ) -> None:
@@ -73,7 +77,7 @@ class PressureLogger:
         """Worker loop that appends pressure and derived metrics to CSV."""
 
         file_exists = self.path.exists()
-        source_volume_l = self.physics.manifold_m1m2m3 + self.physics.tube_50ml
+        source_volume_l = self.physics.source_m1m2m3
         total_volume_l = self.physics.total
 
         n_initial = (self.p_mfld_initial * source_volume_l) / (
