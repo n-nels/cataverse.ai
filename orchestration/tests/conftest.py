@@ -94,7 +94,7 @@ def hardware_config() -> HardwareConfig:
             turbo_pressure_poll_s=2.0,
             turbo_open_max_manifold_torr=0.02,
             mass_spec_open_max_cell_torr=0.1,
-            device_map={
+            actuator_map={
                 "v16": ("act1-2", "ao0"),
                 "RoughPump": ("act1-2", "ao1"),
                 "H2": ("act3-4", "ao0"),

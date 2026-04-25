@@ -1,4 +1,4 @@
-"""Top-level package metadata for CataVerse."""
+"""Top-level package metadata for cataverse.ai."""
 
 import src.datalog as _datalog
 

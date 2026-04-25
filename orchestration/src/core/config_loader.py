@@ -18,7 +18,6 @@ from typing import Any
 import yaml
 from dotenv import load_dotenv
 
-load_dotenv()
 DEFAULT_METAL_MOLAR_MASS = 106.42
 
 
@@ -53,10 +52,10 @@ class SerialDeviceConfig:
 class ExtrelRegisterConfig:
     """Extrel mass spectrometer register addresses and values."""
 
-    sequence_start_address: int
-    sequence_start_value: int
-    sequence_stop_address: int
-    sequence_stop_value: int
+    sequence_start_address: int = 1
+    sequence_start_value: int = 2
+    sequence_stop_address: int = 1
+    sequence_stop_value: int = 9
 
 
 @dataclass(frozen=True)
@@ -130,14 +129,14 @@ class PathsConfig:
     """Filesystem paths for data output, runtime, and shared-drive copies."""
 
     data_directory: str
-    figures_directory: str | None
     autonomous_parameters_directory: str
     share_drive_peak_fit_root: str
     share_drive_pressure_data_root: str
     share_drive_ms_calibrations_root: str
-    runtime_project_root: str | None
-    runtime_venv_python: str | None
-    runtime_system_python: str | None
+    figures_directory: str | None = None
+    runtime_project_root: str | None = None
+    runtime_venv_python: str | None = None
+    runtime_system_python: str | None = None
 
 
 @dataclass(frozen=True)
@@ -168,6 +167,8 @@ def _require(data: dict[str, Any], key: str, file_name: str) -> Any:
 
 
 def _resolve_config_dir(config_dir: Path | None) -> Path:
+    """Resolve the configuration directory."""
+    
     if config_dir is not None:
         resolved = config_dir
     else:
@@ -175,8 +176,11 @@ def _resolve_config_dir(config_dir: Path | None) -> Path:
         if env_config_dir:
             resolved = Path(env_config_dir)
         else:
-            repo_root = Path(__file__).resolve().parents[2]
-            resolved = repo_root / "config"
+            raise FileNotFoundError(
+                "Configuration directory not specified. "
+                "Either pass config_dir explicitly or set the "
+                "CATAVERSE_CONFIG_DIR environment variable in your .env file."
+            )
 
     if not resolved.exists():
         raise FileNotFoundError(f"Configuration directory not found: {resolved}")
@@ -199,45 +203,13 @@ def _to_channel_tuple(value: Any, context: str) -> tuple[str, str]:
     return (left, right)
 
 
-def load_config(config_dir: Path | None = None) -> AppConfig:
-    """Load all YAML config files into a typed ``AppConfig`` container."""
+def _build_system_constants(data: dict[str, Any]) -> SystemConstants:
+    """Build ``SystemConstants`` from the parsed ``system.yaml`` data."""
+    physical_constants = _require(data, "physical_constants", "system.yaml")
+    temperature = _require(data, "temperature", "system.yaml")
+    volumes_l = _require(data, "volumes_l", "system.yaml")
 
-    resolved_dir = _resolve_config_dir(config_dir)
-
-    system_yaml = _load_yaml(resolved_dir / "system.yaml")
-    devices_yaml = _load_yaml(resolved_dir / "devices.yaml")
-    sample_yaml = _load_yaml(resolved_dir / "sample.yaml")
-    paths_yaml = _load_yaml(resolved_dir / "paths.yaml")
-
-    physical_constants = _require(system_yaml, "physical_constants", "system.yaml")
-    temperature = _require(system_yaml, "temperature", "system.yaml")
-    volumes_l = _require(system_yaml, "volumes_l", "system.yaml")
-
-    serial = _require(devices_yaml, "serial", "devices.yaml")
-    mks_serial = _require(serial, "mks", "devices.yaml")
-    watlow_ir_serial = _require(serial, "watlow_ir", "devices.yaml")
-    extrel_ms_serial = _require(serial, "extrel_ms", "devices.yaml")
-
-    actuators = _require(devices_yaml, "actuators", "devices.yaml")
-    voltages = _require(actuators, "voltages", "devices.yaml")
-    timing_s = _require(actuators, "timing_s", "devices.yaml")
-    safety_limits_torr = _require(actuators, "safety_limits_torr", "devices.yaml")
-    actuator_map = _require(actuators, "actuator_map", "devices.yaml")
-    reserved_channels = actuators.get("reserved_channels", [])
-
-    network = _require(devices_yaml, "network", "devices.yaml")
-    opus = _require(network, "opus", "devices.yaml")
-    zmq = _require(network, "zmq", "devices.yaml")
-
-    kasa_plugs = _require(devices_yaml, "kasa_plugs", "devices.yaml")
-
-    sample = _require(sample_yaml, "sample", "sample.yaml")
-
-    paths = _require(paths_yaml, "paths", "paths.yaml")
-    share_drive = _require(paths, "share_drive", "paths.yaml")
-    runtime = paths.get("runtime", {})
-
-    system_config = SystemConstants(
+    return SystemConstants(
         gas_constant=physical_constants["R"],
         manifold_temperature_k=temperature["t_mfld"],
         vessel_volume_l=volumes_l["v_vessel"],
@@ -249,7 +221,28 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
         flask_volume_l=volumes_l["v_flask"],
     )
 
-    hardware_config = HardwareConfig(
+
+def _build_hardware_config(data: dict[str, Any]) -> HardwareConfig:
+    """Build ``HardwareConfig`` from the parsed ``devices.yaml`` data."""
+    serial = _require(data, "serial", "devices.yaml")
+    mks_serial = _require(serial, "mks", "devices.yaml")
+    watlow_ir_serial = _require(serial, "watlow_ir", "devices.yaml")
+    extrel_ms_serial = _require(serial, "extrel_ms", "devices.yaml")
+
+    actuators = _require(data, "actuators", "devices.yaml")
+    voltages = _require(actuators, "voltages", "devices.yaml")
+    timing_s = _require(actuators, "timing_s", "devices.yaml")
+    safety_limits_torr = _require(actuators, "safety_limits_torr", "devices.yaml")
+    actuator_map = _require(actuators, "actuator_map", "devices.yaml")
+    reserved_channels = actuators.get("reserved_channels", [])
+
+    network = _require(data, "network", "devices.yaml")
+    opus = _require(network, "opus", "devices.yaml")
+    zmq = _require(network, "zmq", "devices.yaml")
+
+    kasa_plugs = _require(data, "kasa_plugs", "devices.yaml")
+
+    return HardwareConfig(
         mks=SerialDeviceConfig(
             port=mks_serial["port"],
             baudrate=mks_serial["baudrate"],
@@ -273,18 +266,32 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
                 bytesize=extrel_ms_serial.get("bytesize"),
             ),
             registers=ExtrelRegisterConfig(
-                sequence_start_address=extrel_ms_serial.get("registers", {})
-                .get("sequence_start", {})
-                .get("address", 1),
-                sequence_start_value=extrel_ms_serial.get("registers", {})
-                .get("sequence_start", {})
-                .get("value", 2),
-                sequence_stop_address=extrel_ms_serial.get("registers", {})
-                .get("sequence_stop", {})
-                .get("address", 1),
-                sequence_stop_value=extrel_ms_serial.get("registers", {})
-                .get("sequence_stop", {})
-                .get("value", 9),
+                **{
+                    k: v
+                    for k, v in {
+                        "sequence_start_address": extrel_ms_serial.get(
+                            "registers", {}
+                        )
+                        .get("sequence_start", {})
+                        .get("address"),
+                        "sequence_start_value": extrel_ms_serial.get(
+                            "registers", {}
+                        )
+                        .get("sequence_start", {})
+                        .get("value"),
+                        "sequence_stop_address": extrel_ms_serial.get(
+                            "registers", {}
+                        )
+                        .get("sequence_stop", {})
+                        .get("address"),
+                        "sequence_stop_value": extrel_ms_serial.get(
+                            "registers", {}
+                        )
+                        .get("sequence_stop", {})
+                        .get("value"),
+                    }.items()
+                    if v is not None
+                }
             ),
         ),
         actuator=ActuatorConfig(
@@ -318,31 +325,69 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
         ),
     )
 
-    sample_config = SampleConfig(
-        notebook=sample["notebook"],
-        metal=sample["metal"],
-        support=sample["support"],
-        mass_g=sample["mass"],
-        metal_load_wt_percent=sample["metal_load"],
-        support_surface_area_m2_g=sample["support_sa"],
-        metal_molar_mass_g_mol=sample.get("metal_molar_mass", DEFAULT_METAL_MOLAR_MASS),
-    )
 
-    paths_config = PathsConfig(
-        data_directory=paths["data_directory"],
-        figures_directory=paths.get("figures_directory"),
-        autonomous_parameters_directory=paths["autonomous_parameters_directory"],
-        share_drive_peak_fit_root=share_drive["peak_fit_root"],
-        share_drive_pressure_data_root=share_drive["pressure_data_root"],
-        share_drive_ms_calibrations_root=share_drive["ms_calibrations_root"],
-        runtime_project_root=runtime.get("project_root"),
-        runtime_venv_python=runtime.get("venv_python"),
-        runtime_system_python=runtime.get("system_python"),
-    )
+def _build_sample_config(data: dict[str, Any]) -> SampleConfig:
+    """Build ``SampleConfig`` from the parsed ``sample.yaml`` data."""
+    sample = _require(data, "sample", "sample.yaml")
+
+    kwargs: dict[str, Any] = {
+        "notebook": sample["notebook"],
+        "metal": sample["metal"],
+        "support": sample["support"],
+        "mass_g": sample["mass"],
+        "metal_load_wt_percent": sample["metal_load"],
+        "support_surface_area_m2_g": sample["support_sa"],
+    }
+    if "metal_molar_mass" in sample:
+        kwargs["metal_molar_mass_g_mol"] = sample["metal_molar_mass"]
+    return SampleConfig(**kwargs)
+
+
+def _build_paths_config(data: dict[str, Any]) -> PathsConfig:
+    """Build ``PathsConfig`` from the parsed ``paths.yaml`` data."""
+    paths = _require(data, "paths", "paths.yaml")
+    share_drive = _require(paths, "share_drive", "paths.yaml")
+    runtime = paths.get("runtime", {})
+
+    kwargs: dict[str, Any] = {
+        "data_directory": paths["data_directory"],
+        "autonomous_parameters_directory": paths["autonomous_parameters_directory"],
+        "share_drive_peak_fit_root": share_drive["peak_fit_root"],
+        "share_drive_pressure_data_root": share_drive["pressure_data_root"],
+        "share_drive_ms_calibrations_root": share_drive["ms_calibrations_root"],
+    }
+    for yaml_key, field_name in [
+        ("figures_directory", "figures_directory"),
+        ("project_root", "runtime_project_root"),
+        ("venv_python", "runtime_venv_python"),
+        ("system_python", "runtime_system_python"),
+    ]:
+        source = runtime if field_name.startswith("runtime_") else paths
+        value = source.get(yaml_key)
+        if value is not None:
+            kwargs[field_name] = value
+    return PathsConfig(**kwargs)
+
+
+def load_config(config_dir: Path | None = None) -> AppConfig:
+    """Load all YAML config files into a typed ``AppConfig`` container.
+
+    Calls ``load_dotenv()`` to ensure environment variables (e.g.
+    ``CATAVERSE_CONFIG_DIR``) are available before resolving paths.
+    """
+
+    load_dotenv()
+
+    resolved_dir = _resolve_config_dir(config_dir)
+
+    system_yaml = _load_yaml(resolved_dir / "system.yaml")
+    devices_yaml = _load_yaml(resolved_dir / "devices.yaml")
+    sample_yaml = _load_yaml(resolved_dir / "sample.yaml")
+    paths_yaml = _load_yaml(resolved_dir / "paths.yaml")
 
     return AppConfig(
-        system=system_config,
-        hardware=hardware_config,
-        sample=sample_config,
-        paths=paths_config,
+        system=_build_system_constants(system_yaml),
+        hardware=_build_hardware_config(devices_yaml),
+        sample=_build_sample_config(sample_yaml),
+        paths=_build_paths_config(paths_yaml),
     )

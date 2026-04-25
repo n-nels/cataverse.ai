@@ -39,7 +39,7 @@ def test_load_config_values_match_repo_yaml() -> None:
     assert cfg.hardware.network.opus_ip == "130.20.216.127"
     assert cfg.hardware.network.opus_port == 5555
     assert cfg.hardware.actuator.voltage_open == 5.0
-    assert cfg.hardware.actuator.device_map["H2"] == ("act3-4", "ao0")
+    assert cfg.hardware.actuator.actuator_map["H2"] == ("act3-4", "ao0")
 
     assert cfg.sample.notebook == "nn1120-3"
     assert cfg.sample.metal == "pd"
@@ -113,7 +113,7 @@ actuators:
   safety_limits_torr:
     turbo_open_max_manifold: 0.02
     mass_spec_open_max_cell: 0.1
-  device_map:
+  actuator_map:
     H2: [act3-4, ao0]
   reserved_channels:
     - [act9-10, ao1]

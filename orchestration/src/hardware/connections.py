@@ -89,7 +89,7 @@ class DeviceManager:
         self.pressure = MKSPressure(self._mks_connection)
         self.temperature = WatlowTemperature(self._watlow_client)
         self.mass_spec = ExtrelMassSpec(self._extrel_client)
-        self.analog_io = AnalogIO(self.config.actuator.device_map)
+        self.analog_io = AnalogIO(self.config.actuator.actuator_map)
         self.spectrometer = OpusSpectrometer(cast(zmq.Socket, self._zmq_socket))
         self.spectrometer.connect(
             f"tcp://{self.config.network.opus_ip}:{self.config.network.opus_port}"

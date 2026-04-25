@@ -39,7 +39,7 @@ def _hardware_config_fixture() -> HardwareConfig:
             turbo_pressure_poll_s=2.0,
             turbo_open_max_manifold_torr=0.02,
             mass_spec_open_max_cell_torr=0.1,
-            device_map={"H2": ("act3-4", "ao0")},
+            actuator_map={"H2": ("act3-4", "ao0")},
             reserved_channels=[],
         ),
         network=NetworkConfig(
