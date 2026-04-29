@@ -3,6 +3,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from src.hardware.analog_io import AnalogIO
 
 
@@ -20,9 +22,12 @@ def test_write_uses_mapping_and_cached_device_instances() -> None:
         assert fake_device.write_analog_output.call_count == 2
 
 
-def test_write_returns_false_for_unknown_mapping() -> None:
+def test_write_raises_for_unknown_mapping() -> None:
+    from src.hardware.errors import HardwareMappingError
+
     aio = AnalogIO({})
-    assert aio.write("unknown", 1.0) is False
+    with pytest.raises(HardwareMappingError):
+        aio.write("unknown", 1.0)
 
 
 def test_read_delegates_to_device() -> None:

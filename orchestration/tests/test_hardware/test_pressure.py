@@ -4,6 +4,8 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 from typing import cast
 
+import pytest
+
 from src.hardware.pressure import MKSPressure, PressureReading
 
 
@@ -61,3 +63,17 @@ def test_disconnect_closes_open_connection() -> None:
     pressure.disconnect()
 
     conn.close.assert_called_once()
+
+
+def test_connect_once_raises_when_settings_missing() -> None:
+    from src.hardware.errors import HardwareConnectionError
+
+    conn = MagicMock()
+    conn.port = None
+    conn.baudrate = None
+    conn.timeout = None
+    pressure = MKSPressure(conn)
+    pressure._port = None
+
+    with pytest.raises(HardwareConnectionError, match="Missing serial connection settings"):
+        pressure._connect_once()

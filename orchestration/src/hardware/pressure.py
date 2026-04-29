@@ -13,6 +13,8 @@ from typing import NamedTuple
 
 import serial
 
+from src.hardware.errors import HardwareConnectionError, HardwareReadError
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +23,8 @@ class PressureReading(NamedTuple):
     """One pressure read from the MKS gauge."""
 
     timestamp: datetime
-    manifold: float | str | None
-    cell: float | str | None
+    manifold: float | None
+    cell: float | None
 
 
 class MKSPressure:
@@ -39,8 +41,9 @@ class MKSPressure:
         """Connect once using cached serial settings (no reconnect delay)."""
 
         if self._port is None or self._baudrate is None:
-            logger.error("Missing serial connection settings for MKS reconnect.")
-            return False
+            raise HardwareConnectionError(
+                "Missing serial connection settings for MKS reconnect"
+            )
 
         try:
             self.connection = self._serial_cls(
@@ -93,10 +96,10 @@ class MKSPressure:
             try:
                 return PressureReading(datetime.now(), float(p1), float(p2))
             except ValueError:
-                try:
-                    return PressureReading(datetime.now(), float(p1), str(p2))
-                except ValueError:
-                    return PressureReading(datetime.now(), str(p1), str(p2))
+                raise HardwareReadError(
+                    f"MKS gauge returned non-numeric (over-range?) data: "
+                    f"manifold={p1!r}, cell={p2!r}"
+                )
 
         logger.warning("Serial connection not established.")
         self._connect_once()

@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import logging
 import struct
-import sys
-from typing import NoReturn
 
 from pymodbus.client import ModbusSerialClient as ModbusClient
+
+from src.hardware.errors import HardwareConnectionError, ThermocoupleFault
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class WatlowTemperature:
         """Read temperature from Modbus controller and return Celsius."""
 
         if not self.client:
-            raise RuntimeError("Modbus client not connected.")
+            raise HardwareConnectionError("Watlow Modbus client not connected")
 
         result = self.client.read_holding_registers(
             address=address,
@@ -46,11 +46,16 @@ class WatlowTemperature:
 
         return temperature_c
 
-    def tc_malfunc(self) -> NoReturn:
-        """Handle thermocouple malfunction recovery/error path."""
+    def tc_malfunc(self) -> None:
+        """Handle thermocouple malfunction by logging diagnostics and raising.
+
+        Reads the error code register and the current setpoint for diagnostic
+        logging, resets the setpoint to 25 °C as a safety measure, then raises
+        :class:`ThermocoupleFault` so the caller can trigger a safe shutdown.
+        """
 
         if not self.client:
-            raise RuntimeError("Modbus client not connected.")
+            raise HardwareConnectionError("Watlow Modbus client not connected")
 
         result = self.client.read_holding_registers(
             address=362,
@@ -76,7 +81,10 @@ class WatlowTemperature:
         set_temperature = struct.unpack(">f", registers_bytes)[0]
         set_temperature_c = round(self.f2c(int(set_temperature)), 1)
         logger.error("Set temperature is: %s C", set_temperature_c)
-        sys.exit("Exiting due to temperature read error.")
+        raise ThermocoupleFault(
+            f"Thermocouple malfunction detected. "
+            f"Error code: {registers[0]}, setpoint: {set_temperature_c} C"
+        )
 
     def set_temperature(
         self,
@@ -87,8 +95,7 @@ class WatlowTemperature:
         """Set target temperature on the Modbus controller."""
 
         if not self.client:
-            logger.error("Modbus client not connected.")
-            return False
+            raise HardwareConnectionError("Watlow Modbus client not connected")
 
         data_bytes = struct.pack(">f", self.c2f(setpoint))
         reg_hi, reg_lo = struct.unpack(">HH", data_bytes)

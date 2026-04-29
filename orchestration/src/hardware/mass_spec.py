@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import Any
 
 from pymodbus.client import ModbusSerialClient as ModbusClient
+
+from src.hardware.errors import HardwareConnectionError, HardwareReadError
 
 
 logger = logging.getLogger(__name__)
@@ -27,11 +28,11 @@ class ExtrelMassSpec:
         address: int,
         count: int = 1,
         unit: int = 1,
-    ) -> list[int] | None:
+    ) -> list[int]:
         """Read holding registers from Extrel MS."""
 
         if not self.client:
-            return None
+            raise HardwareConnectionError("Extrel Modbus client not connected")
 
         result = self.client.read_holding_registers(
             address=address,
@@ -39,8 +40,7 @@ class ExtrelMassSpec:
             device_id=unit,
         )
         if result.isError():
-            logger.error("Error reading from Extrel device")
-            return None
+            raise HardwareReadError("Error reading from Extrel device")
 
         return result.registers
 
@@ -48,7 +48,7 @@ class ExtrelMassSpec:
         """Write one holding register on Extrel MS."""
 
         if not self.client:
-            return False
+            raise HardwareConnectionError("Extrel Modbus client not connected")
 
         result = self.client.write_register(address=address, value=value)
         if result.isError():

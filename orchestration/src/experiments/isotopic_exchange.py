@@ -22,6 +22,7 @@ from src.control.gas_delivery import GasDelivery
 from src.control.mass_spec_control import MassSpecController
 from src.control.spectrometer_control import SpectrometerController
 from src.control.temperature_control import TemperatureController
+from src.hardware.pressure import MKSPressure
 from src.datalog.mass_spec_logger import MassSpecLogger
 from src.datalog.pressure_logger import PressureLogger
 from src.experiments.session import ExperimentSession
@@ -44,11 +45,12 @@ class IsotopicExchangeCalibration:
     temp: TemperatureController
     ftir: SpectrometerController
     mass_spec: MassSpecController
+    pressure: MKSPressure
 
     def __post_init__(self) -> None:
         self.gas: str | tuple[str, str] | None = None
         self.gas_2: str | None = None
-        self.p_mfld: float | str | None = None
+        self.p_mfld: float | None = None
         self.p_cell_calc: float | tuple[float, float] | None = None
         self.dt: Any = None
         self.chiller_state: bool | None = None
@@ -300,7 +302,7 @@ class IsotopicExchangeCalibration:
             )
 
         pressure_logger = PressureLogger(
-            pressure=self.gas_controller.pressure_adapter(),
+            pressure=self.pressure,
             physics=self.session.volumes,
             path=Path(self.session.path_pressure_log),
             p_mfld_initial=p_mfld,
@@ -371,7 +373,7 @@ class IsotopicExchangeCalibration:
         try:
             shutil.copy(self.session.path_readme, path_copy)
             time.sleep(10)
-            self.spec.opus_vertex80({"readme": True})
+            self.spec.send_opus_request({"readme": True})
         except IOError as e:
             logger.info(f"An error occurred while copying the file: {e}")
 

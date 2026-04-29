@@ -97,6 +97,8 @@ class KasaConfig:
     chiller_id: str
     variac_id: str
     variac_id_vsl: str
+    username: str | None = None
+    password: str | None = None
 
 
 @dataclass(frozen=True)

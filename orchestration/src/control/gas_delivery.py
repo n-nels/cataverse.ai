@@ -11,10 +11,10 @@ import os
 import time
 import logging
 from datetime import datetime, timedelta
-from typing import Any
 
 from src.core.config_loader import PathsConfig
-from src.hardware.pressure import MKSPressure
+from src.hardware.pressure import MKSPressure, PressureReading
+from src.hardware.errors import HardwareReadError
 from src.core.physics import cell_pressure_from_manifold
 from src.datalog.file_io import create_directory, log_actuator_state
 from .valves import ValveController
@@ -42,21 +42,13 @@ class GasDelivery:
         self.temperature_k = temperature_k
         self.gas_constant = gas_constant
 
-    def read_pressure(self) -> tuple[Any, Any, Any]:
+    def read_pressure(self) -> PressureReading:
         """Read pressure via controller API.
 
         Exists so experiment protocols do not reach through to adapter fields.
         """
 
         return self.pressure.read()
-
-    def pressure_adapter(self) -> MKSPressure:
-        """Return pressure adapter via controller API.
-
-        Exists so experiment protocols do not reach through to adapter fields.
-        """
-
-        return self.pressure
 
     def deliver_gas_to_manifold(
         self,
@@ -68,30 +60,44 @@ class GasDelivery:
     ) -> tuple[str, float]:
         """Deliver gas to manifold through staged actuator writes and pressure feedback."""
 
-        def pressure_difference(p_mfld_final: Any, p_mfld_initial: Any) -> float:
-            global p_mfld_f  # to handle while loop error
+        def pressure_difference(p_mfld_final: float, p_mfld_initial: float) -> float:
+            return abs(p_mfld_final - p_mfld_initial)
+
+        def _evacuate_overpressure() -> PressureReading:
+            """Emergency evacuation when MKS gauge reports over-range.
+
+            Closes the gas valve, opens the rough pump until pressure drops
+            below target + 5%, then settles for 20 s. Returns a full
+            (dt, manifold, cell) pressure reading.
+            """
+            logger.info("Overpressure. Evacuating manifold...")
+            self.valves.close(id)
+            self.valves.write("RoughPump", 1.44)
+
+            # Wait for gauge to return to numeric range
+            while True:
+                try:
+                    dt, p_mfld_evac, p_cell = self.pressure.read()
+                    break
+                except HardwareReadError:
+                    time.sleep(1)
+
+            while p_mfld_evac > target + (0.05 * target):
+                dt, p_mfld_evac, p_cell = self.pressure.read()
+                time.sleep(1)
+
+            self.valves.close("RoughPump")
+            time.sleep(20)
+            dt, p_mfld_evac, p_cell = self.pressure.read()
+            logger.info("Manifold pressure is %s", p_mfld_evac)
+            return PressureReading(dt, float(p_mfld_evac), p_cell)
+
+        def _safe_read() -> PressureReading:
+            """Read pressure, evacuating on over-range."""
             try:
-                return abs(p_mfld_final - p_mfld_initial)
-            except TypeError:
-                logger.info("Overpressure. Evacuating manifold...")
-                self.valves.close(id)
-                self.valves.write("RoughPump", 1.44)
-
-                dt, p_mfld_f, p_cell = self.pressure.read()
-                while isinstance(p_mfld_f, str):
-                    dt, p_mfld_f, p_cell = self.pressure.read()
-                    time.sleep(1)
-
-                while p_mfld_f > target + (0.05 * target):
-                    dt, p_mfld_f, p_cell = self.pressure.read()
-                    time.sleep(1)
-
-                self.valves.close("RoughPump")
-                time.sleep(20)
-                dt, p_mfld_f, p_cell = self.pressure.read()
-                logger.info("Manifold pressure is %s", p_mfld_f)
-                logger.info(type(p_mfld_f))
-                return float(p_mfld_f)
+                return self.pressure.read()
+            except HardwareReadError:
+                return _evacuate_overpressure()
 
         if filename is not None:
             dir_actLog = os.path.join(self.paths.data_directory, str(foldername))
@@ -119,7 +125,7 @@ class GasDelivery:
         pressures = []
         dithers = []
 
-        dt, p_mfld_f, p_cell = self.pressure.read()
+        dt, p_mfld_f, p_cell = _safe_read()
         p_mfld_i = p_mfld_f
         p_mfld_start = p_mfld_f
 
@@ -131,7 +137,7 @@ class GasDelivery:
                 time.sleep(read_short)
                 continue
             else:
-                dt, p_mfld_f, p_cell = self.pressure.read()
+                dt, p_mfld_f, p_cell = _safe_read()
                 act_writes.append(act_write)
                 datetimes.append(dt)
                 pressures.append(p_mfld_f)
@@ -152,7 +158,7 @@ class GasDelivery:
                     and (value <= 1.40)
                 ):
                     time.sleep(read_long)
-                    dt, p_mfld_i, p_cell = self.pressure.read()
+                    dt, p_mfld_i, p_cell = _safe_read()
 
                     act_writes.append(act_write)
                     datetimes.append(dt)
@@ -163,7 +169,7 @@ class GasDelivery:
 
                     if pressure_diff < tolerance:
                         logger.info("Pressure difference is below tolerance")
-                        dt, p_mfld_i, p_cell = self.pressure.read()
+                        dt, p_mfld_i, p_cell = _safe_read()
                         act_write = float(value) + step
                         logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
@@ -182,7 +188,7 @@ class GasDelivery:
                     dithers.append(None)
 
                     time.sleep(read_short)
-                    dt, p_mfld_i, p_cell = self.pressure.read()
+                    dt, p_mfld_i, p_cell = _safe_read()
                     continue
 
                 elif p_mfld_f < 0.5 * target:
@@ -190,7 +196,7 @@ class GasDelivery:
 
                     while p_mfld_f < 0.5 * target:
                         time.sleep(read_short)
-                        dt, p_mfld_i, p_cell = self.pressure.read()
+                        dt, p_mfld_i, p_cell = _safe_read()
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
@@ -204,7 +210,7 @@ class GasDelivery:
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
-                        pressures.append(self.pressure.read()[1])
+                        pressures.append(_safe_read()[1])
                         dithers.append(dither)
 
                         act_write = value - step
@@ -212,7 +218,7 @@ class GasDelivery:
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_long)
 
-                        dt, p_mfld_f, p_cell = self.pressure.read()
+                        dt, p_mfld_f, p_cell = _safe_read()
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
@@ -245,7 +251,7 @@ class GasDelivery:
                 elif (p_mfld_f < target - (0.2 * target)) and (
                     0.125 * target < pressure_diff < 0.5 * target
                 ):
-                    dt, p_mfld_i, p_cell = self.pressure.read()
+                    dt, p_mfld_i, p_cell = _safe_read()
                     logger.info("%s write value is %s for 2", id, act_write)
 
                     act_writes.append(act_write)
@@ -260,12 +266,12 @@ class GasDelivery:
                     pressure_diff <= 0.125 * target
                 ):
                     dither = 0.2
-                    dt, p_mfld_f, p_cell = self.pressure.read()
+                    dt, p_mfld_f, p_cell = _safe_read()
 
                     while p_mfld_start < p_mfld_f < target - (0.2 * target):
                         # Dither between two voltage settings
                         time.sleep(read_short)
-                        dt, p_mfld_i, p_cell = self.pressure.read()
+                        dt, p_mfld_i, p_cell = _safe_read()
                         if p_mfld_i >= target - (0.2 * target):
                             break
 
@@ -281,14 +287,14 @@ class GasDelivery:
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
-                        pressures.append(self.pressure.read()[1])
+                        pressures.append(_safe_read()[1])
                         dithers.append(dither)
 
                         act_write = value - step
                         logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_long)
-                        dt, p_mfld_f, p_cell = self.pressure.read()
+                        dt, p_mfld_f, p_cell = _safe_read()
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
@@ -319,7 +325,7 @@ class GasDelivery:
 
                 elif (target - (0.2 * target)) < p_mfld_f <= (target - (0.1 * target)):
                     dither = 0.2
-                    dt, p_mfld_f, p_cell = self.pressure.read()
+                    dt, p_mfld_f, p_cell = _safe_read()
 
                     while (
                         (target - (0.2 * target))
@@ -328,7 +334,7 @@ class GasDelivery:
                     ):
                         # Dither between two voltage settings
                         time.sleep(read_short)
-                        dt, p_mfld_i, p_cell = self.pressure.read()
+                        dt, p_mfld_i, p_cell = _safe_read()
                         if p_mfld_i >= target - (0.1 * target):
                             break
 
@@ -344,14 +350,14 @@ class GasDelivery:
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
-                        pressures.append(self.pressure.read()[1])
+                        pressures.append(_safe_read()[1])
                         dithers.append(dither)
 
                         act_write = value - step
                         logger.info("%s write value is %s", id, act_write)
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_short)
-                        dt, p_mfld_f, p_cell = self.pressure.read()
+                        dt, p_mfld_f, p_cell = _safe_read()
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
@@ -382,13 +388,13 @@ class GasDelivery:
                     tmp_step = True
                     value = self.valves.write(id, act_write)[1]
                     logger.info("%s write value is %s", id, act_write)
-                    dt, p_mfld_f, p_cell = self.pressure.read()
+                    dt, p_mfld_f, p_cell = _safe_read()
 
                     while (
                         target - (0.1 * target) < p_mfld_f <= target - (0.05 * target)
                     ):
                         time.sleep(read_short)
-                        dt, p_mfld_i, p_cell = self.pressure.read()
+                        dt, p_mfld_i, p_cell = _safe_read()
                         if p_mfld_i > target - (0.05 * target):
                             break
 
@@ -404,7 +410,7 @@ class GasDelivery:
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
-                        pressures.append(self.pressure.read()[1])
+                        pressures.append(_safe_read()[1])
                         dithers.append(dither)
 
                         act_write = value - step
@@ -412,7 +418,7 @@ class GasDelivery:
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_short)
 
-                        dt, p_mfld_f, p_cell = self.pressure.read()
+                        dt, p_mfld_f, p_cell = _safe_read()
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
@@ -455,7 +461,7 @@ class GasDelivery:
 
                     dither = 0.2
                     time.sleep(read_short)
-                    dt, p_mfld_f, p_cell = self.pressure.read()
+                    dt, p_mfld_f, p_cell = _safe_read()
 
                     act_writes.append(act_write)
                     datetimes.append(dt)
@@ -464,7 +470,7 @@ class GasDelivery:
 
                     while target - (0.05 * target) < p_mfld_f < target - tolerance:
                         time.sleep(read_short)
-                        dt, p_mfld_i, p_cell = self.pressure.read()
+                        dt, p_mfld_i, p_cell = _safe_read()
                         if p_mfld_i >= target - tolerance:
                             break
 
@@ -480,7 +486,7 @@ class GasDelivery:
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
-                        pressures.append(self.pressure.read()[1])
+                        pressures.append(_safe_read()[1])
                         dithers.append(dither)
 
                         act_write = value - step
@@ -488,7 +494,7 @@ class GasDelivery:
                         value = self.valves.write(id, act_write)[1]
                         time.sleep(read_long)
 
-                        dt, p_mfld_f, p_cell = self.pressure.read()
+                        dt, p_mfld_f, p_cell = _safe_read()
 
                         act_writes.append(act_write)
                         datetimes.append(dt)
@@ -519,18 +525,18 @@ class GasDelivery:
         value = self.valves.write(id, 1)[1]
         logger.info("Shutting gas valve and waiting for pressure equilibration...")
         time.sleep(60)
-        dt, p_mfld_f, p_cell = self.pressure.read()
+        dt, p_mfld_f, p_cell = _safe_read()
         """maybe deal with O2 faulty valve here???"""
 
         if p_mfld_f > target + (0.1 * target):
             self.valves.write("RoughPump", 1.44)
             logger.info("Evacuating to achieve target...")
             while p_mfld_f > target + (0.05 * target):
-                dt, p_mfld_f, p_cell = self.pressure.read()
+                dt, p_mfld_f, p_cell = _safe_read()
                 time.sleep(1)
             self.valves.close("RoughPump")
             time.sleep(20)
-            dt, p_mfld_f, p_cell = self.pressure.read()
+            dt, p_mfld_f, p_cell = _safe_read()
 
         logger.info(
             "Achieved desired pressure: %s target: %s tolerance: %s",

@@ -7,10 +7,11 @@ class with cached NI device instances.
 from __future__ import annotations
 
 import logging
-from typing import cast
 
 import nidaqmx
 from nidaqmx.constants import AcquisitionType
+
+from src.hardware.errors import HardwareMappingError
 
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,8 @@ class NI_USB6009:
             with nidaqmx.Task() as task:
                 task.ai_channels.add_ai_voltage_chan(
                     f"{self.device_name}/{channel}",
-                    min_val=10.0,
-                    max_val=10.0,
+                    min_val=0.0,
+                    max_val=5.0,
                 )
                 task.timing.cfg_samp_clk_timing(
                     rate=10000,
@@ -38,7 +39,7 @@ class NI_USB6009:
                     samps_per_chan=1,
                 )
                 analog_value = task.read()
-                return cast(float, analog_value)
+                return float(analog_value)
         except nidaqmx.DaqError as exc:
             logger.error("Failed to read analog input from channel %s: %s", channel, exc)
             return 0.0
@@ -83,8 +84,7 @@ class AnalogIO:
 
         device_channel = self.device_map.get(actuator_id)
         if not device_channel:
-            logger.error("No mapping found for ID: %s", actuator_id)
-            return False
+            raise HardwareMappingError(f"No mapping found for actuator ID: {actuator_id}")
 
         device_name, channel = device_channel
         device = self._get_device(device_name)

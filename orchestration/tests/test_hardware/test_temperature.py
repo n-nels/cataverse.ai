@@ -56,7 +56,9 @@ def test_read_temperature_raises_on_modbus_error() -> None:
         watlow.read_temperature()
 
 
-def test_read_temperature_malfunction_path_calls_exit() -> None:
+def test_read_temperature_malfunction_path_raises_thermocouple_fault() -> None:
+    from src.hardware.errors import ThermocoupleFault
+
     client = MagicMock()
 
     rr_bad_temp = MagicMock()
@@ -78,14 +80,15 @@ def test_read_temperature_malfunction_path_calls_exit() -> None:
     ]
 
     watlow = WatlowTemperature(client)
-    with patch("src.hardware.temperature.sys.exit", side_effect=SystemExit):
-        with pytest.raises(SystemExit):
-            watlow.read_temperature()
+    with pytest.raises(ThermocoupleFault):
+        watlow.read_temperature()
 
     client.write_registers.assert_called_once()
 
 
 def test_read_temperature_raises_when_client_missing() -> None:
+    from src.hardware.errors import HardwareConnectionError
+
     watlow = WatlowTemperature(None)
-    with pytest.raises(RuntimeError, match="Modbus client not connected"):
+    with pytest.raises(HardwareConnectionError):
         watlow.read_temperature()

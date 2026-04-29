@@ -24,6 +24,7 @@ class OpusSpectrometer:
         self.socket = socket
         self._context = socket.context
         self._endpoint: str | None = self._get_last_endpoint()
+        # pyzmq's getsockopt returns int | bytes; RCVTIMEO always yields int.
         self._rcv_timeout_ms = cast(int, socket.getsockopt(zmq.RCVTIMEO))
 
     def _get_last_endpoint(self) -> str | None:
@@ -43,7 +44,14 @@ class OpusSpectrometer:
         logger.info("Connected to %s", endpoint)
 
     def reconnect(self) -> None:
-        """Reconnect REQ socket using stored endpoint and timeout settings."""
+        """Reconnect REQ socket using stored endpoint and timeout settings.
+
+        .. warning::
+
+            This method replaces ``self.socket`` with a newly created socket.
+            Any external references to the old socket object become stale
+            after this call.
+        """
 
         if self._endpoint is None:
             self._endpoint = self._get_last_endpoint()
@@ -66,8 +74,26 @@ class OpusSpectrometer:
         else:
             logger.error("No endpoint available; socket could not reconnect.")
 
-    def send(self, message: dict[str, Any]) -> dict[str, Any]:
-        """Send one JSON request and return one parsed reply dictionary."""
+    def send(self, message: dict[str, Any], timeout_ms: int | None = None) -> dict[str, Any]:
+        """Send one JSON request and return one parsed reply dictionary.
+
+        If *timeout_ms* is provided it temporarily overrides the socket's
+        default receive timeout for this single request/reply cycle.
+        """
+
+        old_timeout: int | None = None
+        if timeout_ms is not None:
+            old_timeout = cast(int, self.socket.getsockopt(zmq.RCVTIMEO))
+            self.socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
+
+        try:
+            return self._send_impl(message)
+        finally:
+            if old_timeout is not None:
+                self.socket.setsockopt(zmq.RCVTIMEO, old_timeout)
+
+    def _send_impl(self, message: dict[str, Any]) -> dict[str, Any]:
+        """Internal send/receive implementation."""
 
         message_json = json.dumps(message)
         try:
@@ -111,58 +137,3 @@ class OpusSpectrometer:
             return reply if isinstance(reply, dict) else {"reply": reply}
         except json.JSONDecodeError:
             return {"reply": reply_raw}
-
-    def send_message(self, message: dict[str, Any]) -> bool:
-        """Compatibility send method that mirrors legacy boolean semantics."""
-
-        message_json = json.dumps(message)
-        try:
-            self.socket.send_string(message_json)
-            logger.info("Sent message: %s", message_json)
-            return True
-        except zmq.ZMQError as exc:
-            error_msg = str(exc)
-            logger.error("Failed to send message: %s", error_msg)
-
-            if "current state" in error_msg.lower() or "fsm" in error_msg.lower():
-                logger.warning("Socket in invalid state detected - attempting auto-recovery...")
-                try:
-                    self.reconnect()
-                    logger.info("Retrying message send...")
-                    self.socket.send_string(message_json)
-                    logger.info("Message sent successfully after reconnection: %s", message_json)
-                    return True
-                except Exception as retry_err:
-                    logger.error("Reconnection and retry failed: %s", retry_err)
-                    return False
-            return False
-
-    def receive_message(self, timeout_ms: int | None = None) -> str:
-        """Compatibility receive method that mirrors legacy string semantics."""
-
-        old_timeout: int | None = None
-        try:
-            if timeout_ms is not None:
-                old_timeout = cast(int, self.socket.getsockopt(zmq.RCVTIMEO))
-                self.socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
-
-            message = self.socket.recv_string()
-
-            if timeout_ms is not None and old_timeout is not None:
-                self.socket.setsockopt(zmq.RCVTIMEO, old_timeout)
-
-            return message
-        except zmq.Again:
-            timeout_sec = (timeout_ms if timeout_ms else self._rcv_timeout_ms) / 1000
-            logger.warning(
-                "Receive timeout: No response from server after %.1f seconds", timeout_sec
-            )
-            logger.warning("Socket in invalid state - connection is corrupted")
-            logger.warning("Next send will trigger automatic reconnection")
-            return ""
-        except zmq.ZMQError as exc:
-            logger.error("Failed to receive message: %s", exc)
-            return ""
-        except KeyboardInterrupt:
-            logger.warning("Program interrupted by user. Exiting.")
-            return ""

@@ -21,6 +21,8 @@ from src.control.gas_delivery import GasDelivery
 from src.control.mass_spec_control import MassSpecController
 from src.control.spectrometer_control import SpectrometerController
 from src.control.temperature_control import TemperatureController
+from src.hardware.pressure import MKSPressure
+from src.hardware.temperature import WatlowTemperature
 from src.datalog.mass_spec_logger import MassSpecLogger
 from src.datalog.pressure_logger import PressureLogger
 from src.datalog.temperature_logger import TemperatureLogger
@@ -44,11 +46,13 @@ class AdsorptionExperiment:
     temp: TemperatureController
     ftir: SpectrometerController
     mass_spec: MassSpecController
+    pressure: MKSPressure
+    temperature: WatlowTemperature
 
     def __post_init__(self) -> None:
         self.gas: str | tuple[str, str] | None = None
         self.gas_2: str | None = None
-        self.p_mfld: float | str | None = None
+        self.p_mfld: float | None = None
         self.p_cell_calc: float | tuple[float, float] | None = None
         self.dt: Any = None
         self.chiller_state: bool | None = None
@@ -263,7 +267,7 @@ class AdsorptionExperiment:
         """Acquire spectra from Opus software with threaded acquisition and pressure logging."""
 
         # Initial Opus acquisition with zero repeat/delay
-        self.ftir.opus_vertex80(  # [fix] could use a beter name
+        self.ftir.send_opus_request(
             {
                 "foldername": self.session.folder_name,
                 "filename": self.session.file_name,
@@ -333,7 +337,7 @@ class AdsorptionExperiment:
         self.gas_controller.evacuate_cell("RoughPump")
 
         # Opus Vertex80 for evacuation
-        self.ftir.opus_vertex80(
+        self.ftir.send_opus_request(
             {
                 "end_experiment": True,
                 "foldername": self.session.folder_name,
@@ -374,7 +378,7 @@ class AdsorptionExperiment:
             )
 
             # Send readme command to Opus
-            self.ftir.opus_vertex80({"readme": True})
+            self.ftir.send_opus_request({"readme": True})
 
         except Exception as e:
             logger.info(f"An error occurred while copying the file: {e}")
@@ -447,7 +451,7 @@ class AdsorptionExperiment:
         """Start pressure logging and return the logger handle."""
         log_path = self.session.path_pressure_log
         pressure_logger = PressureLogger(
-            pressure=self.gas_controller.pressure_adapter(),
+            pressure=self.pressure,
             physics=self.session.volumes,
             path=log_path,
             p_mfld_initial=p_mfld_initial,
@@ -470,7 +474,7 @@ class AdsorptionExperiment:
             / f"{self.session.file_name}_tempLog.csv"
         )
         temp_logger = TemperatureLogger(
-            temperature=self.temp.temperature_adapter(),
+            temperature=self.temperature,
             path=log_path,
             read_interval_s=5,
         )

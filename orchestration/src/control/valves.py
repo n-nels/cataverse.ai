@@ -7,10 +7,10 @@ branching, and timing, while delegating writes/reads to hardware-layer adapters.
 from __future__ import annotations
 
 import logging
-import sys
 import time
 
 from src.core.config_loader import ActuatorConfig
+from src.control.errors import SafetyLimitExceeded
 from src.hardware.analog_io import AnalogIO
 from src.hardware.pressure import MKSPressure
 
@@ -29,12 +29,23 @@ class ValveController:
         self.config = config
 
     def write(self, actuator_id: str, voltage: float) -> tuple[str, float]:
-        """Write raw voltage to one actuator channel."""
+        """Write raw voltage to one actuator channel.
+
+        Raises:
+            SafetyLimitExceeded: If *voltage* exceeds ``voltage_max_write``
+                (gas bulb empty). The actuator is closed before raising.
+            HardwareMappingError: If *actuator_id* is not in the actuator map.
+        """
 
         if voltage > self.config.voltage_max_write:
             self.analog_io.write(actuator_id, self.config.voltage_closed)
-            # TODO: consider custom exception
-            sys.exit("Gas bulb empty")
+            raise SafetyLimitExceeded(
+                f"Gas bulb empty: {actuator_id} voltage {voltage} exceeds "
+                f"max write {self.config.voltage_max_write}",
+                actuator_id=actuator_id,
+                measured=voltage,
+                limit=self.config.voltage_max_write,
+            )
 
         self.analog_io.write(actuator_id, voltage)
         return actuator_id, round(float(voltage), 2)
@@ -92,13 +103,23 @@ class ValveController:
         return None
 
     def safe_mass_spec_open(self) -> None:
-        """Run safety sequence before opening MassSpec."""
+        """Run safety sequence before opening MassSpec.
+
+        Raises:
+            SafetyLimitExceeded: If cell pressure exceeds the configured
+                safe-open limit.
+        """
 
         self.close("irCell")
         dt, p_mfld, p_cell = self.pressure.read()
         if p_cell > self.config.mass_spec_open_max_cell_torr:
-            # TODO: consider custom exception
-            sys.exit("Pressure of cell above limit to open safely")
+            raise SafetyLimitExceeded(
+                f"Cell pressure {p_cell} Torr exceeds safe limit "
+                f"{self.config.mass_spec_open_max_cell_torr} Torr to open MassSpec",
+                actuator_id="MassSpec",
+                measured=p_cell,
+                limit=self.config.mass_spec_open_max_cell_torr,
+            )
         return None
 
     def _log_write(self, actuator_id: str, value: float) -> None:

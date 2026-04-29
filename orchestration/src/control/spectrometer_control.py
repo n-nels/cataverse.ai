@@ -23,7 +23,7 @@ class SpectrometerController:
     def __init__(self, spectrometer: OpusSpectrometer) -> None:
         self.spectrometer = spectrometer
 
-    def opus_vertex80(
+    def send_opus_request(
         self,
         message: dict[str, Any],
         timeout_ms: int = 300000,
@@ -31,40 +31,31 @@ class SpectrometerController:
     ) -> str | None:
         """Collect one spectrum with timeout/retry behavior."""
 
-        # Attempt to send message
-        msg = self.spectrometer.send_message(message)
-        if not msg:
-            logger.info("Error: Failed to send message to OPUS")
-            return None
+        reply = self.spectrometer.send(message, timeout_ms=timeout_ms)
+        if not reply:
+            logger.error("Failed to send/receive message to OPUS")
+            if not retry_on_timeout:
+                return None
 
-        logger.info("Collecting spectrum...")
-        reply = self.spectrometer.receive_message(timeout_ms=timeout_ms)
+            try:
+                self.spectrometer.reconnect()
+                time.sleep(2)  # Wait for server to recover
 
-        # Check if we got a valid response
-        if reply:
-            logger.info("fileid: %s", reply)
-            return reply
-
-        if not retry_on_timeout:
-            logger.info("Error: No response from OPUS (timeout)")
-            return None
-
-        try:
-            self.spectrometer.reconnect()
-            time.sleep(2)  # Wait for server to recover
-
-            logger.info("Retrying message after reconnect...")
-            msg = self.spectrometer.send_message(message)
-            if msg:
-                reply = self.spectrometer.receive_message(timeout_ms=timeout_ms)
+                logger.info("Retrying message after reconnect...")
+                reply = self.spectrometer.send(message, timeout_ms=timeout_ms)
                 if reply:
-                    logger.info("fileid: %s", reply)
-                    return reply
-        except Exception as exc:
-            logger.info("Reconnection or retry failed: %s", exc)
+                    file_id = reply.get("reply", str(reply))
+                    logger.info("fileid: %s", file_id)
+                    return file_id
+            except Exception as exc:
+                logger.error("Reconnection or retry failed: %s", exc)
 
-        logger.info("Error: No response from OPUS after timeout and retry")
-        return None
+            logger.error("No response from OPUS after timeout and retry")
+            return None
+
+        file_id = reply.get("reply", str(reply))
+        logger.info("fileid: %s", file_id)
+        return file_id
 
     def opus_acquire(
         self,
@@ -87,7 +78,7 @@ class SpectrometerController:
         }
 
         if do_bckg or all_fileids:
-            self.opus_vertex80(message)
+            self.send_opus_request(message)
 
         message = {
             "foldername": foldername,
@@ -102,7 +93,7 @@ class SpectrometerController:
         for i in range(len(delay)):
             for k in range(repeat[j]):
                 now = datetime.now()
-                self.opus_vertex80(message)
+                self.send_opus_request(message)
 
                 logger.info(
                     "Collected spectrum %s of %s for %s minute delay",

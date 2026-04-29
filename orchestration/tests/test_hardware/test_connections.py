@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.core.config_loader import (
     ActuatorConfig,
     HardwareConfig,
@@ -152,3 +154,49 @@ def test_device_manager_disconnect_cleans_up_resources() -> None:
         assert manager.analog_io is None
         assert manager.spectrometer is None
         assert manager.power is None
+
+
+def test_device_manager_connect_raises_when_watlow_fails() -> None:
+    from src.hardware.errors import HardwareConnectionError
+
+    hardware_config = _hardware_config_fixture()
+
+    with (
+        patch("src.hardware.connections.serial.Serial") as serial_cls,
+        patch("src.hardware.connections.ModbusClient") as modbus_cls,
+        patch("src.hardware.connections.zmq.Context"),
+        patch("src.hardware.connections.KasaPower"),
+    ):
+        serial_cls.return_value = MagicMock(is_open=True)
+
+        watlow_modbus = MagicMock()
+        watlow_modbus.connect.return_value = False
+        modbus_cls.return_value = watlow_modbus
+
+        manager = DeviceManager(hardware_config)
+        with pytest.raises(HardwareConnectionError, match="Watlow"):
+            manager.connect()
+
+
+def test_device_manager_connect_raises_when_extrel_fails() -> None:
+    from src.hardware.errors import HardwareConnectionError
+
+    hardware_config = _hardware_config_fixture()
+
+    with (
+        patch("src.hardware.connections.serial.Serial") as serial_cls,
+        patch("src.hardware.connections.ModbusClient") as modbus_cls,
+        patch("src.hardware.connections.zmq.Context"),
+        patch("src.hardware.connections.KasaPower"),
+    ):
+        serial_cls.return_value = MagicMock(is_open=True)
+
+        watlow_modbus = MagicMock()
+        watlow_modbus.connect.return_value = True
+        extrel_modbus = MagicMock()
+        extrel_modbus.connect.return_value = False
+        modbus_cls.side_effect = [watlow_modbus, extrel_modbus]
+
+        manager = DeviceManager(hardware_config)
+        with pytest.raises(HardwareConnectionError, match="Extrel"):
+            manager.connect()

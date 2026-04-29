@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from src.core.config_loader import load_config
+from src.control.errors import SafetyLimitExceeded
 from src.control.valves import ValveController
 
 
@@ -70,7 +71,7 @@ def test_safe_turbo_open_roughs_until_pressure_below_limit_then_closes() -> None
     assert len(poll_sleep_calls) == 2
 
 
-def test_safe_mass_spec_open_exits_when_cell_pressure_above_limit() -> None:
+def test_safe_mass_spec_open_raises_when_cell_pressure_above_limit() -> None:
     analog_io = MagicMock()
     pressure = MagicMock()
     pressure.read.return_value = (
@@ -83,22 +84,20 @@ def test_safe_mass_spec_open_exits_when_cell_pressure_above_limit() -> None:
     )
 
     with patch("src.control.valves.time.sleep"):
-        with pytest.raises(
-            SystemExit, match="Pressure of cell above limit to open safely"
-        ):
+        with pytest.raises(SafetyLimitExceeded, match="Cell pressure"):
             valves.safe_mass_spec_open()
 
     analog_io.write.assert_called_once_with("irCell", _ACTUATOR_CFG.voltage_closed)
 
 
-def test_write_over_max_voltage_closes_then_exits() -> None:
+def test_write_over_max_voltage_closes_then_raises() -> None:
     analog_io = MagicMock()
     pressure = MagicMock()
     valves = ValveController(
         analog_io=analog_io, pressure=pressure, config=_ACTUATOR_CFG
     )
 
-    with pytest.raises(SystemExit, match="Gas bulb empty"):
+    with pytest.raises(SafetyLimitExceeded, match="Gas bulb empty"):
         valves.write("H2", _ACTUATOR_CFG.voltage_max_write + 0.01)
 
     analog_io.write.assert_called_once_with("H2", _ACTUATOR_CFG.voltage_closed)

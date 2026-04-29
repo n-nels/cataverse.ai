@@ -139,6 +139,8 @@ def main():
         temp=temp_controller,
         ftir=ftir_controller,
         mass_spec=ms_controller,
+        pressure=devices.pressure,
+        temperature=devices.temperature,
     )
 
     iso_exp = IsotopicExchangeCalibration(
@@ -147,6 +149,7 @@ def main():
         temp=temp_controller,
         ftir=ftir_controller,
         mass_spec=ms_controller,
+        pressure=devices.pressure,
     )
 
     def run_adsorption_experiment():

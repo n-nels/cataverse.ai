@@ -13,6 +13,7 @@ from typing import Any
 import requests
 
 from src.core.config_loader import KasaConfig
+from src.hardware.errors import HardwareConnectionError
 
 
 logger = logging.getLogger(__name__)
@@ -42,8 +43,10 @@ class KasaPower:
         """Log in to Kasa cloud and cache auth token/url."""
 
         if not self.username or not self.password:
-            logger.error("Kasa credentials are not configured.")
-            return False
+            raise HardwareConnectionError(
+                "Kasa credentials not configured. "
+                "Set username/password in KasaConfig or KASA_USERNAME/KASA_PASSWORD env vars."
+            )
 
         self.token = None
         self.url = None
@@ -76,13 +79,35 @@ class KasaPower:
         return False
 
     def set_state(self, device_id: str, on: bool) -> dict[str, Any]:
-        """Set smart-plug relay state for the given device ID."""
+        """Set smart-plug relay state for the given device ID.
 
-        # Preserve legacy command semantics from subprocess usage:
-        # each state change performs a fresh login before control.
-        if not self.login():
-            logger.error("Unable to log in. Cannot control Kasa device.")
-            return {}
+        Uses a cached auth token when available.  On auth failure (non-zero
+        ``error_code``), re-authenticates once and retries.
+        """
+
+        if self.token is None:
+            logger.info("No cached Kasa token — logging in.")
+            if not self.login():
+                logger.error("Unable to log in. Cannot control Kasa device.")
+                return {}
+
+        result = self._send_control(device_id, on)
+
+        # Re-authenticate once on auth failure
+        error_code = result.get("error_code")
+        if error_code is not None and error_code != 0:
+            logger.warning(
+                "Kasa control returned error_code %s — re-authenticating.", error_code
+            )
+            if not self.login():
+                logger.error("Re-login failed. Cannot control Kasa device.")
+                return {}
+            result = self._send_control(device_id, on)
+
+        return result
+
+    def _send_control(self, device_id: str, on: bool) -> dict[str, Any]:
+        """Send a relay-state control request using the cached token."""
 
         payload = {
             "method": "passthrough",

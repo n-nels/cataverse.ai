@@ -47,14 +47,6 @@ class TemperatureController:
 
         return self.temperature.read_temperature()
 
-    def temperature_adapter(self) -> WatlowTemperature:
-        """Return temperature adapter via controller API.
-
-        Exists so experiment protocols do not reach through to adapter fields.
-        """
-
-        return self.temperature
-
     def watlow(
         self,
         filename: str | None,
