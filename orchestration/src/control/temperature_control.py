@@ -308,3 +308,12 @@ class TemperatureController:
         """Set a Kasa smart-plug state by plug id."""
 
         self.power.set_state(plug_id, cmd)
+
+    def set_heating_elements(
+        self, chiller: bool, manifold_variac: bool, vessel_variac: bool
+    ) -> None:
+        """Set chiller and both variac smart-plug states in one call."""
+
+        self.set_plug_state(self.kasa.chiller_id, chiller)
+        self.set_plug_state(self.kasa.variac_id, manifold_variac)
+        self.set_plug_state(self.kasa.variac_id_vsl, vessel_variac)

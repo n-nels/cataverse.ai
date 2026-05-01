@@ -9,10 +9,14 @@ from __future__ import annotations
 
 import glob
 import os
-import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.hardware.pressure import MKSPressure
+    from src.hardware.mass_spec import ExtrelMassSpec
 
 from src.core.config_loader import PathsConfig, SampleConfig, SystemConstants
 from src.datalog.file_io import (
@@ -20,6 +24,8 @@ from src.datalog.file_io import (
     log_experiment_parameters,
     write_material_parameters,
 )
+from src.datalog.pressure_logger import PressureLogger
+from src.datalog.mass_spec_logger import MassSpecLogger
 from src.core.physics import SystemVolumes
 
 
@@ -223,6 +229,22 @@ class ExperimentSession:
                     return True
         return False
 
+    def _read_field_value(self, section_name: str) -> str | None:
+        """Return the ``- Value: ...`` content for a README section, or None."""
+
+        if not self.path_readme or not os.path.exists(self.path_readme):
+            return None
+
+        found_header = False
+        with open(self.path_readme, "r") as file:
+            for line in file:
+                if line.strip() == f"## {section_name}":
+                    found_header = True
+                    continue
+                if found_header and line.strip().startswith("- Value:"):
+                    return line.strip().removeprefix("- Value:").strip()
+        return None
+
     def log_pretreatment(
         self,
         gas: Any,
@@ -372,8 +394,19 @@ class ExperimentSession:
 
                 file.write(line)
 
-    def is_new_sample_experiment(self) -> None: # [fix] this seems fragile!
-        """Append ``is_new_sample`` metadata field using legacy share-drive rule."""
+    def is_new_sample_experiment(self) -> None:
+        """Append ``is_new_sample`` metadata field using legacy share-drive rule.
+
+        Safety-net check for when the user forgets to pass ``new_sample=True``
+        to ``new_experiment()``.  Derives the value from two signals:
+
+        1. Exactly one ``*_CarbonylPeakArea.csv`` file exists on the share
+           drive for this sample folder (indicates prior peak-fit data).
+        2. The current experiment was marked successful (``exp_success = True``
+           in the README).
+
+        Both conditions must hold for ``is_new_sample`` to be ``True``.
+        """
 
         if not self.path_readme or not self.folder_name:
             return
@@ -384,12 +417,8 @@ class ExperimentSession:
         if len(carbonyl_files) != 1:
             is_new_sample = False
         else:
-            with open(self.path_readme, "r", encoding="utf-8") as file:
-                content = file.read()
-
-            pattern = r"##\s*exp_success.*?-\s*Value:\s*(True|true)"
-            match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
-            is_new_sample = match is not None
+            success_value = self._read_field_value("exp_success")
+            is_new_sample = success_value is not None and success_value.lower() == "true"
 
         log_experiment_parameters(
             self.path_readme,
@@ -401,3 +430,38 @@ class ExperimentSession:
                 }
             ],
         )
+
+    def start_pressure_log(
+        self,
+        pressure: MKSPressure,
+        p_mfld_initial: float,
+        p_cell_initial: float,
+    ) -> PressureLogger:
+        """Construct, start, and return a PressureLogger for this session."""
+
+        pressure_logger = PressureLogger(
+            pressure=pressure,
+            volumes=self.volumes,
+            sample=self.sample,
+            constants=self.constants,
+            path=self.path_pressure_log,
+            p_mfld_initial=p_mfld_initial,
+            p_cell_initial=p_cell_initial,
+        )
+        pressure_logger.start()
+        return pressure_logger
+
+    def start_mass_spec_log(
+        self,
+        mass_spec: ExtrelMassSpec,
+        stream_tags: list[str],
+    ) -> MassSpecLogger:
+        """Construct, start, and return a MassSpecLogger for this session."""
+
+        ms_logger = MassSpecLogger(
+            mass_spec=mass_spec,
+            path=Path(self.path_ms_log),
+            stream_tags=stream_tags,
+        )
+        ms_logger.start()
+        return ms_logger

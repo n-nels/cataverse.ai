@@ -7,15 +7,13 @@ new typed interfaces.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import shutil
 import threading
 import time
 import os
 import logging
 from typing import Any
-from typing import cast
-from pathlib import Path
 
 from src.control.gas_delivery import GasDelivery
 from src.control.mass_spec_control import MassSpecController
@@ -48,13 +46,13 @@ class AdsorptionExperiment:
     pressure: MKSPressure
     temperature: WatlowTemperature
 
-    def __post_init__(self) -> None:
-        self.gas: str | tuple[str, str] | None = None
-        self.gas_2: str | None = None
-        self.p_mfld: float | None = None
-        self.p_cell_calc: float | tuple[float, float] | None = None
-        self.dt: Any = None
-        self.chiller_state: bool | None = None
+    # Runtime state — set by protocol methods during experiment execution.
+    gas: str | tuple[str, str] | None = field(default=None)
+    gas_2: str | None = field(default=None)
+    p_mfld: float | None = field(default=None)
+    p_cell_calc: float | tuple[float, float] | None = field(default=None)
+    dt: Any = field(default=None)
+    chiller_state: bool | None = field(default=None)
 
     def acquire_ms_spectra(self) -> MassSpecLogger:
         """Start mass-spec streaming with legacy valve/sequence ordering."""
@@ -70,12 +68,10 @@ class AdsorptionExperiment:
         else:
             logger.info("Failed to set Extrel sequence")
 
-        ms_logger = MassSpecLogger(
+        ms_logger = self.session.start_mass_spec_log(
             mass_spec=self.mass_spec.mass_spec_adapter(),
-            path=Path(cast(str, self.session.path_ms_log)),
             stream_tags=self.mass_spec.stream_tags,
         )
-        ms_logger.start()
         time.sleep(60)
         return ms_logger
 
@@ -125,13 +121,10 @@ class AdsorptionExperiment:
         self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
 
         if log_params:
-            p_mfld_value = cast(float, self.p_mfld)
-            p_cell_value = cast(float, p_cell)
-            t_cell_value = cast(float, t_cell)
             self.session.log_pretreatment(
                 gas=self.gas,
-                p_gas_meas=(p_mfld_value, p_cell_value),
-                t_cell=t_cell_value,
+                p_gas_meas=(self.p_mfld, p_cell),
+                t_cell=t_cell,
                 rate=rate,
                 duration=duration,
                 chiller_state=self.chiller_state,
@@ -344,17 +337,25 @@ class AdsorptionExperiment:
             }
         )
 
-        # Mark experiment as successful
-        self.session.mark_success(success=True)
+        # Mark experiment as successful and finalize
+        self.finalize(success=True)
+
+    def finalize(self, success: bool) -> None:
+        """End-of-experiment cleanup: mark success, copy files, notify OPUS.
+
+        Safe to call multiple times — ``mark_success`` and share-drive copies
+        are idempotent (copy overwrites, success field is rewritten).
+        Must be called after ``pressure_logger.stop()`` so the CSV is not
+        held open during the copy on Windows.
+        """
+
+        self.session.mark_success(success=success)
         time.sleep(5)
 
-        # Check if new sample experiment
         self.session.is_new_sample_experiment()
         time.sleep(5)
 
-        # Copy files to share drive
         try:
-            # Copy README file
             shutil.copy2(
                 self.session.path_readme,
                 os.path.join(
@@ -363,7 +364,6 @@ class AdsorptionExperiment:
                     f"{self.session.file_name}_README.md",
                 ),
             )
-            # Copy pressure log file
             shutil.copy2(
                 self.session.path_pressure_log,
                 os.path.join(
@@ -373,7 +373,6 @@ class AdsorptionExperiment:
                 ),
             )
 
-            # Send readme command to Opus
             self.ftir.send_opus_request({"readme": True})
 
         except Exception as e:
@@ -429,28 +428,15 @@ class AdsorptionExperiment:
         self, chiller_cmd: bool, variac_cmd: bool, variac_vsl_cmd: bool
     ) -> None:
         """Set the state of the chiller and variac smart plugs."""
-        if chiller_cmd is not None:
-            self.chiller_state = chiller_cmd
-            self.temp.set_plug_state(self.temp.kasa.chiller_id, chiller_cmd)
-        if variac_cmd is not None:
-            self.temp.set_plug_state(self.temp.kasa.variac_id, variac_cmd)
-        if variac_vsl_cmd is not None:
-            self.temp.set_plug_state(self.temp.kasa.variac_id_vsl, variac_vsl_cmd)
+        self.chiller_state = chiller_cmd
+        self.temp.set_heating_elements(chiller_cmd, variac_cmd, variac_vsl_cmd)
 
     def start_pressure_log(
         self, p_mfld_initial: Any, p_cell_initial: Any
     ) -> PressureLogger:
         """Start pressure logging and return the logger handle."""
-        log_path = self.session.path_pressure_log
-        pressure_logger = PressureLogger(
+        return self.session.start_pressure_log(
             pressure=self.pressure,
-            volumes=self.session.volumes,
-            sample=self.session.sample,
-            constants=self.session.constants,
-            path=log_path,
             p_mfld_initial=p_mfld_initial,
             p_cell_initial=p_cell_initial,
         )
-        pressure_logger.start()
-
-        return pressure_logger
