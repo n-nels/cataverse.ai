@@ -18,7 +18,16 @@ logger = logging.getLogger(__name__)
 
 
 class SpectrometerController:
-    """Control OPUS acquisition request/retry sequences."""
+    """Control OPUS acquisition request/retry sequences.
+
+    Concurrency
+    -----------
+    ``send_opus_request`` and ``opus_acquire`` communicate over a single ZMQ
+    socket owned by the ``OpusSpectrometer`` adapter.  These methods are **not**
+    thread-safe — concurrent calls will interleave request/reply frames.  The
+    experiment layer launches ``opus_acquire`` on a background thread; no other
+    thread should call into this controller while an acquisition is in progress.
+    """
 
     def __init__(self, spectrometer: OpusSpectrometer) -> None:
         self.spectrometer = spectrometer

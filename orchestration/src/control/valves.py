@@ -19,7 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 class ValveController:
-    """Behavior-frozen valve controller using hardware-layer adapters."""
+    """Behavior-frozen valve controller using hardware-layer adapters.
+
+    Concurrency
+    -----------
+    No method on this class is thread-safe.  ``write``, ``dither``, and
+    ``close_all`` share the ``AnalogIO`` NI-DAQmx session and the
+    ``MKSPressure`` serial connection.  Concurrent calls from multiple threads
+    will produce undefined hardware behaviour.  Callers must serialise access
+    externally.
+    """
 
     def __init__(
         self, analog_io: AnalogIO, pressure: MKSPressure, config: ActuatorConfig

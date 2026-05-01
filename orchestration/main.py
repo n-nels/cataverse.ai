@@ -109,7 +109,6 @@ def main():
     gas_controller = GasDelivery(
         valves=valves,
         pressure=devices.pressure,
-        paths=config.paths,
         total_volume_l=volumes.total,
         temperature_k=config.system.manifold_temperature_k,
         gas_constant=config.system.gas_constant,

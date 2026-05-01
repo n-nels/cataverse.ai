@@ -76,6 +76,7 @@ def mock_session():
     session.file_name = "test_experiment"
     session.folder_name = "test_folder"
     session.path_pressure_log = "/tmp/test_pressure.csv"
+    session.path_actuator_log = "/tmp/test_act.csv"
     session.path_ms_log = "/tmp/test_ms.csv"
     session.path_readme = "/tmp/test_readme.md"
     session.paths.data_directory = "/tmp"
@@ -232,11 +233,16 @@ class TestAdsorptionExperiment:
             variac_vsl_cmd=False,
         )
 
-        # Verify Kasa plug states set
-        mock_temp_controller.chiller_state.assert_called_once_with(True)
-        mock_temp_controller.variac_state.assert_called_once_with(True)
-        mock_temp_controller.kasa_plug_state.assert_called_once_with(
-            "variac_id_vsl", False
+        # Verify Kasa plug states set via set_plug_state
+        assert mock_temp_controller.set_plug_state.call_count == 3
+        mock_temp_controller.set_plug_state.assert_any_call(
+            mock_temp_controller.kasa.chiller_id, True
+        )
+        mock_temp_controller.set_plug_state.assert_any_call(
+            mock_temp_controller.kasa.variac_id, True
+        )
+        mock_temp_controller.set_plug_state.assert_any_call(
+            mock_temp_controller.kasa.variac_id_vsl, False
         )
 
     def test_start_pressure_log(self, adsorption_experiment, mock_gas_controller):
@@ -245,13 +251,6 @@ class TestAdsorptionExperiment:
 
         # Verify logger returned
         assert pressure_logger is not None
-
-    def test_start_temperature_log(self, adsorption_experiment, mock_gas_controller):
-        """Test temperature logging thread start."""
-        temp_logger = adsorption_experiment.start_temperature_log()
-
-        # Verify logger returned
-        assert temp_logger is not None
 
 
 class TestAdsorptionExperimentSequence:

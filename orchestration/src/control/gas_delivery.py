@@ -7,16 +7,14 @@ new control/hardware adapters.
 
 from __future__ import annotations
 
-import os
 import time
 import logging
 from datetime import datetime, timedelta
 
-from src.core.config_loader import PathsConfig
 from src.hardware.pressure import MKSPressure, PressureReading
 from src.hardware.errors import HardwareReadError
 from src.core.physics import cell_pressure_from_manifold
-from src.datalog.file_io import create_directory, log_actuator_state
+from src.datalog.file_io import log_actuator_state
 from .valves import ValveController
 
 
@@ -24,20 +22,30 @@ logger = logging.getLogger(__name__)
 
 
 class GasDelivery:
-    """Behavior-frozen gas delivery controller using valve and pressure adapters."""
+    """Behavior-frozen gas delivery controller using valve and pressure adapters.
+
+    Concurrency
+    -----------
+    No method on this class is thread-safe.  ``deliver_gas_to_manifold`` and
+    ``deliver_gas_to_cell`` perform multi-step valve/pressure sequences that
+    must not be interleaved.  ``read_pressure`` shares the underlying
+    ``MKSPressure`` serial connection with ``ValveController.dither`` — callers
+    must ensure these are not invoked concurrently.  The experiment layer
+    currently launches ``cell_open_admit`` on a background thread; contention
+    on the shared pressure adapter is unguarded.  A full fix is deferred to
+    Phase 8.7.
+    """
 
     def __init__(
         self,
         valves: ValveController,
         pressure: MKSPressure,
-        paths: PathsConfig,
         total_volume_l: float,
         temperature_k: float,
         gas_constant: float,
     ) -> None:
         self.valves = valves
         self.pressure = pressure
-        self.paths = paths
         self.total_volume_l = total_volume_l
         self.temperature_k = temperature_k
         self.gas_constant = gas_constant
@@ -52,8 +60,7 @@ class GasDelivery:
 
     def deliver_gas_to_manifold(
         self,
-        filename: str | None,
-        foldername: str | None,
+        act_log_path: str | None,
         id: str,
         target: float,
         openMS: bool = True,
@@ -99,12 +106,8 @@ class GasDelivery:
             except HardwareReadError:
                 return _evacuate_overpressure()
 
-        if filename is not None:
-            dir_actLog = os.path.join(self.paths.data_directory, str(foldername))
-            path_actLog = os.path.join(dir_actLog, filename + "_actLog.csv")
-            create_directory(dir_actLog)
-            """[fix] move elsewhere since they create files?
-            """
+        if act_log_path is not None:
+            path_actLog = act_log_path
 
         self.valves.close("RoughPump")
         self.valves.close("TurboPump")

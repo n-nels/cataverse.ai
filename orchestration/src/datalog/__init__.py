@@ -11,7 +11,7 @@ import logging
 
 from .mass_spec_logger import MassSpecLogger
 from .pressure_logger import PressureLogger
-from .temperature_logger import TemperatureLogger
+from .temperature_log_writer import TemperatureLogWriter
 
 
 _LOGGING_CONFIGURED = False
@@ -44,7 +44,7 @@ def get_logger(name: str) -> logging.Logger:
 
 __all__ = [
     "PressureLogger",
-    "TemperatureLogger",
+    "TemperatureLogWriter",
     "MassSpecLogger",
     "configure_logging",
     "get_logger",

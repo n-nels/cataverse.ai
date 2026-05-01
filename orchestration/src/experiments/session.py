@@ -174,6 +174,7 @@ class ExperimentSession:
 
         self.path_readme = os.path.join(base_dir, f"{self.file_name}_README.md")
         self.path_pressure_log = os.path.join(base_dir, f"{self.file_name}_pressureLog.csv")
+        self.path_actuator_log = os.path.join(base_dir, f"{self.file_name}_actLog.csv")
         self.path_ms_log = os.path.join(base_dir, f"{self.file_name}_msLog.csv")
 
         metal_density = (

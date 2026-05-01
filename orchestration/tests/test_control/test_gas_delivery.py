@@ -31,7 +31,6 @@ def test_deliver_gas_to_manifold_executes_expected_valve_write_sequence() -> Non
     gas = GasDelivery(
         valves=valves,
         pressure=pressure,
-        paths=_CFG.paths,
         total_volume_l=_CFG.system.manifold_m1m2m3_volume_l
         + _CFG.system.cell_volume_l
         + _CFG.system.valve_volume_l
@@ -42,8 +41,7 @@ def test_deliver_gas_to_manifold_executes_expected_valve_write_sequence() -> Non
 
     with patch("src.control.gas_delivery.time.sleep"):
         actuator_id, p_final = gas.deliver_gas_to_manifold(
-            filename=None,
-            foldername=None,
+            act_log_path=None,
             id="H2",
             target=1.0,
             openMS=False,
@@ -92,7 +90,6 @@ def test_evacuate_cell_uses_roughpump_sequence_then_opens_turbopump() -> None:
     gas = GasDelivery(
         valves=valves,
         pressure=pressure,
-        paths=_CFG.paths,
         total_volume_l=_CFG.system.manifold_m1m2m3_volume_l
         + _CFG.system.cell_volume_l
         + _CFG.system.valve_volume_l

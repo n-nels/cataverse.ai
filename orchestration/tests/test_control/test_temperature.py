@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, call, patch
 
-import src.control.temperature_control as temperature_control_module
 from src.core.config_loader import load_config
 from src.control.temperature_control import TemperatureController
 
@@ -27,7 +26,9 @@ def test_watlow_ramp_returns_tuple_and_writes_setpoints() -> None:
 
     with (
         patch("src.control.temperature_control.time.sleep"),
-        patch("src.control.temperature_control.log_temperature"),
+        patch(
+            "src.datalog.temperature_log_writer.TemperatureLogWriter.write_ramp_rows"
+        ),
     ):
         result = controller.watlow(
             filename="run1",
@@ -48,8 +49,8 @@ def test_watlow_cooling_path_controls_variac_states() -> None:
     temperature = MagicMock()
     power = MagicMock()
 
-    # initial read, while-loop read, then hold_temp read
-    temperature.read_temperature.side_effect = [40.0, 25.0, 25.0]
+    # initial read, while-loop read
+    temperature.read_temperature.side_effect = [40.0, 25.0]
     temperature.set_temperature.return_value = True
 
     controller = TemperatureController(
@@ -58,9 +59,6 @@ def test_watlow_cooling_path_controls_variac_states() -> None:
         paths=_CFG.paths,
         kasa=_CFG.hardware.kasa,
     )
-
-    # stabilize module-global legacy path state for filename=None branch
-    temperature_control_module.path_tempLog = "unused.csv"
 
     with patch("src.control.temperature_control.time.sleep"):
         result = controller.watlow(
@@ -82,7 +80,7 @@ def test_watlow_cooling_path_controls_variac_states() -> None:
     ]
 
 
-def test_kasa_helpers_delegate_to_power_set_state() -> None:
+def test_set_plug_state_delegates_to_power_set_state() -> None:
     temperature = MagicMock()
     power = MagicMock()
     controller = TemperatureController(
@@ -92,9 +90,9 @@ def test_kasa_helpers_delegate_to_power_set_state() -> None:
         kasa=_CFG.hardware.kasa,
     )
 
-    controller.chiller_state(True)
-    controller.variac_state(False)
-    controller.kasa_plug_state("plug-123", True)
+    controller.set_plug_state(_CFG.hardware.kasa.chiller_id, True)
+    controller.set_plug_state(_CFG.hardware.kasa.variac_id, False)
+    controller.set_plug_state("plug-123", True)
 
     assert power.set_state.call_args_list == [
         call(_CFG.hardware.kasa.chiller_id, True),

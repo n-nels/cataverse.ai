@@ -67,7 +67,6 @@ def gas_controller(valve_controller, mock_device_manager, app_config):
     return GasDelivery(
         valves=valve_controller,
         pressure=mock_device_manager.pressure,
-        paths=app_config.paths,
         total_volume_l=(
             app_config.system.manifold_m1m2m3_volume_l
             + app_config.system.cell_volume_l

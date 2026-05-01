@@ -56,6 +56,16 @@ class IsotopicExchangeCalibration:
         self.chiller_state: bool | None = None
         self.filename: str | None = None  # for isoX naming convention
 
+    def _act_log_path(self) -> str | None:
+        """Build actuator log path from isoX naming convention, or None."""
+        if self.filename is None:
+            return None
+        return str(
+            Path(self.session.paths.data_directory)
+            / self.foldername
+            / f"{self.filename}_actLog.csv"
+        )
+
     def isoX_calib_main(self, xchgTime: list[int], sleepTime: int) -> None:
         """Main function to run the isotopic exchange calibration experiment."""
         for i in range(len(xchgTime)):
@@ -66,8 +76,7 @@ class IsotopicExchangeCalibration:
             self.gas_controller.valves.open("MassSpec")
             time.sleep(120)
             self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
-                filename=self.filename,
-                foldername=self.foldername,
+                act_log_path=self._act_log_path(),
                 id="CO",
                 target=1.0,
                 openMS=True,
@@ -136,8 +145,7 @@ class IsotopicExchangeCalibration:
 
             if i != len(xchgTime) - 1:
                 self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
-                    filename=self.filename,
-                    foldername=self.foldername,
+                    act_log_path=self._act_log_path(),
                     id="13CO",
                     target=1.0,
                     openMS=True,
@@ -213,8 +221,7 @@ class IsotopicExchangeCalibration:
     def supply_gas_to_mfld(self, gas: str, targetPressure: float) -> None:
         """Supply gas to the manifold. The target pressure corresponds to the pressure in the total volume of the system."""
         self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
-            self.session.file_name,
-            self.session.folder_name,
+            self.session.path_actuator_log,
             id=gas,
             target=targetPressure,
             openMS=True,
@@ -231,8 +238,7 @@ class IsotopicExchangeCalibration:
         self.gas_controller.valves.open("TurboPump")
         time.sleep(120)
         self.gas_2, self.p_mfld_2 = self.gas_controller.deliver_gas_to_manifold(
-            self.session.file_name,
-            self.session.folder_name,
+            self.session.path_actuator_log,
             id=gas,
             target=targetPressure,
             openMS=False,
@@ -359,9 +365,9 @@ class IsotopicExchangeCalibration:
         self, chiller_cmd: bool, variac_cmd: bool, variac_vsl_cmd: bool
     ) -> None:
         """Set the state of the chiller and variac. The chiller_cmd is used to set the state of the chiller and the variac_cmd is used to set the state of the variac."""
-        self.temp.kasa_plug_state(self.temp.kasa.chiller_id, chiller_cmd)
-        self.temp.kasa_plug_state(self.temp.kasa.variac_id, variac_cmd)
-        self.temp.kasa_plug_state(self.temp.kasa.variac_id_vsl, variac_vsl_cmd)
+        self.temp.set_plug_state(self.temp.kasa.chiller_id, chiller_cmd)
+        self.temp.set_plug_state(self.temp.kasa.variac_id, variac_cmd)
+        self.temp.set_plug_state(self.temp.kasa.variac_id_vsl, variac_vsl_cmd)
 
     def copy_readme(self) -> None:
         """Copy the README.md file to the peakFit folder."""
@@ -424,7 +430,7 @@ class IsotopicExchangeCalibration:
 
             p_mfld_calc = (initial_mfld_moles * R * t_mfld) / v_source_m1m2m3
             id, p_mfld = self.gas_controller.deliver_gas_to_manifold(
-                filename=None, foldername=None, id="13CO", target=p_mfld_calc
+                act_log_path=None, id="13CO", target=p_mfld_calc
             )
             moles = p_mfld * v_source_m1m2m3 / (R * t_mfld)
 
@@ -462,8 +468,7 @@ class IsotopicExchangeCalibration:
             time.sleep(300)
             self.gas_controller.valves.close("TurboPump")
             id, p_mfld = self.gas_controller.deliver_gas_to_manifold(
-                filename=None,
-                foldername=None,
+                act_log_path=None,
                 id="CO",
                 target=v_source_m1m2m3 / v_source_m1m2,
             )
@@ -501,7 +506,7 @@ class IsotopicExchangeCalibration:
         i = 0
         for _ in range(2):
             self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
-                filename=None, foldername=None, id="CO", target=1.0
+                act_log_path=None, id="CO", target=1.0
             )
             self.gas_controller.deliver_gas_to_cell()
             self.gas_controller.valves.close("irCell")

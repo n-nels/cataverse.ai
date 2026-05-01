@@ -25,7 +25,6 @@ from src.hardware.pressure import MKSPressure
 from src.hardware.temperature import WatlowTemperature
 from src.datalog.mass_spec_logger import MassSpecLogger
 from src.datalog.pressure_logger import PressureLogger
-from src.datalog.temperature_logger import TemperatureLogger
 from src.experiments.session import ExperimentSession
 from src.core.physics import cell_pressure_from_manifold
 
@@ -174,8 +173,7 @@ class AdsorptionExperiment:
             * target_pressure
         )
         self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
-            self.session.file_name,
-            self.session.folder_name,
+            self.session.path_actuator_log,
             id=gas,
             target=val,
             openMS=True,
@@ -193,8 +191,7 @@ class AdsorptionExperiment:
         self.gas_controller.valves.open("TurboPump")
         time.sleep(120)
         self.gas_2, self.p_mfld_2 = self.gas_controller.deliver_gas_to_manifold(
-            self.session.file_name,
-            self.session.folder_name,
+            self.session.path_actuator_log,
             id=gas,
             target=target_pressure,
             openMS=False,
@@ -226,8 +223,7 @@ class AdsorptionExperiment:
 
         # Supply first gas to manifold
         self.gas, self.p_mfld = self.gas_controller.deliver_gas_to_manifold(
-            self.session.file_name,
-            self.session.folder_name,
+            self.session.path_actuator_log,
             id=gas[0],
             target=val_1,
             openMS=True,
@@ -242,8 +238,7 @@ class AdsorptionExperiment:
         self.gas_controller.valves.open("TurboPump")
         time.sleep(300)
         self.gas_2, self.p_mfld_2 = self.gas_controller.deliver_gas_to_manifold(
-            self.session.file_name,
-            self.session.folder_name,
+            self.session.path_actuator_log,
             id=gas[1],
             target=val_2,
             openMS=True,
@@ -432,18 +427,14 @@ class AdsorptionExperiment:
     def chiller_variac_state(
         self, chiller_cmd: bool, variac_cmd: bool, variac_vsl_cmd: bool
     ) -> None:
-        """Set the state of the chiller and variac. The chiller_cmd is used to set the state of the chiller and the variac_cmd is used to set the state of the variac."""
+        """Set the state of the chiller and variac smart plugs."""
         if chiller_cmd is not None:
             self.chiller_state = chiller_cmd
-            self.temp.chiller_state(chiller_cmd)
+            self.temp.set_plug_state(self.temp.kasa.chiller_id, chiller_cmd)
         if variac_cmd is not None:
-            self.temp.variac_state(variac_cmd)
+            self.temp.set_plug_state(self.temp.kasa.variac_id, variac_cmd)
         if variac_vsl_cmd is not None:
-            self.temp.kasa_plug_state("variac_id_vsl", variac_vsl_cmd)
-        """
-        [fix] These are devices controlled by Kasa plugs. Two plugs control the variac and one a chiller.
-            We should just use kasa_plug_state.
-        """
+            self.temp.set_plug_state(self.temp.kasa.variac_id_vsl, variac_vsl_cmd)
 
     def start_pressure_log(
         self, p_mfld_initial: Any, p_cell_initial: Any
@@ -465,18 +456,3 @@ class AdsorptionExperiment:
         pressure_logger.start()
 
         return pressure_logger
-
-    def start_temperature_log(self) -> TemperatureLogger:
-        """Start temperature logging and return the logger handle."""
-        log_path = (
-            Path(self.session.paths.data_directory)
-            / self.session.folder_name
-            / f"{self.session.file_name}_tempLog.csv"
-        )
-        temp_logger = TemperatureLogger(
-            temperature=self.temperature,
-            path=log_path,
-            read_interval_s=5,
-        )
-        temp_logger.start()
-        return temp_logger
