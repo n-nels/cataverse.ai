@@ -5,61 +5,29 @@ This file demonstrates how to run the instrument control system
 across its architecture layers (config, hardware, control, datalog, experiments).
 
 Usage:
-    python main.py              # Run with real hardware
-    python main.py --mock       # Run with mock hardware (for testing/debugging)
-    python main.py --mock --adsorption  # Run adsorption experiment with mocks
-    python main.py --mock --isotopic    # Run isotopic exchange with mocks
+    python main.py --adsorption          # Run adsorption with real hardware
+    python main.py --isotopic            # Run isotopic exchange with real hardware
+    python main.py --mock --adsorption   # Run adsorption with mock hardware
+    python main.py --mock --isotopic     # Run isotopic exchange with mock hardware
 """
 
 import argparse
-from unittest.mock import MagicMock
 
 from src.core.config_loader import load_config
 from src.datalog import get_logger, configure_logging
 from src.core.physics import SystemVolumes
 from src.experiments.session import ExperimentSession
 from src.hardware.connections import DeviceManager
+from src.hardware.mocks import create_mock_devices
 from src.control.spectrometer_control import SpectrometerController
 from src.control.mass_spec_control import MassSpecController
 from src.control.temperature_control import TemperatureController
 from src.control.valves import ValveController
 from src.control.gas_delivery import GasDelivery
 from src.experiments.adsorption import AdsorptionExperiment
-from src.experiments.isotopic_exchange import IsotopicExchangeCalibration
 
 
 logger = get_logger(__name__)
-
-
-def create_mock_devices(config):
-    """Create mock device manager for testing without hardware."""
-    devices = MagicMock(spec=DeviceManager)
-    devices.config = config.hardware
-
-    devices.pressure = MagicMock()
-    devices.pressure.read.return_value = (MagicMock(), 0.01, 0.01)
-
-    devices.temperature = MagicMock()
-    devices.temperature.read_temperature.return_value = 25.0
-
-    devices.mass_spec = MagicMock()
-    devices.mass_spec.write_register.return_value = True
-    devices.mass_spec.read_registers.return_value = [1, 2]
-
-    devices.analog_io = MagicMock()
-    devices.analog_io.write.return_value = None
-
-    devices.spectrometer = MagicMock()
-    devices.spectrometer.send.return_value = "OK"
-    devices.spectrometer.receive.return_value = "fileid123"
-
-    devices.power = MagicMock()
-    devices.power.set_state.return_value = True
-
-    devices.connect.return_value = None
-    devices.disconnect.return_value = None
-
-    return devices
 
 
 def create_real_devices(config):
@@ -76,10 +44,11 @@ def main():
     parser.add_argument(
         "--mock", action="store_true", help="Use mock hardware for testing"
     )
-    parser.add_argument(
+    experiment = parser.add_mutually_exclusive_group(required=True)
+    experiment.add_argument(
         "--adsorption", action="store_true", help="Run adsorption experiment"
     )
-    parser.add_argument(
+    experiment.add_argument(
         "--isotopic", action="store_true", help="Run isotopic exchange experiment"
     )
     args = parser.parse_args()
@@ -134,58 +103,63 @@ def main():
         paths=config.paths,
     )
 
-    ads_exp = AdsorptionExperiment(
-        session=session,
-        gas_controller=gas_controller,
-        temp=temp_controller,
-        ftir=ftir_controller,
-        mass_spec=ms_controller,
-        pressure=devices.pressure,
-        temperature=devices.temperature,
-    )
-
-    iso_exp = IsotopicExchangeCalibration(
-        session=session,
-        gas_controller=gas_controller,
-        temp=temp_controller,
-        ftir=ftir_controller,
-        mass_spec=ms_controller,
-        pressure=devices.pressure,
-    )
-
     def run_adsorption_experiment():
+        ads_exp = AdsorptionExperiment(
+            session=session,
+            gas_controller=gas_controller,
+            temp=temp_controller,
+            ftir=ftir_controller,
+            ms=ms_controller,
+            pressure=devices.pressure,
+            temperature=devices.temperature,
+        )
         logger.info("Starting adsorption experiment...")
         session.new_experiment()
-        logger.info("Cleaning surface...")
-        ads_exp.chiller_variac_state(
-            chiller_cmd=True, variac_cmd=True, variac_vsl_cmd=True
-        )
-        ads_exp.heat_under_evacuation(
-            pump_type="RoughPump", target_temp=25, hold_time=0.0, ramp_rate=20
-        )
-        ads_exp.heat_under_evacuation(
-            pump_type="TurboPump", target_temp=25, hold_time=0.0, ramp_rate=0
-        )
-        logger.info("Oxidizing surface...")
-        ads_exp.introduce_pretreatment_gas_to_cell(target_temp=25, hold_time=0)
-        ads_exp.heat_under_evacuation(
-            pump_type="TurboPump", target_temp=25, hold_time=0.0, ramp_rate=0
-        )
-        logger.info("Adsorbing 13CO...")
-        ads_exp.cool_cell(target_temp=45, hold_time=0, variac_cmd=False)
-        ads_exp.chiller_variac_state(
-            chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False
-        )
-        ads_exp.acquire_spectra(
-            repeat=[0],
-            delay=[0],
-            all_fileids=True,
-            do_bckg=True,
-            do_fit=True,
-        )
-        logger.info("Adsorption experiment completed!")
+        success = False
+        try:
+            logger.info("Cleaning surface...")
+            ads_exp.chiller_variac_state(
+                chiller_cmd=True, variac_cmd=True, variac_vsl_cmd=True
+            )
+            ads_exp.heat_under_evacuation(
+                pump_type="RoughPump", target_temp=25, hold_time=0.0, ramp_rate=20
+            )
+            ads_exp.heat_under_evacuation(
+                pump_type="TurboPump", target_temp=25, hold_time=0.0, ramp_rate=0
+            )
+            logger.info("Oxidizing surface...")
+            ads_exp.introduce_pretreatment_gas_to_cell(target_temp=25, hold_time=0)
+            ads_exp.heat_under_evacuation(
+                pump_type="TurboPump", target_temp=25, hold_time=0.0, ramp_rate=0
+            )
+            logger.info("Adsorbing 13CO...")
+            ads_exp.cool_cell(target_temp=45, hold_time=0, variac_cmd=False)
+            ads_exp.chiller_variac_state(
+                chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False
+            )
+            ads_exp.acquire_spectra(
+                repeat=[0],
+                delay=[0],
+                all_fileids=True,
+                do_bckg=True,
+                do_fit=True,
+            )
+            success = True
+            logger.info("Adsorption experiment completed!")
+        finally:
+            ads_exp.finalize(success=success)
 
     def run_isotopic_exchange_calibration():
+        from src.experiments.isotopic_exchange import IsotopicExchangeCalibration
+
+        iso_exp = IsotopicExchangeCalibration(
+            session=session,
+            gas_controller=gas_controller,
+            temp=temp_controller,
+            ftir=ftir_controller,
+            mass_spec=ms_controller,
+            pressure=devices.pressure,
+        )
         logger.info("Starting isotopic exchange calibration...")
         session.new_experiment()
         logger.info("Cleaning surface...")
@@ -261,9 +235,6 @@ def main():
             run_adsorption_experiment()
         elif args.isotopic:
             run_isotopic_exchange_calibration()
-        else:
-            logger.info("Use --adsorption or --isotopic to run experiments.")
-            logger.info("Use --mock to run without hardware.")
     finally:
         if not args.mock:
             devices.disconnect()

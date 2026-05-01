@@ -103,7 +103,7 @@ def adsorption_experiment(
         gas_controller=mock_gas_controller,
         temp=mock_temp_controller,
         ftir=mock_spec_controller,
-        mass_spec=mock_mass_spec_controller,
+        ms=mock_mass_spec_controller,
     )
 
 

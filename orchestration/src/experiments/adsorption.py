@@ -42,7 +42,7 @@ class AdsorptionExperiment:
     gas_controller: GasDelivery
     temp: TemperatureController
     ftir: SpectrometerController
-    mass_spec: MassSpecController
+    ms: MassSpecController
     pressure: MKSPressure
     temperature: WatlowTemperature
 
@@ -62,15 +62,15 @@ class AdsorptionExperiment:
         time.sleep(30)
 
         # Extrel sequence start from config
-        success = self.mass_spec.start_sequence()
+        success = self.ms.start_sequence()
         if success:
             logger.info("Extrel sequence started")
         else:
             logger.info("Failed to set Extrel sequence")
 
         ms_logger = self.session.start_mass_spec_log(
-            mass_spec=self.mass_spec.mass_spec_adapter(),
-            stream_tags=self.mass_spec.stream_tags,
+            mass_spec=self.ms.mass_spec_adapter(),
+            stream_tags=self.ms.stream_tags,
         )
         time.sleep(60)
         return ms_logger
@@ -110,7 +110,7 @@ class AdsorptionExperiment:
             ms_logger.stop()
 
             # Extrel sequence stop from config
-            success = self.mass_spec.stop_sequence()
+            success = self.ms.stop_sequence()
             if success:
                 logger.info("Extrel sequence stopped")
             else:
