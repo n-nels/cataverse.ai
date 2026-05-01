@@ -17,9 +17,13 @@ class MassSpecController:
         self,
         mass_spec: ExtrelMassSpec,
         registers: ExtrelRegisterConfig,
+        stream_tags: list[str] | None = None,
     ) -> None:
         self.mass_spec = mass_spec
         self.registers = registers
+        self.stream_tags: list[str] = stream_tags or [
+            "V1_I_28", "V1_I_29", "V1_I_44", "V1_I_45",
+        ]
 
     def write_register(self, address: int, value: int) -> bool:
         """Write one Extrel register via the hardware adapter."""

@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.datalog.pressure_logger import PressureLogger
+from src.core.config_loader import SampleConfig, SystemConstants
 from src.core.physics import SystemVolumes
 
 
@@ -35,14 +36,35 @@ def test_pressure_logger_writes_csv_and_starts_stops_cleanly(tmp_path: Path) -> 
         flask=1.004,
     )
 
+    sample = SampleConfig(
+        notebook="NB001",
+        metal="Pd",
+        support="Al2O3",
+        mass_g=0.0164,
+        metal_load_wt_percent=0.04983,
+        support_surface_area_m2_g=100.0,
+    )
+
+    constants = SystemConstants(
+        gas_constant=62.363577,
+        manifold_temperature_k=298.15,
+        vessel_volume_l=0.0119913,
+        valve_volume_l=0.000152,
+        cell_volume_l=0.03381,
+        manifold_m1m2_volume_l=0.078862,
+        manifold_m1m2m3_volume_l=0.11116,
+        tube_50ml_volume_l=0.05643,
+        flask_volume_l=1.004,
+    )
+
     logger = PressureLogger(
         pressure=pressure,
-        physics=volumes,
+        volumes=volumes,
+        sample=sample,
+        constants=constants,
         path=log_path,
         p_mfld_initial=1.0,
         p_cell_initial=0.0,
-        mass_g=0.0164,
-        metal_load_wt_percent=0.04983,
         read_interval_s=0.01,
     )
 

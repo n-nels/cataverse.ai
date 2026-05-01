@@ -6,7 +6,6 @@ class with a daemon worker thread.
 
 from __future__ import annotations
 
-import csv
 import logging
 import threading
 import time
@@ -14,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.hardware.mass_spec import ExtrelMassSpec
+from src.datalog._csv_helpers import open_csv_with_header
 
 
 logger = logging.getLogger(__name__)
@@ -26,14 +26,16 @@ class MassSpecLogger:
         self,
         mass_spec: ExtrelMassSpec,
         path: Path,
+        stream_tags: list[str],
         start_address: int = 2,
-        poll_interval_s: float = 1.2,
+        read_interval_s: float = 1.2,
         unit: int = 1,
     ) -> None:
         self.mass_spec = mass_spec
         self.path = path
+        self.stream_tags = stream_tags
         self.start_address = start_address
-        self.poll_interval_s = poll_interval_s
+        self.read_interval_s = read_interval_s
         self.unit = unit
 
         self._stop = threading.Event()
@@ -59,33 +61,37 @@ class MassSpecLogger:
     def _run(self) -> None:
         """Worker loop that appends decoded Extrel values to CSV."""
 
-        tags = ["V1_I_28", "V1_I_29", "V1_I_44", "V1_I_45"]
-        file_exists = self.path.exists()
+        tags = self.stream_tags
 
-        with self.path.open("a", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            if not file_exists:
-                writer.writerow(["timestamp"] + tags)
+        csvfile, writer = open_csv_with_header(self.path, ["timestamp"] + tags)
+        with csvfile:
 
-            while not self._stop.is_set():
-                regs = self.mass_spec.read_registers(
-                    address=self.start_address,
-                    count=8,
-                    unit=self.unit,
-                )
+            try:
+                while not self._stop.is_set():
+                    try:
+                        regs = self.mass_spec.read_registers(
+                            address=self.start_address,
+                            count=2 * len(tags),
+                            unit=self.unit,
+                        )
+                    except Exception as exc:
+                        logger.error("Error reading from Extrel: %s", exc)
+                        regs = None
 
-                if regs is None:
-                    logger.info("read error: failed to read from Extrel")
-                else:
-                    vals = [
-                        self.mass_spec.decode_ieee754_cdab(regs[0], regs[1]),
-                        self.mass_spec.decode_ieee754_cdab(regs[2], regs[3]),
-                        self.mass_spec.decode_ieee754_cdab(regs[4], regs[5]),
-                        self.mass_spec.decode_ieee754_cdab(regs[6], regs[7]),
-                    ]
+                    if regs is None:
+                        logger.error("read error: failed to read from Extrel")
+                    else:
+                        vals = [
+                            self.mass_spec.decode_ieee754_cdab(
+                                regs[2 * i], regs[2 * i + 1]
+                            )
+                            for i in range(len(tags))
+                        ]
 
-                    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-                    writer.writerow([ts] + vals)
-                    csvfile.flush()
+                        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                        writer.writerow([ts] + vals)
+                        csvfile.flush()
 
-                time.sleep(self.poll_interval_s)
+                    time.sleep(self.read_interval_s)
+            except KeyboardInterrupt:
+                logger.info("Mass-spec logging stopped.")

@@ -73,6 +73,7 @@ class AdsorptionExperiment:
         ms_logger = MassSpecLogger(
             mass_spec=self.mass_spec.mass_spec_adapter(),
             path=Path(cast(str, self.session.path_ms_log)),
+            stream_tags=self.mass_spec.stream_tags,
         )
         ms_logger.start()
         time.sleep(60)
@@ -443,15 +444,12 @@ class AdsorptionExperiment:
         log_path = self.session.path_pressure_log
         pressure_logger = PressureLogger(
             pressure=self.pressure,
-            physics=self.session.volumes,
+            volumes=self.session.volumes,
+            sample=self.session.sample,
+            constants=self.session.constants,
             path=log_path,
             p_mfld_initial=p_mfld_initial,
             p_cell_initial=p_cell_initial,
-            mass_g=self.session.sample.mass_g,
-            metal_load_wt_percent=self.session.sample.metal_load_wt_percent,
-            metal_molar_mass_g_mol=self.session.sample.metal_molar_mass_g_mol,
-            temperature_k=self.gas_controller.temperature_k,
-            gas_constant=self.gas_controller.gas_constant,
         )
         pressure_logger.start()
 

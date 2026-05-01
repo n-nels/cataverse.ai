@@ -309,15 +309,12 @@ class IsotopicExchangeCalibration:
 
         pressure_logger = PressureLogger(
             pressure=self.pressure,
-            physics=self.session.volumes,
+            volumes=self.session.volumes,
+            sample=self.session.sample,
+            constants=self.session.constants,
             path=Path(self.session.path_pressure_log),
             p_mfld_initial=p_mfld,
             p_cell_initial=p_cell,
-            mass_g=self.session.sample.mass_g,
-            metal_load_wt_percent=self.session.sample.metal_load_wt_percent,
-            metal_molar_mass_g_mol=self.session.sample.metal_molar_mass_g_mol,
-            temperature_k=self.gas_controller.temperature_k,
-            gas_constant=self.gas_controller.gas_constant,
         )
         pressure_logger.start()
 

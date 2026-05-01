@@ -1,44 +1,38 @@
-"""Data logging and experiment file I/O helpers for new datalog layer.
+"""Data logging file I/O helpers.
 
-This module consolidates legacy utilities for directory creation, CSV/markdown
-logging, experiment ID generation, and share-drive copy operations.
+This module provides CSV and markdown writing primitives used by the datalog
+layer: directory creation, general-purpose CSV append, actuator/temperature
+CSV logging, and markdown parameter sections for experiment READMEs.
+
+Session-bookkeeping functions (experiment ID generation, share-drive copies)
+live in ``experiments.session``.
 """
 
 from __future__ import annotations
 
 import csv
-import glob
-import os
-import shutil
-import time
 import logging
-from datetime import datetime
+from pathlib import Path
 from typing import Any
-
-from src.core.config_loader import PathsConfig, SampleConfig
 
 
 logger = logging.getLogger(__name__)
 
 
-def material_prefix(sample: SampleConfig) -> str:
-    """Build standard sample folder prefix."""
-
-    return f"{sample.notebook}_{sample.metal}_{sample.support}_"
-
-
-def create_directory(directory_path: str) -> None:
+def create_directory(directory_path: str | Path) -> None:
     """Create directory path if it does not already exist."""
 
-    if not os.path.exists(directory_path):
-        os.makedirs(directory_path)
+    Path(directory_path).mkdir(parents=True, exist_ok=True)
 
 
-def log_to_csv(file_path: str, headers: list[str], rows: list[list[Any]]) -> None:
+def log_to_csv(
+    file_path: str | Path, headers: list[str], rows: list[list[Any]]
+) -> None:
     """General-purpose append-or-create CSV logger."""
 
-    mode = "a" if os.path.exists(file_path) else "w"
-    with open(file_path, mode, newline="") as csv_file:
+    p = Path(file_path)
+    mode = "a" if p.exists() else "w"
+    with p.open(mode, newline="") as csv_file:
         writer = csv.writer(csv_file)
         if mode == "w":
             writer.writerow(headers)
@@ -46,7 +40,7 @@ def log_to_csv(file_path: str, headers: list[str], rows: list[list[Any]]) -> Non
 
 
 def log_actuator_state(
-    file_path: str,
+    file_path: str | Path,
     actuator_id: str,
     act_writes: list[Any],
     pressures: list[Any],
@@ -64,7 +58,7 @@ def log_actuator_state(
 
 
 def log_temperature(
-    file_path: str,
+    file_path: str | Path,
     write_temps: list[Any],
     read_temps: list[Any],
     timestamps: list[Any],
@@ -77,11 +71,14 @@ def log_temperature(
     log_to_csv(file_path, headers, rows)
 
 
-def log_experiment_parameters(file_path: str, parameters: list[dict[str, Any]]) -> None:
+def log_experiment_parameters(
+    file_path: str | Path, parameters: list[dict[str, Any]]
+) -> None:
     """Append experiment parameter sections to a markdown file."""
 
-    mode = "a" if os.path.exists(file_path) else "w"
-    with open(file_path, mode) as file:
+    p = Path(file_path)
+    mode = "a" if p.exists() else "w"
+    with p.open(mode) as file:
         for parameter in parameters:
             file.write(f"## {parameter['name']}\n")
             file.write(f"- Description: {parameter['description']}\n")
@@ -96,7 +93,7 @@ def log_experiment_parameters(file_path: str, parameters: list[dict[str, Any]]) 
 
 
 def write_material_parameters(
-    path_readme: str,
+    path_readme: str | Path,
     notebook: str,
     mass: float,
     metal: str,
@@ -108,7 +105,7 @@ def write_material_parameters(
 ) -> None:
     """Write one-time material parameter markdown to README path."""
 
-    if os.path.exists(path_readme):
+    if Path(path_readme).exists():
         return
 
     parameters = [
@@ -155,133 +152,3 @@ def write_material_parameters(
     ]
 
     log_experiment_parameters(path_readme, parameters)
-
-
-def _increment(
-    dir_path: str,
-    base_folder_name: str,
-    folder_name: str | None = None,
-    new_folder: bool = False,
-) -> tuple[int, int]:
-    """Handle folder/file iteration logic for experiment IDs."""
-
-    if os.path.exists(dir_path):
-        existing_folders = [
-            folder
-            for folder in os.listdir(dir_path)
-            if folder.startswith(base_folder_name)
-        ]
-        if folder_name:
-            existing_files = glob.glob(f"{os.path.join(dir_path, folder_name)}/*")
-            exp_iter = (
-                max(
-                    [
-                        int(os.path.basename(file).split("-")[-1].split("_")[0])
-                        for file in existing_files
-                        if base_folder_name in file
-                    ]
-                )
-                + 1
-            )
-            return 0, exp_iter
-
-        if existing_folders:
-            if new_folder:
-                fld_iter = (
-                    max([int(folder.split("_")[-1]) for folder in existing_folders]) + 1
-                )
-                exp_iter = 0
-                return fld_iter, exp_iter
-            else:
-                fld_iter = max(
-                    int(folder.split("_")[-1]) for folder in existing_folders
-                )
-
-            last_folder = None
-            filtered_folders = [
-                folder for folder in existing_folders if base_folder_name in folder
-            ]
-            if filtered_folders:
-                last_folder = filtered_folders[-1]
-
-            if last_folder and os.path.exists(os.path.join(dir_path, last_folder)):
-                last_folder_path = os.path.join(dir_path, last_folder)
-                existing_files = glob.glob(f"{last_folder_path}/*")
-                exp_iter = 0
-                if existing_files:
-                    exp_iter = (
-                        max(
-                            [
-                                int(os.path.basename(file).split("-")[-1].split("_")[0])
-                                for file in existing_files
-                                if base_folder_name in file
-                            ]
-                        )
-                        + 1
-                    )
-                return fld_iter, exp_iter
-    return 0, 0
-
-
-def generate_experiment_id(
-    sample: SampleConfig,
-    paths: PathsConfig,
-    file_name: str,
-    folder_name: str,
-    new_sample: bool,
-) -> tuple[str, str]:
-    """Generate experiment file/folder names from current directory state."""
-
-    dir_path = paths.data_directory
-    base_folder_name = material_prefix(sample)
-
-    if file_name and folder_name:
-        return file_name, folder_name
-
-    elif file_name:
-        fld_iter = _increment(dir_path, base_folder_name)[0]
-        fld_iter_str = f"{fld_iter:03}"
-        folder_name = (
-            f"{sample.notebook}_{sample.metal}_{sample.support}_{fld_iter_str}"
-        )
-
-    elif folder_name:
-        fld_iter_str = folder_name.split("_")[-1]
-        exp_iter = _increment(dir_path, base_folder_name, folder_name)[1]
-        now = datetime.now()
-        formatted_time = now.strftime("%Y%m%d_%H%M%S_")
-        exp_iter_str = f"{exp_iter:03}"
-        file_name = f"{formatted_time}{sample.metal}_{sample.support}_{fld_iter_str}-{exp_iter_str}"
-    else:
-        fld_iter, exp_iter = _increment(
-            dir_path, base_folder_name, new_folder=new_sample
-        )
-        now = datetime.now()
-        formatted_time = now.strftime("%Y%m%d_%H%M%S_")
-        fld_iter_str = f"{fld_iter:03}"
-        exp_iter_str = f"{exp_iter:03}"
-
-        file_name = f"{formatted_time}{sample.metal}_{sample.support}_{fld_iter_str}-{exp_iter_str}"
-        folder_name = (
-            f"{sample.notebook}_{sample.metal}_{sample.support}_{fld_iter_str}"
-        )
-
-    return file_name, folder_name
-
-
-def copy_to_share_drive(
-    src_path: str,
-    dest_folder: str,
-    file_name: str,
-    suffix: str,
-) -> None:
-    """Copy a source file to destination folder with suffixed filename."""
-
-    dest_path = os.path.join(dest_folder, f"{file_name}_{suffix}")
-    create_directory(dest_folder)
-
-    try:
-        shutil.copy(src_path, dest_path)
-        time.sleep(10)
-    except IOError as exc:
-        logger.error("An error occurred while copying the file: %s", exc)

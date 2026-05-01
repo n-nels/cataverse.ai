@@ -64,6 +64,7 @@ class ExtrelDeviceConfig:
 
     serial: SerialDeviceConfig
     registers: ExtrelRegisterConfig
+    stream_tags: list[str]
 
 
 @dataclass(frozen=True)
@@ -294,6 +295,9 @@ def _build_hardware_config(data: dict[str, Any]) -> HardwareConfig:
                     }.items()
                     if v is not None
                 }
+            ),
+            stream_tags=extrel_ms_serial.get(
+                "stream_tags", ["V1_I_28", "V1_I_29", "V1_I_44", "V1_I_45"]
             ),
         ),
         actuator=ActuatorConfig(

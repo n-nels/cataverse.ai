@@ -21,6 +21,7 @@ serial:
     stopbits: 1
     bytesize: 8
     timeout_s: 1
+    stream_tags: ["V1_I_28", "V1_I_29", "V1_I_44", "V1_I_45"]
     registers:
       sequence_start: {address: 1, value: 2}
       sequence_stop: {address: 1, value: 9}

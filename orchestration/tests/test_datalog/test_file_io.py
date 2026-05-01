@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from unittest.mock import patch
 
 from src.datalog.file_io import (
-    copy_to_share_drive,
     create_directory,
     log_to_csv,
     write_material_parameters,
@@ -98,46 +96,3 @@ def test_write_material_parameters_noop_when_readme_exists(tmp_path: Path) -> No
     )
 
     assert readme_path.read_text(encoding="utf-8") == "existing content\n"
-
-
-def test_copy_to_share_drive_copies_file_to_suffixed_destination(tmp_path: Path) -> None:
-    src = tmp_path / "source.txt"
-    src.write_text("hello", encoding="utf-8")
-
-    dest_folder = tmp_path / "share"
-    file_name = "exp001"
-    suffix = "README.md"
-
-    with patch("src.datalog.file_io.time.sleep") as sleep_mock:
-        copy_to_share_drive(
-            src_path=str(src),
-            dest_folder=str(dest_folder),
-            file_name=file_name,
-            suffix=suffix,
-        )
-
-    sleep_mock.assert_called_once_with(10)
-
-    copied = dest_folder / f"{file_name}_{suffix}"
-    assert copied.exists()
-    assert copied.read_text(encoding="utf-8") == "hello"
-
-
-def test_copy_to_share_drive_ioerror_is_handled(tmp_path: Path) -> None:
-    src = tmp_path / "source.txt"
-    src.write_text("hello", encoding="utf-8")
-
-    dest_folder = tmp_path / "share"
-
-    with (
-        patch("src.datalog.file_io.shutil.copy", side_effect=IOError("copy failed")),
-        patch("src.datalog.file_io.logger") as logger_mock,
-    ):
-        copy_to_share_drive(
-            src_path=str(src),
-            dest_folder=str(dest_folder),
-            file_name="exp001",
-            suffix="README.md",
-        )
-
-    logger_mock.error.assert_called_once()

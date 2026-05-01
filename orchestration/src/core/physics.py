@@ -8,6 +8,8 @@ dependencies.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+from typing import NamedTuple
 
 
 DEFAULT_GAS_CONSTANT_L_TORR_PER_K_MOL = 62.363577
@@ -158,4 +160,66 @@ def metal_surface_density(
         * AVOGADRO_NUMBER_PER_MOL
         * (1 / support_surface_area_m2_g)
         * (1e-9**2)
+    )
+
+
+class PressureMetrics(NamedTuple):
+    """Derived metrics computed per pressure-logger tick."""
+
+    relative_time_s: float | None
+    amount_adsorbed_umol_per_g: float
+    apparent_conversion: float
+    apparent_coverage: float
+
+
+def compute_pressure_metrics(
+    p_mfld: float,
+    dt: datetime,
+    t0: datetime | None,
+    p_mfld_initial: float,
+    p_cell_initial: float,
+    source_volume_l: float,
+    total_volume_l: float,
+    cell_volume_l: float,
+    mass_g: float,
+    metal_load_wt_percent: float,
+    metal_molar_mass_g_mol: float,
+    temperature_k: float,
+    gas_constant: float = DEFAULT_GAS_CONSTANT_L_TORR_PER_K_MOL,
+) -> PressureMetrics:
+    """Compute per-tick pressure-derived metrics for the pressure logger.
+
+    Pure function — no I/O, no threading.  Unit-testable in isolation.
+    """
+
+    n_initial = (p_mfld_initial * source_volume_l) / (gas_constant * temperature_k)
+
+    p_initial = (
+        (p_mfld_initial * source_volume_l) + (p_cell_initial * cell_volume_l)
+    ) / total_volume_l
+
+    n_adsorbed_initial = (p_initial * total_volume_l) / (gas_constant * temperature_k)
+
+    amount_adsorbed_umol_g = amount_adsorbed(
+        n_initial_mol=n_adsorbed_initial,
+        pressure_equilibrium_torr=p_mfld,
+        total_volume_l=total_volume_l,
+        temperature_k=temperature_k,
+        mass_g=mass_g,
+        gas_constant=gas_constant,
+    )
+
+    n_current = p_mfld * total_volume_l / (gas_constant * temperature_k)
+    apparent_conversion = (n_initial - n_current) / n_initial * 100
+
+    pd_umol_g = (metal_load_wt_percent / 100) * (1 / metal_molar_mass_g_mol) * 1e6
+    apparent_coverage = amount_adsorbed_umol_g / pd_umol_g
+
+    relative_time_s = (dt - t0).total_seconds() if t0 is not None else None
+
+    return PressureMetrics(
+        relative_time_s=relative_time_s,
+        amount_adsorbed_umol_per_g=amount_adsorbed_umol_g,
+        apparent_conversion=apparent_conversion,
+        apparent_coverage=apparent_coverage,
     )

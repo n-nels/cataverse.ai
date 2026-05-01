@@ -6,19 +6,18 @@ reusable start/stop class with a daemon worker thread.
 
 from __future__ import annotations
 
-import csv
 import logging
 import threading
 import time
 from pathlib import Path
-from typing import cast
 
 from src.hardware.pressure import MKSPressure
+from src.core.config_loader import SampleConfig, SystemConstants
 from src.core.physics import (
-    DEFAULT_TEMPERATURE_K,
     SystemVolumes,
-    amount_adsorbed,
+    compute_pressure_metrics,
 )
+from src.datalog._csv_helpers import open_csv_with_header
 
 
 logger = logging.getLogger(__name__)
@@ -30,27 +29,21 @@ class PressureLogger:
     def __init__(
         self,
         pressure: MKSPressure,
-        physics: SystemVolumes,
+        volumes: SystemVolumes,
+        sample: SampleConfig,
+        constants: SystemConstants,
         path: Path,
         p_mfld_initial: float,
         p_cell_initial: float,
-        mass_g: float,
-        metal_load_wt_percent: float,
-        metal_molar_mass_g_mol: float = 106.42,
-        temperature_k: float = DEFAULT_TEMPERATURE_K,
-        gas_constant: float = 62.363577,
         read_interval_s: float = 5,
     ) -> None:
         self.pressure = pressure
-        self.physics = physics
+        self.volumes = volumes
+        self.sample = sample
+        self.constants = constants
         self.path = Path(path)
         self.p_mfld_initial = p_mfld_initial
         self.p_cell_initial = p_cell_initial
-        self.mass_g = mass_g
-        self.metal_load_wt_percent = metal_load_wt_percent
-        self.metal_molar_mass_g_mol = metal_molar_mass_g_mol
-        self.temperature_k = temperature_k
-        self.gas_constant = gas_constant
         self.read_interval_s = read_interval_s
 
         self._stop = threading.Event()
@@ -76,36 +69,24 @@ class PressureLogger:
     def _run(self) -> None:
         """Worker loop that appends pressure and derived metrics to CSV."""
 
-        file_exists = self.path.exists()
-        source_volume_l = self.physics.source_m1m2m3
-        total_volume_l = self.physics.total
-
-        n_initial = (self.p_mfld_initial * source_volume_l) / (
-            self.gas_constant * self.temperature_k
-        )  # mol
-        p_initial = (
-            (self.p_mfld_initial * source_volume_l)
-            + (self.p_cell_initial * self.physics.cell)
-        ) / total_volume_l
-        pd_umol_g = (
-            (self.metal_load_wt_percent / 100) * (1 / self.metal_molar_mass_g_mol) * 1e6
-        )
+        source_volume_l = self.volumes.source_m1m2m3
+        total_volume_l = self.volumes.total
+        cell_volume_l = self.volumes.cell
+        gas_constant = self.constants.gas_constant
+        temperature_k = self.constants.manifold_temperature_k
 
         t0 = None
-        with self.path.open("a", newline="") as file:
-            writer = csv.writer(file)
-            if not file_exists:
-                writer.writerow(
-                    [
-                        "timestamp",
-                        "p_mfld",
-                        "p_cell",
-                        "relative_time_s",
-                        "amount_adsorbed_umol/g",
-                        "apparent_conversion",
-                        "apparent_coverage",
-                    ]
-                )
+        _HEADERS = [
+            "timestamp",
+            "p_mfld",
+            "p_cell",
+            "relative_time_s",
+            "amount_adsorbed_umol/g",
+            "apparent_conversion",
+            "apparent_coverage",
+        ]
+        file, writer = open_csv_with_header(self.path, _HEADERS)
+        with file:
 
             try:
                 while not self._stop.is_set():
@@ -119,45 +100,35 @@ class PressureLogger:
                         t0 = dt
 
                     if p_mfld is not None and dt is not None:
-                        p_mfld_value = cast(float, p_mfld)
-                        relative_time_s = (dt - t0).total_seconds() if t0 else None
-
-                        n_adsorbed_initial = (p_initial * total_volume_l) / (
-                            self.gas_constant * self.temperature_k
-                        )
-                        amount_adsorbed_umol_g = amount_adsorbed(
-                            n_initial_mol=n_adsorbed_initial,
-                            pressure_equilibrium_torr=p_mfld_value,
+                        metrics = compute_pressure_metrics(
+                            p_mfld=p_mfld,
+                            dt=dt,
+                            t0=t0,
+                            p_mfld_initial=self.p_mfld_initial,
+                            p_cell_initial=self.p_cell_initial,
+                            source_volume_l=source_volume_l,
                             total_volume_l=total_volume_l,
-                            temperature_k=self.temperature_k,
-                            mass_g=self.mass_g,
-                            gas_constant=self.gas_constant,
+                            cell_volume_l=cell_volume_l,
+                            mass_g=self.sample.mass_g,
+                            metal_load_wt_percent=self.sample.metal_load_wt_percent,
+                            metal_molar_mass_g_mol=self.sample.metal_molar_mass_g_mol,
+                            temperature_k=temperature_k,
+                            gas_constant=gas_constant,
                         )
-
-                        n_current = (
-                            p_mfld_value
-                            * total_volume_l
-                            / (self.gas_constant * self.temperature_k)
+                        writer.writerow(
+                            [
+                                dt,
+                                p_mfld,
+                                p_cell,
+                                metrics.relative_time_s,
+                                metrics.amount_adsorbed_umol_per_g,
+                                metrics.apparent_conversion,
+                                metrics.apparent_coverage,
+                            ]
                         )
-                        apparent_conversion = (n_initial - n_current) / n_initial * 100
-                        apparent_coverage = amount_adsorbed_umol_g / pd_umol_g
                     else:
-                        relative_time_s = None
-                        amount_adsorbed_umol_g = None
-                        apparent_conversion = None
-                        apparent_coverage = None
+                        writer.writerow([dt, p_mfld, p_cell, None, None, None, None])
 
-                    writer.writerow(
-                        [
-                            dt,
-                            p_mfld,
-                            p_cell,
-                            relative_time_s,
-                            amount_adsorbed_umol_g,
-                            apparent_conversion,
-                            apparent_coverage,
-                        ]
-                    )
                     file.flush()
                     time.sleep(self.read_interval_s)
             except KeyboardInterrupt:

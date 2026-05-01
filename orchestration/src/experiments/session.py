@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from src.core.config_loader import PathsConfig, SampleConfig
+from src.core.config_loader import PathsConfig, SampleConfig, SystemConstants
 from src.datalog.file_io import (
     create_directory,
     log_experiment_parameters,
@@ -29,6 +29,7 @@ class ExperimentSession:
 
     sample: SampleConfig
     volumes: SystemVolumes
+    constants: SystemConstants
     paths: PathsConfig
     file_name: str | None = None
     folder_name: str | None = None

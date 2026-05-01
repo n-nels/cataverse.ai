@@ -124,11 +124,13 @@ def main():
     ms_controller = MassSpecController(
         mass_spec=devices.mass_spec,
         registers=config.hardware.extrel_ms.registers,
+        stream_tags=config.hardware.extrel_ms.stream_tags,
     )
 
     session = ExperimentSession(
         sample=config.sample,
         volumes=volumes,
+        constants=config.system,
         paths=config.paths,
     )
 
