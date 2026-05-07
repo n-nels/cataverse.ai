@@ -179,28 +179,6 @@ class AdsorptionExperiment:
             self.session.volumes.total,
         )
 
-    def supply_another_gas_to_mfld(self, gas: str, target_pressure: float) -> None:
-        """Supply another gas to the manifold. The gas is delivered to the manifold and the pressure is calculated."""
-        self.gas_controller.valves.close("v16")
-        self.gas_controller.valves.open("TurboPump")
-        time.sleep(120)
-        self.gas_2, self.p_mfld_2 = self.gas_controller.deliver_gas_to_manifold(
-            self.session.path_actuator_log,
-            id=gas,
-            target=target_pressure,
-            openMS=False,
-        )
-        self.p_cell_calc = cell_pressure_from_manifold(
-            self.p_mfld, self.session.volumes.m3, self.session.volumes.total
-        )
-        self.p_cell_calc_2 = cell_pressure_from_manifold(
-            self.p_mfld_2,
-            self.session.volumes.source_m1m2,
-            self.session.volumes.total,
-        )
-        self.gas_controller.valves.open("v16")
-        time.sleep(60)
-
     def supply_gases_to_mfld(
         self, gas: list[str], target_pressure: list[float]
     ) -> None:

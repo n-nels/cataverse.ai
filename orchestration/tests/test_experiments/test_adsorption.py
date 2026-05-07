@@ -177,21 +177,6 @@ class TestAdsorptionExperiment:
         # Verify gas delivery called
         mock_gas_controller.deliver_gas_to_manifold.assert_called_once()
 
-    def test_supply_another_gas_to_mfld(
-        self, adsorption_experiment, mock_gas_controller
-    ):
-        """Test second gas supply to manifold."""
-        adsorption_experiment.supply_another_gas_to_mfld(
-            gas="13CO", target_pressure=1.0
-        )
-
-        # Verify valve sequence
-        mock_gas_controller.valves.close.assert_called_with("v16")
-        mock_gas_controller.valves.open.assert_any_call("TurboPump")
-
-        # Verify gas delivery called
-        mock_gas_controller.deliver_gas_to_manifold.assert_called_once()
-
     def test_acquire_spectra(
         self, adsorption_experiment, mock_spec_controller, mock_gas_controller
     ):

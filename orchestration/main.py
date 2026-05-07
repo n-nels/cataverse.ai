@@ -128,6 +128,7 @@ def main():
                 pump_type="TurboPump", target_temp=25, hold_time=0.0, ramp_rate=0
             )
             logger.info("Oxidizing surface...")
+            # ads_exp.supply_gas_to_mfld(gas="O2", target_pressure=5.0)
             ads_exp.introduce_pretreatment_gas_to_cell(target_temp=25, hold_time=0)
             ads_exp.heat_under_evacuation(
                 pump_type="TurboPump", target_temp=25, hold_time=0.0, ramp_rate=0
