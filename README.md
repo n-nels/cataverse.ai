@@ -1,3 +1,4 @@
+<img width="4032" height="3024" alt="20260323_121059" src="https://github.com/user-attachments/assets/083ae582-c130-4b94-8c5d-ff89e1482b65" />
 # cataverse.ai
 
 cataverse.ai is an autonomous research platform for catalyst discovery, built to shift development from trial-and-error to predictive design. The scientific goal is to understand how operating conditions reshape oxide-supported transition-metal catalysts in real time, then use that understanding to engineer materials with targeted structure and function. By treating catalyst evolution as a controllable process rather than a post hoc observation, the platform supports faster iteration and more reproducible materials development.
