@@ -428,58 +428,60 @@ def plot_monomer_cluster_fit(
         diagnostics_axis = ax.twinx()
 
     time_label = "Time (h)" if time_unit == "h" else "Time (s)"
-    cluster_time = cluster_df["Time (s)"].to_numpy(dtype=float)
-    cluster_area = cluster_df["Cumulative_Peak_Area"].to_numpy(dtype=float)
-    cluster_time_values = cluster_time / 3600 if time_unit == "h" else cluster_time
-    ax.scatter(cluster_time_values, cluster_area, s=18, label="cluster_sum", alpha=0.7)
 
-    # Cluster trajectories are always fit with PFO.
-    cluster_params = _extract_pfo_fit_params(cluster_df)
-    pre_params = _extract_prefixed_pfo_params(cluster_df, "pre_")
-    post_params = _extract_prefixed_pfo_params(cluster_df, "post_")
+    if not cluster_df.empty:
+        cluster_time = cluster_df["Time (s)"].to_numpy(dtype=float)
+        cluster_area = cluster_df["Cumulative_Peak_Area"].to_numpy(dtype=float)
+        cluster_time_values = cluster_time / 3600 if time_unit == "h" else cluster_time
+        ax.scatter(cluster_time_values, cluster_area, s=18, label="cluster_sum", alpha=0.7)
 
-    cluster_row = cluster_df.iloc[-1]
-    cluster_classification = cluster_row.get("classification")
-    growth_onset = _coerce_float(cluster_row.get("growth_onset_s"))
-    if growth_onset is None:
-        growth_onset = _coerce_float(cluster_row.get("breakpoint_s"))
-    if (
-        cluster_classification == "discontinuous"
-        and growth_onset is not None
-        and pre_params
-        and post_params
-    ):
-        pre_mask = cluster_time <= growth_onset
-        post_mask = cluster_time > growth_onset
-        if np.any(pre_mask):
+        # Cluster trajectories are always fit with PFO.
+        cluster_params = _extract_pfo_fit_params(cluster_df)
+        pre_params = _extract_prefixed_pfo_params(cluster_df, "pre_")
+        post_params = _extract_prefixed_pfo_params(cluster_df, "post_")
+
+        cluster_row = cluster_df.iloc[-1]
+        cluster_classification = cluster_row.get("classification")
+        growth_onset = _coerce_float(cluster_row.get("growth_onset_s"))
+        if growth_onset is None:
+            growth_onset = _coerce_float(cluster_row.get("breakpoint_s"))
+        if (
+            cluster_classification == "discontinuous"
+            and growth_onset is not None
+            and pre_params
+            and post_params
+        ):
+            pre_mask = cluster_time <= growth_onset
+            post_mask = cluster_time > growth_onset
+            if np.any(pre_mask):
+                _plot_pfo_fit_curve(
+                    ax,
+                    cluster_time[pre_mask],
+                    pre_params,
+                    label="cluster_pre_fit",
+                    color="red",
+                    time_unit=time_unit,
+                )
+            if np.any(post_mask):
+                _plot_pfo_fit_curve(
+                    ax,
+                    cluster_time[post_mask],
+                    post_params,
+                    label="cluster_post_fit",
+                    color="darkred",
+                    time_unit=time_unit,
+                )
+            onset_time = growth_onset / 3600 if time_unit == "h" else growth_onset
+            ax.axvline(onset_time, color="gray", linestyle="--", label="growth onset")
+        elif cluster_params:
             _plot_pfo_fit_curve(
                 ax,
-                cluster_time[pre_mask],
-                pre_params,
-                label="cluster_pre_fit",
+                cluster_time,
+                cluster_params,
+                label="cluster_fit",
                 color="red",
                 time_unit=time_unit,
             )
-        if np.any(post_mask):
-            _plot_pfo_fit_curve(
-                ax,
-                cluster_time[post_mask],
-                post_params,
-                label="cluster_post_fit",
-                color="darkred",
-                time_unit=time_unit,
-            )
-        onset_time = growth_onset / 3600 if time_unit == "h" else growth_onset
-        ax.axvline(onset_time, color="gray", linestyle="--", label="growth onset")
-    elif cluster_params:
-        _plot_pfo_fit_curve(
-            ax,
-            cluster_time,
-            cluster_params,
-            label="cluster_fit",
-            color="red",
-            time_unit=time_unit,
-        )
 
     if not monomer_df.empty:
         monomer_time = monomer_df["Time (s)"].to_numpy(dtype=float)
@@ -498,7 +500,7 @@ def plot_monomer_cluster_fit(
                 monomer_time,
                 monomer_params,
                 label="monomer_fit",
-                color="blue",
+                color="red",
                 time_unit=time_unit,
             )
             if diagnostics_axis is not None:
@@ -592,7 +594,7 @@ def plot_kinetic_fit(
         return
 
     cluster_sum = _extract_sum_trace(df_filtered, "cluster_sum")
-    if cluster_sum.empty:
+    if "cluster_sum" in SUM_PEAKS and cluster_sum.empty:
         LOGGER.warning("Insufficient cluster data in %s", csv_path)
         return
 

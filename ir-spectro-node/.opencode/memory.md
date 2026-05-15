@@ -15,6 +15,16 @@
 
 ## Accomplished (this session)
 
+### EDA plotting script
+- Added `src/visualizations/eda/plot_pfo_sec_params_vs_time.py` to plot all `pfo-sec_*`
+  parameters vs time per CSV in `C:\Data\peakFit\nn1120-3_pd_ceo2_004`, saving figures
+  to `C:\Figures\_plot`.
+
+## Violations
+- Rule violated: Think-First Protocol (no explicit thinking block before code changes).
+  Context: Implemented plotting script without a recorded Think-First block.
+  Suggested remediation: Include a Think-First block before future code edits.
+
 ### Writer stubs (`src/utils/kinetic_fit_writer.py`)
 - `remove_legacy_pfo_columns_file` implemented: reads CSV, drops prefixed columns via
   `utils.drop_columns_with_prefixes`, writes via `utils.write_plain_legacy_output`.

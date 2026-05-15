@@ -89,25 +89,8 @@ if __name__ == "__main__":
 
 # ---------------------------------------------------------------------------------------------------
 
-    # file_directory = r"C:\Data\OpusConvert_subIFG_lgRfl\nn1120-3_pd_ceo2_004"
-    # name = r"20260329_032106_pd_ceo2_004-010"
-
-    # for file_name in os.listdir(file_directory):
-    #     if name in file_name:
-    #         file_path = os.path.join(file_directory, file_name)
-    #         if os.path.isfile(file_path):
-    #             try:
-    #                 print(f"Processing {file_path}...")
-    #                 KineticFit.run_main(file_path)
-    #             except Exception as e:
-    #                 print(e)
-
-# ---------------------------------------------------------------------------------------------------
-
     file_directory = r"C:\Data\OpusConvert_subIFG_lgRfl\nn1120-3_pd_ceo2_004"
-    name = r"20260329_032106_pd_ceo2_004-010"
-
-    kinetics = KineticFit()
+    name = r"20260506_052154_pd_ceo2_004-019"
 
     for file_name in os.listdir(file_directory):
         if name in file_name:
@@ -115,6 +98,23 @@ if __name__ == "__main__":
             if os.path.isfile(file_path):
                 try:
                     print(f"Processing {file_path}...")
-                    kinetics.run_peak_heights(file_path)
+                    KineticFit.run_main(file_path)
                 except Exception as e:
                     print(e)
+
+# ---------------------------------------------------------------------------------------------------
+
+    # file_directory = r"C:\Data\OpusConvert_subIFG_lgRfl\nn1120-3_pd_ceo2_004"
+    # name = r"20260329_032106_pd_ceo2_004-010"
+
+    # kinetics = KineticFit()
+
+    # for file_name in os.listdir(file_directory):
+    #     if name in file_name:
+    #         file_path = os.path.join(file_directory, file_name)
+    #         if os.path.isfile(file_path):
+    #             try:
+    #                 print(f"Processing {file_path}...")
+    #                 kinetics.run_peak_heights(file_path)
+    #             except Exception as e:
+    #                 print(e)

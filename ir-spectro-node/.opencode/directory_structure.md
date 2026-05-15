@@ -101,6 +101,8 @@ ir-spectro-node/
 │   │   ├── subtract_ifg.py
 │   │   └── subtract_ifg_manual.py
 │   └── visualizations/
+│       ├── eda/
+│       │   └── plot_pfo_sec_params_vs_time.py
 │       ├── plot_area_vs_time.py
 │       ├── plot_monomer_cluster_fit.py
 │       ├── plot_monomer_max.py
