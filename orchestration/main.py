@@ -134,7 +134,7 @@ def main():
                 pump_type="TurboPump", target_temp=25, hold_time=0.0, ramp_rate=0
             )
             logger.info("Adsorbing 13CO...")
-            ads_exp.cool_cell(target_temp=45, hold_time=0, variac_cmd=False)
+            ads_exp.cool_cell(target_temp=25, hold_time=0, variac_cmd=False)
             ads_exp.chiller_variac_state(
                 chiller_cmd=False, variac_cmd=False, variac_vsl_cmd=False
             )
