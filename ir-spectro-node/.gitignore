@@ -23,6 +23,7 @@ null
 arxiv/
 docs/
 sandbox/
+# eda/
 
 # Personal terminal history
 .lesshst

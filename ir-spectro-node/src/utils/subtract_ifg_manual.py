@@ -82,7 +82,7 @@ def Deconvolute(file):
 
 
 # specify file & folder
-opus_filename = "20260315_214542_pd_ceo2_004-008"
+opus_filename = "20260505_063850_pd_ceo2_004-018"
 folder_name = "nn1120-3_pd_ceo2_004\\"
 
 # define paths
@@ -108,7 +108,7 @@ processed_files = set()
 
 # # subtract interferograms
 delete_files(path_subIFG, opus_filename)
-# delete_files(path_readParams, opus_filename)  ## this only deletes the subIfG file, not the readme.
+delete_files(path_readParams, opus_filename)  ## this only deletes the subIfG file, not the readme.
 # delete_files(path_lgRfl, opus_filename)  ## this does not work b/c of the function rules..Delete FSD too!
 for step in range(1, 11):  # 21 for agglomeration
     start = 0 if step == 1 else 2

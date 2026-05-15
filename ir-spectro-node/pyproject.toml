@@ -10,6 +10,7 @@ dependencies = [
     "numpy>=2.4.1",
     "pandas>=2.3.3",
     "pybaselines>=1.2.1",
+    "PyYAML>=6.0.2",
     "pyzmq>=27.1.0",
     "scipy>=1.17.0",
 ]

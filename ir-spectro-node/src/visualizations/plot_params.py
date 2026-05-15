@@ -22,7 +22,7 @@ from src.core import config
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_DATASET_FOLDERS = ["nn1120-3_pd_ceo2_004"]
-DEFAULT_SCAN_PARENT = False
+DEFAULT_SCAN_PARENT = True
 DEFAULT_PEAK_NAMES = ["monomer_sum", "cluster_sum"]
 DEFAULT_PFO_PARAMETERS = [
     "pfo_k_s-1",

@@ -17,9 +17,9 @@ import glob
 #     os.rename(old_file_path, new_file_path)
 
 
-folder_name = 'nn1120-3_pd_ceo2_001\\'
-old_filename = '20250702_154755_pd_ceo2_001-059*'
-new_filename = '20250702_154755_pd_ceo2_001-054.'
+folder_name = 'nn1120-3_pd_ceo2_004\\'
+old_filename = '20260505_063850_pd_ceo2_004-018*'
+new_filename = '20260505_063850_pd_ceo2_004-018.'
 
 path_OpusFiles = "C:\\Data\\OpusFiles\\" + folder_name
 path_lgRfl = "C:\\Data\\OpusConvert_lgRfl\\" + folder_name
@@ -38,8 +38,8 @@ for path in paths:
         # suffix = file.split('.')[-1]
         n = str(m).zfill(4)
         new_name = file.replace(file.split('\\')[-1], new_filename + str(n))
-        # os.rename(file, new_name)
+        os.rename(file, new_name)
         m += 1
 
-        print(new_name)
-        print(file)
+        # print(new_name)
+        # print(file)
