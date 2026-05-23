@@ -135,3 +135,11 @@ class ValveController:
         """Log actuator write id/value with timestamp."""
 
         logger.info("%s write value is %s", actuator_id, value)
+
+if __name__ == "__main__":
+    valves = ValveController(
+        analog_io=AnalogIO(),
+        pressure=MKSPressure(),
+        config=ActuatorConfig(),
+    )
+    valves.close_all(device_map=valves.config.device_map)

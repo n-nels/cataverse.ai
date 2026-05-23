@@ -79,7 +79,7 @@ Findings from the hardware package review. Ordered by priority: latent bugs firs
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 8.4.1 | **[H12]** Fix `NI_USB6009.read_analog_input` voltage range. Current code declares `min_val=10.0, max_val=10.0` — a zero-width range, nonsensical. Change to `min_val=0.0, max_val=5.0` to match the actuator write range and typical signal levels. Verify with the human that these are the correct bounds for your signals before committing. | `src/hardware/analog_io.py` | [ ] |
+| 8.4.1 | **[H12]** Fix `NI_USB6009.read_analog_input` voltage range. Current code declares `min_val=10.0, max_val=10.0` — a zero-width range, nonsensical. Change to `min_val=0.0, max_val=5.0` to match the actuator write range and typical signal levels. Verify with the human that these are the correct bounds for your signals before committing. | `src/hardware/analog_io.py` | [x] |
 | 8.4.2 | **[H8]** Resolve `KasaConfig` field mismatch. `KasaPower.__init__` reads `credentials.username` and `credentials.password`, but the `KasaConfig` dataclass in `config_loader.py` does not declare those fields. Test fixtures construct `KasaConfig(..., username="user", password="pass")`. Grep the real `config_loader.py` for the current truth; if `username`/`password` are missing, add them (with `None` defaults, since creds come from env vars). Run on real hardware after the fix — this is a latent `AttributeError` that only fires when live credentials are used. | `src/core/config_loader.py`, `src/hardware/power.py`, `tests/test_hardware/test_connections.py` | [x] |
 
 ### Error-handling policy

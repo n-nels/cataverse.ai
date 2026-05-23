@@ -1,8 +1,8 @@
 """Adsorption experiment protocol using the new architecture layers.
 
 This module provides an adsorption experiment class that coordinates
-session metadata, control-layer operations, and hardware access through the
-new typed interfaces.
+session metadata, control-layer operations, and hardware access through
+typed interfaces.
 """
 
 from __future__ import annotations
@@ -157,6 +157,13 @@ class AdsorptionExperiment:
 
     def supply_gas_to_mfld(self, gas: str, target_pressure: float) -> None:
         """Supply gas to the manifold. The target pressure corresponds to the pressure in the total volume of the system."""
+        limit = self.session.volumes.max_target_pressure
+        if target_pressure > limit:
+            raise ValueError(
+                f"Target pressure {target_pressure:.2f} Torr exceeds gauge-derived "
+                f"limit of {limit:.2f} Torr for single-gas delivery."
+            )
+
         if self.gas_2:
             self.gas_2 = None
 
@@ -183,6 +190,14 @@ class AdsorptionExperiment:
         self, gas: list[str], target_pressure: list[float]
     ) -> None:
         """Supply gases to the manifold. The target pressure corresponds to the pressure in the total volume of the system."""
+        limits = self.session.volumes.max_target_pressure_dual
+        for i, (p, lim) in enumerate(zip(target_pressure, limits)):
+            if p > lim:
+                raise ValueError(
+                    f"Target pressure for gas {gas[i]} ({p:.2f} Torr) exceeds "
+                    f"gauge-derived limit of {lim:.2f} Torr."
+                )
+
         # Calculate target pressures for each gas based on volume ratios
         val_1 = (
             (self.session.volumes.total) / self.session.volumes.m3 * target_pressure[0]
@@ -252,8 +267,8 @@ class AdsorptionExperiment:
                 self.session.folder_name,
                 repeat,
                 delay,
-                all_fileids,
-                do_bckg,
+                False,  # reset_fileids handled in initial request
+                False,  # do_bckg handled in initial request
                 do_fit,
             ),
         )
@@ -314,9 +329,6 @@ class AdsorptionExperiment:
                 "reset_fileids": False,
             }
         )
-
-        # Mark experiment as successful and finalize
-        self.finalize(success=True)
 
     def finalize(self, success: bool) -> None:
         """End-of-experiment cleanup: mark success, copy files, notify OPUS.

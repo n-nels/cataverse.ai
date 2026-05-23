@@ -1,7 +1,7 @@
 """Data logging package for the new CataVerse architecture.
 
 This package contains reusable data loggers and logging utilities used by the
-new control/experiments stack. It intentionally avoids the package name
+control/experiments stack. It intentionally avoids the package name
 ``logging`` to prevent shadowing Python's standard library module.
 """
 

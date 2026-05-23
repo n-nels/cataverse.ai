@@ -29,3 +29,7 @@ volumes_l:
 
   # Flask volume [L] (not measured as of 09/24/2024)
   v_flask: 1.004
+
+pressure_gauge:
+  # Maximum readable pressure on the MKS gauge [Torr]
+  max_pressure_torr: 10.0

@@ -2,10 +2,6 @@
 
 This module reads configuration from ``config/*.yaml`` and exposes a strongly-typed
 ``AppConfig`` object for the new hardware/control/datalog packages.
-
-Dependencies:
-- Standard library: ``os``, ``dataclasses``, ``pathlib``
-- Third-party: ``yaml``
 """
 
 from __future__ import annotations
@@ -34,6 +30,7 @@ class SystemConstants:
     manifold_m1m2m3_volume_l: float
     tube_50ml_volume_l: float
     flask_volume_l: float
+    gauge_max_pressure_torr: float
 
 
 @dataclass(frozen=True)
@@ -211,6 +208,7 @@ def _build_system_constants(data: dict[str, Any]) -> SystemConstants:
     physical_constants = _require(data, "physical_constants", "system.yaml")
     temperature = _require(data, "temperature", "system.yaml")
     volumes_l = _require(data, "volumes_l", "system.yaml")
+    pressure_gauge = _require(data, "pressure_gauge", "system.yaml")
 
     return SystemConstants(
         gas_constant=physical_constants["R"],
@@ -222,6 +220,7 @@ def _build_system_constants(data: dict[str, Any]) -> SystemConstants:
         manifold_m1m2m3_volume_l=volumes_l["v_m1m2m3"],
         tube_50ml_volume_l=volumes_l["v_50tube"],
         flask_volume_l=volumes_l["v_flask"],
+        gauge_max_pressure_torr=pressure_gauge["max_pressure_torr"],
     )
 
 

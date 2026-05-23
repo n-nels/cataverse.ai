@@ -1,9 +1,4 @@
-"""Pure gas-law and catalyst-surface calculations for CataVerse.
-
-This module centralizes calculation logic previously implemented inline in
-operations and experiments. It has no hardware, threading, network, or file-I/O
-dependencies.
-"""
+"""Pure gas-law and catalyst-surface calculations for cataverse platform."""
 
 from __future__ import annotations
 
@@ -28,6 +23,7 @@ class SystemVolumes:
     manifold_m1m2m3: float
     tube_50ml: float
     flask: float
+    gauge_max_pressure_torr: float
 
     @property
     def m3(self) -> float:
@@ -52,6 +48,26 @@ class SystemVolumes:
         """Total connected experiment volume [L]."""
 
         return self.manifold_m1m2m3 + self.cell + self.valve + self.tube_50ml
+
+    @property
+    def max_target_pressure(self) -> float:
+        """Max allowable target pressure (Torr) for single-gas delivery.
+
+        Derived from gauge limit × (source_m1m2m3 / total).
+        """
+        return self.gauge_max_pressure_torr * self.source_m1m2m3 / self.total
+
+    @property
+    def max_target_pressure_dual(self) -> tuple[float, float]:
+        """Max allowable target pressures (Torr) for two-gas co-adsorption.
+
+        Returns (limit_gas_1, limit_gas_2) derived from gauge limit ×
+        (m3 / total) and gauge limit × (source_m1m2 / total) respectively.
+        """
+        return (
+            self.gauge_max_pressure_torr * self.m3 / self.total,
+            self.gauge_max_pressure_torr * self.source_m1m2 / self.total,
+        )
 
 
 def moles_from_pressure(

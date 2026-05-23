@@ -1,9 +1,4 @@
-"""Experiment session metadata manager for the new architecture.
-
-This module provides a typed session object that replaces legacy
-``experiment_parameters`` while preserving output structure and README content
-format through datalog file I/O helpers.
-"""
+"""Experiment session metadata manager for the new architecture."""
 
 from __future__ import annotations
 
@@ -49,10 +44,11 @@ class ExperimentSession:
         name: str | None = None,
         folder_name: str | None = None,
         new_sample: bool = False,
+        counter: int = 0,
     ) -> tuple[str, str]:
         """Create/resolve experiment IDs and initialize README/material metadata."""
 
-        self.counter = 0
+        self.counter = counter
 
         def increment(
             dir_path: str,
