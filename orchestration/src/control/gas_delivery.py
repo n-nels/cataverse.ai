@@ -548,9 +548,7 @@ class GasDelivery:
             tolerance,
         )
         p_mfld_f = p_mfld_f - p_mfld_start
-        if filename is None:
-            pass
-        else:
+        if act_log_path is not None:
             log_actuator_state(
                 file_path=path_actLog,
                 actuator_id=id,
@@ -564,7 +562,7 @@ class GasDelivery:
 
     def deliver_gas_to_cell(
         self, id: str = "irCell"
-    ) -> None:  # [fix] deliver_pretreatment..
+    ) -> None:
         """Admit gas to the IR cell using staged writes and pressure dithering.
 
         This preserves the legacy pressure-dependent stepping flow used for

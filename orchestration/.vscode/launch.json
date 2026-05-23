@@ -17,7 +17,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
-            "args": ["--mock", "--adsorption"],
+            "args": ["--mock", "adsorption-ref"],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
             "env": {
@@ -29,7 +29,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
-            "args": ["--adsorption"],
+            "args": ["adsorption-ref"],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
             "env": {

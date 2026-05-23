@@ -1,8 +1,4 @@
-"""Watlow temperature controller adapter for the hardware layer.
-
-This module ports low-level Modbus temperature read/write behavior from the
-legacy device helper while accepting an injected Modbus client connection.
-"""
+"""Watlow temperature controller adapter for the hardware layer."""
 
 from __future__ import annotations
 
@@ -90,7 +86,6 @@ class WatlowTemperature:
         self,
         setpoint: float,
         address: int = 2160,
-        slave_id: int = 1,
     ) -> bool:
         """Set target temperature on the Modbus controller."""
 

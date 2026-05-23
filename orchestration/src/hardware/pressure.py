@@ -94,12 +94,21 @@ class MKSPressure:
                     return PressureReading(datetime.now(), None, None)
 
             try:
-                return PressureReading(datetime.now(), float(p1), float(p2))
+                p1_float = float(p1)
             except ValueError:
                 raise HardwareReadError(
                     f"MKS gauge returned non-numeric (over-range?) data: "
                     f"manifold={p1!r}, cell={p2!r}"
                 )
+
+            try:
+                p2_float = float(p2)
+            except ValueError:
+                # Cell gauge returns 'Off' when inactive (below range / valve closed)
+                logger.debug("Cell gauge returned non-numeric value: %r, treating as NaN", p2)
+                p2_float = float('nan')
+
+            return PressureReading(datetime.now(), p1_float, p2_float)
 
         logger.warning("Serial connection not established.")
         self._connect_once()
