@@ -133,10 +133,6 @@ class PathsConfig:
     share_drive_peak_fit_root: str
     share_drive_pressure_data_root: str
     share_drive_ms_calibrations_root: str
-    figures_directory: str | None = None
-    runtime_project_root: str | None = None
-    runtime_venv_python: str | None = None
-    runtime_system_python: str | None = None
 
 
 @dataclass(frozen=True)
@@ -353,7 +349,6 @@ def _build_paths_config(data: dict[str, Any]) -> PathsConfig:
     """Build ``PathsConfig`` from the parsed ``paths.yaml`` data."""
     paths = _require(data, "paths", "paths.yaml")
     share_drive = _require(paths, "share_drive", "paths.yaml")
-    runtime = paths.get("runtime", {})
 
     kwargs: dict[str, Any] = {
         "data_directory": paths["data_directory"],
@@ -362,16 +357,6 @@ def _build_paths_config(data: dict[str, Any]) -> PathsConfig:
         "share_drive_pressure_data_root": share_drive["pressure_data_root"],
         "share_drive_ms_calibrations_root": share_drive["ms_calibrations_root"],
     }
-    for yaml_key, field_name in [
-        ("figures_directory", "figures_directory"),
-        ("project_root", "runtime_project_root"),
-        ("venv_python", "runtime_venv_python"),
-        ("system_python", "runtime_system_python"),
-    ]:
-        source = runtime if field_name.startswith("runtime_") else paths
-        value = source.get(yaml_key)
-        if value is not None:
-            kwargs[field_name] = value
     return PathsConfig(**kwargs)
 
 

@@ -35,14 +35,10 @@ def _system_volumes() -> SystemVolumes:
 def _paths_config(tmp_path: Path) -> PathsConfig:
     return PathsConfig(
         data_directory=str(tmp_path / "data"),
-        figures_directory=None,
         autonomous_parameters_directory=str(tmp_path / "autonomous"),
         share_drive_peak_fit_root=str(tmp_path / "share_peak_fit"),
         share_drive_pressure_data_root=str(tmp_path / "share_pressure"),
         share_drive_ms_calibrations_root=str(tmp_path / "share_ms"),
-        runtime_project_root=None,
-        runtime_venv_python=None,
-        runtime_system_python=None,
     )
 
 

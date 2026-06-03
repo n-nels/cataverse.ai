@@ -56,35 +56,15 @@ class TemperatureLogWriter:
         """Return ``True`` when a valid file path is configured."""
         return self._file_path is not None
 
-    def write_ramp_rows(
-        self,
-        write_temps: list[float],
-        read_temps: list[float],
-        timestamps: list[datetime],
-    ) -> None:
-        """Write the batch of ramp set-point / read-back rows.
-
-        Produces the same CSV output as the legacy ``log_temperature()`` call.
-        """
-        if self._file_path is None:
-            return
-
-        length = min(len(write_temps), len(read_temps), len(timestamps))
-        rows: list[list[object]] = [
-            [write_temps[i], read_temps[i], timestamps[i]] for i in range(length)
-        ]
-        log_to_csv(self._file_path, self._HEADERS, rows)
-
-    def append_hold_row(
+    def append_row(
         self,
         setpoint: float,
         actual: float,
         timestamp: datetime | None = None,
     ) -> None:
-        """Append a single hold-phase row to the CSV.
+        """Append a single temperature row to the CSV.
 
-        Replaces the inline ``csv_file.write(...)`` that lived inside the
-        nested ``hold_temp`` function.
+        Used for both ramp-phase and hold-phase temperature logging.
         """
         if self._file_path is None:
             return

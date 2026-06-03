@@ -1,12 +1,12 @@
 # refactor notes
-- config_loader.py, line 21; why is default_molar_mass hardcoded? line 128 should not be hardcoded
-- config_loader.py, lines 141-143; are these needed?
-- physics.py, lines 15-17; hardcoded
-- **physics.py, compute_pressure_metrics(); needs to be verified, confusing**
-- temperature_log_writer.py, line 69-70; seems off, return nothing?
-- temperature_log_writer.py; i thought we were going to write in real-time??
-- gas_delivery.py, calc_pressure(); not used
-- gas_delivery.py, act_log_path signature; shouldn't this be persistent, defined as self.act_log_path or something? same for others.
+- [x] config_loader.py, line 21; why is default_molar_mass hardcoded? line 128 should not be hardcoded
+- [x] config_loader.py, lines 141-143; are these needed?
+- [x] physics.py, lines 15-17; hardcoded (kept — universal physical constants + standard 298K assumption)
+- [] **physics.py, compute_pressure_metrics(); needs to be verified, confusing** (renamed variables for clarity + added inline comments)
+- [x] temperature_log_writer.py, line 69-70; seems off, return nothing? (intentional no-op when filename=None — disables logging gracefully)
+- [x] temperature_log_writer.py; i thought we were going to write in real-time?? (kept real-time ramp writes; renamed append_hold_row -> append_row for clarity)
+- [x] gas_delivery.py, calc_pressure(); not used (removed dead method + unused import)
+- [x] gas_delivery.py, act_log_path signature; shouldn't this be persistent, defined as self.act_log_path or something? same for others. (moved to __init__, set after new_experiment())
 - gas_delivery.py, line 109-110; why are we redefining?
 - temperature_control.py, line 21; hardcoded default_log_interval
 - temperature_control.py; does the legacy code still make sense or is there a better way to do this?
@@ -28,3 +28,4 @@
 - adsorption.py: move p_mfld_2 and p_cell_calc_2 to top
 - let's shut heat lines off on final evac. Just put them as args for each function. If introducing pre-gas, true, if evac, false.
 - would then need to build auto pipeline to graph
+- why is pressure logger start and stop inside ExperimentSession class?

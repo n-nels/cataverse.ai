@@ -27,7 +27,7 @@ def test_watlow_ramp_returns_tuple_and_writes_setpoints() -> None:
     with (
         patch("src.control.temperature_control.time.sleep"),
         patch(
-            "src.datalog.temperature_log_writer.TemperatureLogWriter.write_ramp_rows"
+            "src.datalog.temperature_log_writer.TemperatureLogWriter.append_row"
         ),
     ):
         result = controller.watlow(

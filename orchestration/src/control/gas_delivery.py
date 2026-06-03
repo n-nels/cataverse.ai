@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 
 from src.hardware.pressure import MKSPressure, PressureReading
 from src.hardware.errors import HardwareReadError
-from src.core.physics import cell_pressure_from_manifold
 from src.datalog.file_io import log_actuator_state
 from .valves import ValveController
 
@@ -106,8 +105,6 @@ class GasDelivery:
             except HardwareReadError:
                 return _evacuate_overpressure()
 
-        if act_log_path is not None:
-            path_actLog = act_log_path
 
         self.valves.close("RoughPump")
         self.valves.close("TurboPump")
@@ -550,7 +547,7 @@ class GasDelivery:
         p_mfld_f = p_mfld_f - p_mfld_start
         if act_log_path is not None:
             log_actuator_state(
-                file_path=path_actLog,
+                file_path=act_log_path,
                 actuator_id=id,
                 act_writes=act_writes,
                 pressures=pressures,
@@ -944,7 +941,3 @@ class GasDelivery:
 
         self.valves.close(id)
 
-    def calc_pressure(self, p1: float, v1: float) -> float:
-        """Calculate total pressure in the system using configured total volume."""
-
-        return cell_pressure_from_manifold(p1, v1, self.total_volume_l)
