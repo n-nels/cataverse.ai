@@ -1,37 +1,33 @@
 # Session Memory
 
-## Last session: 2026-05-15
+## Last session: 2026-06-03
 
 ### Status
-All phases 8.1–8.8 of `docs/clean_up_plan.md` are complete.
-- **8.4.1**: Marked complete — was already fixed (ranges are `min_val=0.0, max_val=5.0`).
-- **8.5.12**: Still frozen — hardware revalidation pending real hardware access.
+- **Phase 8 cleanup plan (`docs/clean_up_plan.md`) is complete and deleted.**
+- All code tasks (8.1–8.8) finished. Only 8.5.12 (real-hardware revalidation of `watlow()` split) remains as a lab activity — no code changes needed.
 
-### New work: `main_v2.py` + `api/` layer
+### Current state of the codebase
+- `src/core/` — config loading + physics (clean, foundational, no internal deps)
+- `src/hardware/` — device adapters with exception hierarchy (`HardwareError` tree)
+- `src/control/` — valve, gas, temperature, spectrometer control (no `sys.exit`, proper exceptions)
+- `src/datalog/` — threaded loggers + CSV I/O (consistent threading, extracted physics)
+- `src/experiments/` — `AdsorptionExperiment` dataclass with `finalize()`, session management
+- `main.py` — CLI entry point with abort handling, lazy experiment construction, `devices.disconnect()` in `finally`
+- `api/adsorption.py` — scientist-facing high-level verb wrapper
+- `main_v2.py` — thin CLI using `api/` layer
 
-Designed and implemented a new experiment interface:
+### Active work: `main_v2.py` + `api/` layer
 
 **Architecture:**
-- `src/experiments/setup.py` — `Instruments` dataclass + `initialize(mock=False)` (all wiring boilerplate)
-- `api/adsorption.py` — `Adsorption` wrapper class with scientist-facing verbs: `clean_surface()`, `oxidize_surface()`, `pretreat_adsorbate()`, `monitor_adsorption()`, `finalize()`
-- `main_v2.py` — thin CLI + `run_adsorption_experiment(inst)` / `run_isotopic_exchange_calibration(inst)` recipes
-- `api/__init__.py` — empty package init
-
-**Key decisions:**
-- High-level verbs wrap the atomic `AdsorptionExperiment` methods (in `src/experiments/adsorption.py`) without mixing layers
-- `ads.clean_surface(evac_temp=450, evac_time=1)` syntax — methods on a wrapper class, not standalone functions
-- `scripts/` directory was created then deleted in favor of `api/` naming
-- Isotopic exchange left as raw low-level calls with a TODO to define `api/isotopic_exchange.py` later
-- YAML protocol loading deferred — when ready, it's just `params = yaml.safe_load(...)` fed into the verb calls
-
-**Known issue:**
-- Hovering over `ads.clean_surface(...)` in VS Code doesn't show full args — caused by `from __future__ import annotations` in `api/adsorption.py`. Fix: remove that import and use direct imports instead of `TYPE_CHECKING` guard. Not yet applied.
+- `src/experiments/setup.py` — `Instruments` dataclass + `initialize(mock=False)`
+- `api/adsorption.py` — `Adsorption` wrapper: `clean_surface()`, `oxidize_surface()`, `pretreat_adsorbate()`, `monitor_adsorption()`, `finalize()`
+- `main_v2.py` — thin CLI + recipe functions
 
 ### Remaining open items
-- **8.5.12**: Hardware revalidation — blocked on real hardware access.
-- **api/isotopic_exchange.py**: Define high-level verbs for isotopic exchange (future work).
-- **YAML protocol loading**: Deferred — slot in when autonomous experimentation work begins.
-- **`from __future__ import annotations` fix** in `api/adsorption.py` for better IDE hover support.
+- **8.5.12**: Hardware revalidation of watlow split — blocked on lab access.
+- **api/isotopic_exchange.py**: Define high-level verbs (future work).
+- **YAML protocol loading**: Deferred — slot in when autonomous experimentation begins.
+- **`from __future__ import annotations` fix** in `api/adsorption.py` for better IDE hover.
 
 ### Known test issues (pre-existing)
 - 3 failures in `test_config_loader.py`: `.env` has wrong `CATAVERSE_CONFIG_DIR` path for Windows.

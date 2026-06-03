@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 from dotenv import load_dotenv
 
-DEFAULT_METAL_MOLAR_MASS = 106.42
+
 
 
 @dataclass(frozen=True)
@@ -121,7 +121,7 @@ class SampleConfig:
     mass_g: float
     metal_load_wt_percent: float
     support_surface_area_m2_g: float
-    metal_molar_mass_g_mol: float = DEFAULT_METAL_MOLAR_MASS
+    metal_molar_mass_g_mol: float
 
 
 @dataclass(frozen=True)
@@ -343,8 +343,9 @@ def _build_sample_config(data: dict[str, Any]) -> SampleConfig:
         "metal_load_wt_percent": sample["metal_load"],
         "support_surface_area_m2_g": sample["support_sa"],
     }
-    if "metal_molar_mass" in sample:
-        kwargs["metal_molar_mass_g_mol"] = sample["metal_molar_mass"]
+    kwargs["metal_molar_mass_g_mol"] = _require(
+        sample, "metal_molar_mass", "sample.yaml"
+    )
     return SampleConfig(**kwargs)
 
 

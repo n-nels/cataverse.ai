@@ -11,16 +11,14 @@ The system controls real physical hardware. Changes to this code can open valves
 Before writing any code, read the following in order:
 
 1. `.opencode/memory.md` — Recent session context and outstanding items.
-2. `docs/clean_up_plan.md` — The active work plan. Identify which phase and task you are on.
-3. The `AGENTS.md` in whatever module directory you will be working in.
+2. The `AGENTS.md` in whatever module directory you will be working in.
 
 ## On Close
 
 Before ending a session, update the following as needed:
 
 1. `.opencode/memory.md` — Log what was done, decisions made, and anything unfinished.
-2. `docs/clean_up_plan.md` — Mark completed tasks, note the current phase.
-3. Any `AGENTS.md` files in modules that were modified — keep them accurate.
+2. Any `AGENTS.md` files in modules that were modified — keep them accurate.
 
 ## Package Structure
 
@@ -32,13 +30,7 @@ The active dependency flow is: **experiments -> control + datalog -> hardware ->
 
 The control and experiment layers contain sequences of valve operations, pressure checks, timing delays, and temperature ramps that were validated against real hardware. These values are not arbitrary.
 
-Changes to these sequences are permitted in this cleanup pass, but are gated. Tasks in `docs/clean_up_plan.md` that touch behavior-sensitive code are marked `[FROZEN]`. When executing a `[FROZEN]` task:
-
-1. Stop before making changes, summarize what will change and why, and wait for explicit human go-ahead.
-2. Validate the change against existing tests and, where the task requires it, plan a real-hardware revalidation.
-3. If you encounter an unintended behavior change in a task *not* marked `[FROZEN]` — different timing, different valve order, different pressure threshold — STOP and report. Do not "fix" it silently.
-
-Hardware Safety Rules (below) are never changed regardless of phase.
+Any change to behavior-sensitive code (valve sequencing, gas delivery, pressure checks, timing-sensitive protocol methods) requires explicit human go-ahead before committing. If you encounter an unintended behavior change — different timing, different valve order, different pressure threshold — STOP and report. Do not "fix" it silently.
 
 ### Hardware Safety Rules
 
