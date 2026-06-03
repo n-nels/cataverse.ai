@@ -41,7 +41,6 @@ def test_deliver_gas_to_manifold_executes_expected_valve_write_sequence() -> Non
 
     with patch("src.control.gas_delivery.time.sleep"):
         actuator_id, p_final = gas.deliver_gas_to_manifold(
-            act_log_path=None,
             id="H2",
             target=1.0,
             openMS=False,

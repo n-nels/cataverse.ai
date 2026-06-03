@@ -5,7 +5,7 @@ description = "Instrument control system for experimental automation"
 requires-python = ">=3.12"
 dependencies = [
     "pyzmq",
-    "pyserial", 
+    "pyserial",
     "pymodbus",
     "pyyaml",
     "pyusb",
@@ -14,7 +14,10 @@ dependencies = [
     "nidaqmx",
     "matplotlib",
     "python-kasa",  # Don't forget the Kasa library!
-    "python-dotenv"
+    "python-dotenv",
+    "lightgbm",
+    "scikit-learn",
+    "joblib",
 ]
 
 [project.scripts]

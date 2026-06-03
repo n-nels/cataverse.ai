@@ -58,9 +58,9 @@
 
 ## Phase 7: Model Training
 
-- [ ] Start with gradient boosting (XGBoost/LightGBM) — handles mixed features well
-- [ ] Train on train set, use validation set for early stopping
-- [ ] Evaluate on test set with appropriate metrics (RMSE, R² per target)
+- [x] Start with gradient boosting (LightGBM) — handles mixed features well
+- [x] Train on train set, use validation set for early stopping
+- [x] Evaluate on test set with appropriate metrics (RMSE, R² per target)
 
 ## Phase 8: Iteration
 

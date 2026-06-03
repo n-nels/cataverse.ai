@@ -107,7 +107,7 @@ def amount_adsorbed(
         temperature_k=temperature_k,
         gas_constant=gas_constant,
     )
-    n_adsorbed = n_initial_mol - n_equilibrium
+    n_adsorbed = n_initial_mol - n_equilibrium # need to account for initial adsorption
     return n_adsorbed * 1e6 / mass_g
 
 
@@ -208,16 +208,21 @@ def compute_pressure_metrics(
     Pure function — no I/O, no threading.  Unit-testable in isolation.
     """
 
-    n_initial = (p_mfld_initial * source_volume_l) / (gas_constant * temperature_k)
+    # Moles dosed from source (manifold) before expansion into cell
+    n_dosed = (p_mfld_initial * source_volume_l) / (gas_constant * temperature_k)
 
+    # Expected equilibrium pressure if nothing adsorbs (mixing source + cell)
     p_initial = (
         (p_mfld_initial * source_volume_l) + (p_cell_initial * cell_volume_l)
     ) / total_volume_l
 
-    n_adsorbed_initial = (p_initial * total_volume_l) / (gas_constant * temperature_k)
+    # Total moles in the combined system after mixing (source + cell)
+    """this quantity represents intial adsorption"""
+    n_initial = (p_initial * total_volume_l) / (gas_constant * temperature_k)
 
+    # Amount adsorbed = (total system moles) - (moles remaining in gas phase now)
     amount_adsorbed_umol_g = amount_adsorbed(
-        n_initial_mol=n_adsorbed_initial,
+        n_initial_mol=n_initial,
         pressure_equilibrium_torr=p_mfld,
         total_volume_l=total_volume_l,
         temperature_k=temperature_k,
@@ -225,9 +230,13 @@ def compute_pressure_metrics(
         gas_constant=gas_constant,
     )
 
-    n_current = p_mfld * total_volume_l / (gas_constant * temperature_k)
-    apparent_conversion = (n_initial - n_current) / n_initial * 100
+    # Moles currently in gas phase at measured pressure
+    n_gas_current = p_mfld * total_volume_l / (gas_constant * temperature_k)
 
+    # Fraction of dosed gas consumed (%)
+    apparent_conversion = (n_dosed - n_gas_current) / n_dosed * 100
+
+    # Coverage: adsorbed amount relative to total metal sites
     pd_umol_g = (metal_load_wt_percent / 100) * (1 / metal_molar_mass_g_mol) * 1e6
     apparent_coverage = amount_adsorbed_umol_g / pd_umol_g
 

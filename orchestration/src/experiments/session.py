@@ -36,6 +36,7 @@ class ExperimentSession:
     folder_name: str | None = None
     path_readme: str | None = None
     path_pressure_log: str | None = None
+    path_actuator_log: str | None = None
     path_ms_log: str | None = None
     counter: int = 0
 

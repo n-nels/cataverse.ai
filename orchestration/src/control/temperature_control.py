@@ -155,20 +155,15 @@ class TemperatureController:
             current_temp, target_temp, rate, update_interval
         )
 
-        read_temps: list[float] = []
-        time_stamps: list[datetime] = []
-        write_temps: list[float] = list(setpoints)
-
         start_time = datetime.now()
         last_print_time = start_time
 
         for temp in setpoints[1:]:
             now = datetime.now()
-            time_stamps.append(now)
             current_temp = self.temperature.read_temperature()
-            read_temps.append(current_temp)
 
             self.temperature.set_temperature(temp)
+            log_writer.append_row(temp, current_temp, now)
 
             if (now - last_print_time).total_seconds() >= 30:
                 elapsed_time = (now - start_time).total_seconds() / 60
@@ -183,7 +178,6 @@ class TemperatureController:
             if wait > 0:
                 time.sleep(wait)
 
-        log_writer.write_ramp_rows(write_temps, read_temps, time_stamps)
         self._hold_at_setpoint(
             setpoint=target_temp,
             duration=duration,
@@ -224,7 +218,7 @@ class TemperatureController:
                 target_temp,
             )
 
-            log_writer.append_hold_row(target_temp, current_temp)
+            log_writer.append_row(target_temp, current_temp)
             time.sleep(120)
 
         self._hold_at_setpoint(
@@ -296,7 +290,7 @@ class TemperatureController:
 
         while time.time() < end_hold:
             current_temp = self.temperature.read_temperature()
-            log_writer.append_hold_row(setpoint, current_temp)
+            log_writer.append_row(setpoint, current_temp)
 
             remaining = end_hold - time.time()
             if remaining < log_interval:
