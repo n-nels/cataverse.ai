@@ -80,23 +80,23 @@ def run_adsorption_experiment(inst: Instruments):
                           enable_ms=False,
                           chiller=False)
         
-        ads.oxidize_surface(pressure=5.0,
-                            temp=450,
-                            time=1,
+        ads.oxidize_surface(pressure=8.0,
+                            temp=350,
+                            time=3.0,
                             evac_temp=450,
                             evac_time=0.5)
         
-        ads.pretreat_adsorbate(adsorbate="H2",
-                               pressure=7.0,
-                               temp=350,
-                               time=1,
-                               evac_temp=250,
-                               evac_time=0.5)
+        # ads.pretreat_adsorbate(adsorbate="H2",
+        #                        pressure=7.0,
+        #                        temp=350,
+        #                        time=1,
+        #                        evac_temp=250,
+        #                        evac_time=0.5)
         
         ads.monitor_adsorption(adsorbate="13CO",
                                pressure=0.84,
                                temp=45,
-                               repeat=[10, 5, 15, 300],
+                               repeat=[10, 5, 15, 150],
                                delay=[60, 300, 600, 1800])
         success = True
     
@@ -125,7 +125,7 @@ def run_adsorption_reference(inst: Instruments):
         ads.monitor_adsorption(adsorbate="13CO",
                                pressure=0.84,
                                temp=45,
-                               repeat=[10, 5, 15, 300],
+                               repeat=[10, 5, 15, 150],
                                delay=[60, 300, 600, 1800])
         success = True
     

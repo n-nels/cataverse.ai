@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from src.core.config_loader import (
-    DEFAULT_METAL_MOLAR_MASS,
     AppConfig,
     ExtrelDeviceConfig,
     ExtrelRegisterConfig,
@@ -49,7 +50,7 @@ def test_load_config_values_match_repo_yaml() -> None:
     assert cfg.paths.share_drive_peak_fit_root == "X:\\peakFit"
 
 
-def test_load_config_uses_default_metal_molar_mass_when_missing(tmp_path: Path) -> None:
+def test_load_config_raises_when_metal_molar_mass_missing(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     config_dir.mkdir()
 
@@ -148,8 +149,8 @@ paths:
         encoding="utf-8",
     )
 
-    cfg = load_config(config_dir=config_dir)
-    assert cfg.sample.metal_molar_mass_g_mol == DEFAULT_METAL_MOLAR_MASS
+    with pytest.raises(KeyError):
+        load_config(config_dir=config_dir)
 
 
 def test_system_volumes_from_loaded_config_match_core_config_derived_values() -> None:

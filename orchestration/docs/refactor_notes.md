@@ -1,0 +1,30 @@
+# refactor notes
+- config_loader.py, line 21; why is default_molar_mass hardcoded? line 128 should not be hardcoded
+- config_loader.py, lines 141-143; are these needed?
+- physics.py, lines 15-17; hardcoded
+- **physics.py, compute_pressure_metrics(); needs to be verified, confusing**
+- temperature_log_writer.py, line 69-70; seems off, return nothing?
+- temperature_log_writer.py; i thought we were going to write in real-time??
+- gas_delivery.py, calc_pressure(); not used
+- gas_delivery.py, act_log_path signature; shouldn't this be persistent, defined as self.act_log_path or something? same for others.
+- gas_delivery.py, line 109-110; why are we redefining?
+- temperature_control.py, line 21; hardcoded default_log_interval
+- temperature_control.py; does the legacy code still make sense or is there a better way to do this?
+- setup.py, line 57; If you want confirmation that all devices connected, you'd need to add logger calls inside DeviceManager.connect(). But functionally,         if it didn't raise an exception, the connections succeeded.
+- Let's also write the logger to file, but overwrites on each new experiment. WE have to define directory.
+- gas_delivery.py, line 711; don't we have default values for close/open?
+- src.experiments/adsorption.py, line 109; should be argument with default
+- src.experiments/adsorption.py, introduce_pretreatment_gas_to_cell(); mixes delivery and heating
+- finalize.py; may consider doing post opus acquisition things here as well for early script exit
+- should round dp, gives huge floating
+- add .json logic, remove expParams.csv logic
+- the pre_pressure readings don't specify p_cell, p_mfld like exp_pressure does in the readme.md
+- need to check the pressure calculations for calculated values
+- i thought we were going to write is_new_sample in the beginning? Rn, is in finalize
+- somehow we forgot is_reference (comes at end, needs to come first)
+- need to add process_pressure.py & analyze
+- main.py-ads.oxidize_surface() introduces gas before cooling to target temperature; they actually all do this. Need to cool/heat beforehand. See CataVerse. But need to be careful b/c heating under evac after introducing oxidation (evac_time, temp) works as expected. That is if gas@T, then only expose gas at the temperatures
+- api/adsorption.py: oxidize_surface() and pretreat_adsorbate() hardcode ramp rate needs changed to default 20. I guess the default should be 20 and we need to change the logic in temperature_control.py so it does not depend on ramp rate, but rather just measures the current temperature and the target and heats/cools accordingly. That's the root cause for the problem above.
+- adsorption.py: move p_mfld_2 and p_cell_calc_2 to top
+- let's shut heat lines off on final evac. Just put them as args for each function. If introducing pre-gas, true, if evac, false.
+- would then need to build auto pipeline to graph
