@@ -245,6 +245,73 @@ def build_dataset(
     return Dataset(X=X, y=y, records=records)
 
 
+DEFAULT_OUTPUT_DIR = Path(__file__).parent / "outputs"
+
+
+def save_dataset(
+    dataset: Dataset,
+    output_dir: str | Path | None = None,
+) -> Path:
+    """
+    Save dataset to disk as parquet files.
+
+    Parameters
+    ----------
+    dataset : Dataset
+        Dataset to save.
+    output_dir : str | Path | None
+        Output directory. Defaults to module-relative outputs/.
+
+    Returns
+    -------
+    Path
+        Path to output directory.
+    """
+    out_dir = Path(output_dir) if output_dir else DEFAULT_OUTPUT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save features
+    X_path = out_dir / "X.parquet"
+    dataset.X.to_parquet(X_path)
+
+    # Save targets
+    y_path = out_dir / "y.parquet"
+    dataset.y.to_parquet(y_path)
+
+    # Save metadata (record base_names)
+    meta_path = out_dir / "records.csv"
+    pd.DataFrame({
+        "base_name": [r.base_name for r in dataset.records],
+        "datetime": [r.datetime.isoformat() for r in dataset.records],
+    }).to_csv(meta_path, index=False)
+
+    logger.info("Saved dataset to %s (X=%s, y=%s)", out_dir, X_path, y_path)
+    return out_dir
+
+
+def load_dataset(
+    input_dir: str | Path,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Load dataset from disk.
+
+    Parameters
+    ----------
+    input_dir : str | Path
+        Directory containing X.parquet and y.parquet.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        X (features), y (targets).
+    """
+    in_dir = Path(input_dir)
+    X = pd.read_parquet(in_dir / "X.parquet")
+    y = pd.read_parquet(in_dir / "y.parquet")
+    logger.info("Loaded dataset: X=%s, y=%s", X.shape, y.shape)
+    return X, y
+
+
 if __name__ == "__main__":
     import sys
 

@@ -9,8 +9,7 @@
 - [x] gas_delivery.py, act_log_path signature; shouldn't this be persistent, defined as self.act_log_path or something? same for others. (moved to __init__, set after new_experiment())
 - [x] gas_delivery.py, line 109-110; why are we redefining?
 - [x] temperature_control.py, line 21; hardcoded default_log_interval
-
-- Let's also write the logger to file, but overwrites on each new experiment. WE have to define directory.
+- [x] Let's also write the logger to file, but overwrites on each new experiment. We have to define directory.
 - gas_delivery.py, line 711; don't we have default values for close/open?
 - src.experiments/adsorption.py, line 109; should be argument with default
 - src.experiments/adsorption.py, introduce_pretreatment_gas_to_cell(); mixes delivery and heating
