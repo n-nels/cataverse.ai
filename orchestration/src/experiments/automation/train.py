@@ -12,7 +12,7 @@ from typing import NamedTuple
 import joblib
 import pandas as pd
 from lightgbm import LGBMRegressor
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import root_mean_squared_error, r2_score
 
 from load import build_dataset, split_dataset
 
@@ -20,25 +20,6 @@ logger = logging.getLogger(__name__)
 
 # Default model directory
 DEFAULT_MODEL_DIR = Path(__file__).parent / "models"
-
-
-def sanitize_feature_names(columns: list[str]) -> list[str]:
-    """
-    Sanitize feature names for LightGBM.
-
-    Removes characters that LightGBM doesn't support in feature names.
-
-    Parameters
-    ----------
-    columns : list[str]
-        Original column names.
-
-    Returns
-    -------
-    list[str]
-        Sanitized column names.
-    """
-    return [re.sub(r"[^\w\.\-]", "_", col) for col in columns]
 
 
 class ModelConfig(NamedTuple):
@@ -109,13 +90,32 @@ def train_target_model(
 
     # Evaluate on validation set
     y_pred = model.predict(X_val)
-    rmse = float(mean_squared_error(y_val, y_pred, squared=False))
+    rmse = float(root_mean_squared_error(y_val, y_pred))
     r2 = float(r2_score(y_val, y_pred))
 
     metrics = {"rmse": rmse, "r2": r2}
     logger.info("%s - RMSE: %.6f, R²: %.4f", target_name, rmse, r2)
 
     return model, metrics
+
+
+def sanitize_feature_names(columns: list[str]) -> list[str]:
+    """
+    Sanitize feature names for LightGBM.
+
+    Removes characters that LightGBM doesn't support in feature names.
+
+    Parameters
+    ----------
+    columns : list[str]
+        Original column names.
+
+    Returns
+    -------
+    list[str]
+        Sanitized column names.
+    """
+    return [re.sub(r"[^\w\.\-]", "_", col) for col in columns]
 
 
 def train_all_targets(
@@ -146,8 +146,8 @@ def train_all_targets(
     TrainedModel
         Container with trained models, config, and metrics.
     """
-    if config is None:
-        config = ModelConfig()
+    # if config is None:
+    #     config = ModelConfig()
 
     models = {}
     all_metrics = {}
@@ -208,7 +208,7 @@ def evaluate_on_test(
 
     for target_name, model in trained_model.models.items():
         y_pred = model.predict(X_test_clean)
-        rmse = float(mean_squared_error(y_test[target_name], y_pred, squared=False))
+        rmse = float(root_mean_squared_error(y_test[target_name], y_pred))
         r2 = float(r2_score(y_test[target_name], y_pred))
         test_metrics[target_name] = {"rmse": rmse, "r2": r2}
         logger.info("Test %s - RMSE: %.6f, R²: %.4f", target_name, rmse, r2)

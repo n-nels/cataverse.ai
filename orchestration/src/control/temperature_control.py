@@ -18,9 +18,6 @@ from src.hardware.temperature import WatlowTemperature
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_LOG_INTERVAL: int = 10
-"""Default interval in seconds between temperature log rows."""
-
 
 class TemperatureController:
     """Control Watlow temperature ramps and Kasa power states.
@@ -66,7 +63,7 @@ class TemperatureController:
         rate: float,
         variac_cmd: bool,
         update_interval: int = 2,
-        log_interval: int = DEFAULT_LOG_INTERVAL,
+        log_interval: int = 10,
     ) -> tuple[float, float, float]:
         """Ramp, cool, or hold temperature and log to CSV.
 
