@@ -2,15 +2,14 @@
 - [x] config_loader.py, line 21; why is default_molar_mass hardcoded? line 128 should not be hardcoded
 - [x] config_loader.py, lines 141-143; are these needed?
 - [x] physics.py, lines 15-17; hardcoded (kept — universal physical constants + standard 298K assumption)
-- [] **physics.py, compute_pressure_metrics(); needs to be verified, confusing** (renamed variables for clarity + added inline comments)
+- [x] **physics.py, compute_pressure_metrics(); needs to be verified, confusing** (reviewed; physics is intentional — n_dosed is source gas only, p_initial is expected mixed gauge pressure, and n_initial includes small residual cell gas)
 - [x] temperature_log_writer.py, line 69-70; seems off, return nothing? (intentional no-op when filename=None — disables logging gracefully)
 - [x] temperature_log_writer.py; i thought we were going to write in real-time?? (kept real-time ramp writes; renamed append_hold_row -> append_row for clarity)
 - [x] gas_delivery.py, calc_pressure(); not used (removed dead method + unused import)
 - [x] gas_delivery.py, act_log_path signature; shouldn't this be persistent, defined as self.act_log_path or something? same for others. (moved to __init__, set after new_experiment())
-- gas_delivery.py, line 109-110; why are we redefining?
-- temperature_control.py, line 21; hardcoded default_log_interval
-- temperature_control.py; does the legacy code still make sense or is there a better way to do this?
-- setup.py, line 57; If you want confirmation that all devices connected, you'd need to add logger calls inside DeviceManager.connect(). But functionally,         if it didn't raise an exception, the connections succeeded.
+- [x] gas_delivery.py, line 109-110; why are we redefining?
+- [x] temperature_control.py, line 21; hardcoded default_log_interval
+
 - Let's also write the logger to file, but overwrites on each new experiment. WE have to define directory.
 - gas_delivery.py, line 711; don't we have default values for close/open?
 - src.experiments/adsorption.py, line 109; should be argument with default
@@ -29,3 +28,5 @@
 - let's shut heat lines off on final evac. Just put them as args for each function. If introducing pre-gas, true, if evac, false.
 - would then need to build auto pipeline to graph
 - why is pressure logger start and stop inside ExperimentSession class?
+- temperature_control.py; does the legacy code still make sense or is there a better way to do this?
+- setup.py, line 57; If you want confirmation that all devices connected, you'd need to add logger calls inside DeviceManager.connect(). But functionally,         if it didn't raise an exception, the connections succeeded.

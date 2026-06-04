@@ -80,9 +80,9 @@ def run_adsorption_experiment(inst: Instruments):
                           enable_ms=False,
                           chiller=False)
         
-        ads.oxidize_surface(pressure=8.0,
-                            temp=350,
-                            time=3.0,
+        ads.oxidize_surface(pressure=5.5,
+                            temp=550,
+                            time=2.5,
                             evac_temp=450,
                             evac_time=0.5)
         

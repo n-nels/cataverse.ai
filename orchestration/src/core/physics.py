@@ -70,6 +70,15 @@ class SystemVolumes:
         )
 
 
+class PressureMetrics(NamedTuple):
+    """Derived metrics computed per pressure-logger tick."""
+
+    relative_time_s: float | None
+    amount_adsorbed_umol_per_g: float
+    apparent_conversion: float
+    apparent_coverage: float
+
+
 def moles_from_pressure(
     pressure_torr: float,
     volume_l: float,
@@ -111,54 +120,6 @@ def amount_adsorbed(
     return n_adsorbed * 1e6 / mass_g
 
 
-def amount_adsorbed_from_pressures(
-    p_initial_torr: float,
-    source_volume_l: float,
-    p_equilibrium_torr: float,
-    total_volume_l: float,
-    temperature_k: float,
-    mass_g: float,
-    gas_constant: float = DEFAULT_GAS_CONSTANT_L_TORR_PER_K_MOL,
-) -> float:
-    """Return adsorbed amount in µmol/g from initial and equilibrium pressures.
-
-    Convenience wrapper around :func:`amount_adsorbed` that computes the
-    initial moles internally, so the caller does not need to call
-    :func:`moles_from_pressure` separately with a different volume.
-
-    Parameters
-    ----------
-    p_initial_torr : float
-        Manifold pressure before expansion into the cell.
-    source_volume_l : float
-        Volume of the gas source (manifold + tube) used for the initial dose.
-    p_equilibrium_torr : float
-        Pressure after equilibration across the total volume.
-    total_volume_l : float
-        Total connected volume (manifold + cell + tube + valve).
-    temperature_k : float
-        Gas temperature in Kelvin.
-    mass_g : float
-        Catalyst sample mass in grams.
-    gas_constant : float
-        Gas constant in L·Torr·K⁻¹·mol⁻¹.
-    """
-    n_initial = moles_from_pressure(
-        pressure_torr=p_initial_torr,
-        volume_l=source_volume_l,
-        temperature_k=temperature_k,
-        gas_constant=gas_constant,
-    )
-    return amount_adsorbed(
-        n_initial_mol=n_initial,
-        pressure_equilibrium_torr=p_equilibrium_torr,
-        total_volume_l=total_volume_l,
-        temperature_k=temperature_k,
-        mass_g=mass_g,
-        gas_constant=gas_constant,
-    )
-
-
 def metal_surface_density(
     metal_load_wt_percent: float,
     molar_mass_g_mol: float,
@@ -177,15 +138,6 @@ def metal_surface_density(
         * (1 / support_surface_area_m2_g)
         * (1e-9**2)
     )
-
-
-class PressureMetrics(NamedTuple):
-    """Derived metrics computed per pressure-logger tick."""
-
-    relative_time_s: float | None
-    amount_adsorbed_umol_per_g: float
-    apparent_conversion: float
-    apparent_coverage: float
 
 
 def compute_pressure_metrics(
@@ -217,7 +169,6 @@ def compute_pressure_metrics(
     ) / total_volume_l
 
     # Total moles in the combined system after mixing (source + cell)
-    """this quantity represents intial adsorption"""
     n_initial = (p_initial * total_volume_l) / (gas_constant * temperature_k)
 
     # Amount adsorbed = (total system moles) - (moles remaining in gas phase now)
