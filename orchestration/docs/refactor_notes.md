@@ -10,22 +10,19 @@
 - [x] gas_delivery.py, line 109-110; why are we redefining?
 - [x] temperature_control.py, line 21; hardcoded default_log_interval
 - [x] Let's also write the logger to file, but overwrites on each new experiment. We have to define directory.
-- gas_delivery.py, line 711; don't we have default values for close/open?
-- src.experiments/adsorption.py, line 109; should be argument with default
-- src.experiments/adsorption.py, introduce_pretreatment_gas_to_cell(); mixes delivery and heating
-- finalize.py; may consider doing post opus acquisition things here as well for early script exit
-- should round dp, gives huge floating
-- add .json logic, remove expParams.csv logic
-- the pre_pressure readings don't specify p_cell, p_mfld like exp_pressure does in the readme.md
-- need to check the pressure calculations for calculated values
-- i thought we were going to write is_new_sample in the beginning? Rn, is in finalize
-- somehow we forgot is_reference (comes at end, needs to come first)
-- need to add process_pressure.py & analyze
-- main.py-ads.oxidize_surface() introduces gas before cooling to target temperature; they actually all do this. Need to cool/heat beforehand. See CataVerse. But need to be careful b/c heating under evac after introducing oxidation (evac_time, temp) works as expected. That is if gas@T, then only expose gas at the temperatures
-- api/adsorption.py: oxidize_surface() and pretreat_adsorbate() hardcode ramp rate needs changed to default 20. I guess the default should be 20 and we need to change the logic in temperature_control.py so it does not depend on ramp rate, but rather just measures the current temperature and the target and heats/cools accordingly. That's the root cause for the problem above.
-- adsorption.py: move p_mfld_2 and p_cell_calc_2 to top
-- let's shut heat lines off on final evac. Just put them as args for each function. If introducing pre-gas, true, if evac, false.
-- would then need to build auto pipeline to graph
-- why is pressure logger start and stop inside ExperimentSession class?
-- temperature_control.py; does the legacy code still make sense or is there a better way to do this?
-- setup.py, line 57; If you want confirmation that all devices connected, you'd need to add logger calls inside DeviceManager.connect(). But functionally,         if it didn't raise an exception, the connections succeeded.
+- [x] gas_delivery.py, line 711; don't we have default values for close/open?
+- [x] i thought we were going to write is_new_sample in the beginning? Rn, is in api, finalize()
+- [] somehow we forgot is_reference (comes at end, needs to come first)
+- [] add .json logic, remove expParams.csv logic
+- [] src.experiments/adsorption.py, line 109; should be argument with default
+- [] src.experiments/adsorption.py, introduce_pretreatment_gas_to_cell(); mixes delivery and heating
+- [] finalize.py; may consider doing post opus acquisition things here as well for early script exit
+- [] should round dp, gives huge floating
+- [] need to add process_pressure.py & analyze
+- [] main.py-ads.oxidize_surface() introduces gas before cooling to target temperature; they actually all do this. Need to cool/heat beforehand. See CataVerse. But need to be careful b/c heating under evac after introducing oxidation (evac_time, temp) works as expected. That is if gas@T, then only expose gas at the temperatures
+- [] api/adsorption.py: oxidize_surface() and pretreat_adsorbate() hardcode ramp rate needs changed to default 20. I guess the default should be 20 and we need to change the logic in temperature_control.py so it does not depend on ramp rate, but rather just measures the current temperature and the target and heats/cools accordingly. That's the root cause for the problem above.
+- [] let's shut heat lines off on final evac. Just put them as args for each function. If introducing pre-gas, true, if evac, false.
+- [] would then need to build auto pipeline to graph
+- [] why is pressure logger start and stop inside ExperimentSession class?
+- [] temperature_control.py; does the legacy code still make sense or is there a better way to do this?
+- [] setup.py, line 57; If you want confirmation that all devices connected, you'd need to add logger calls inside DeviceManager.connect(). But functionally,         if it didn't raise an exception, the connections succeeded.

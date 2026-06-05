@@ -212,6 +212,18 @@ class ExperimentSession:
                 ],
             )
 
+        if not self._check_line_exists("## is_new_sample"):
+            log_experiment_parameters(
+                self.path_readme,
+                [
+                    {
+                        "name": "is_new_sample",
+                        "description": "Whether this is a new sample.",
+                        "value": new_sample,
+                    }       
+                ],
+            )
+
         if self.file_name is None or self.folder_name is None:
             raise RuntimeError("Failed to generate experiment file/folder identifiers")
         return self.file_name, self.folder_name
@@ -226,21 +238,6 @@ class ExperimentSession:
                     return True
         return False
 
-    def _read_field_value(self, section_name: str) -> str | None:
-        """Return the ``- Value: ...`` content for a README section, or None."""
-
-        if not self.path_readme or not os.path.exists(self.path_readme):
-            return None
-
-        found_header = False
-        with open(self.path_readme, "r") as file:
-            for line in file:
-                if line.strip() == f"## {section_name}":
-                    found_header = True
-                    continue
-                if found_header and line.strip().startswith("- Value:"):
-                    return line.strip().removeprefix("- Value:").strip()
-        return None
 
     def log_pretreatment(
         self,
@@ -274,7 +271,7 @@ class ExperimentSession:
                     },
                     {
                         "name": f"pre_pressure_meas_{self.counter}",
-                        "description": "Measured pressure of gas in Torr.",
+                        "description": "Measured pressure of gas in Torr (p_mfld, p_cell).",
                         "value": p_gas_meas,
                     },
                     {
@@ -391,42 +388,6 @@ class ExperimentSession:
 
                 file.write(line)
 
-    def is_new_sample_experiment(self) -> None:
-        """Append ``is_new_sample`` metadata field using legacy share-drive rule.
-
-        Safety-net check for when the user forgets to pass ``new_sample=True``
-        to ``new_experiment()``.  Derives the value from two signals:
-
-        1. Exactly one ``*_CarbonylPeakArea.csv`` file exists on the share
-           drive for this sample folder (indicates prior peak-fit data).
-        2. The current experiment was marked successful (``exp_success = True``
-           in the README).
-
-        Both conditions must hold for ``is_new_sample`` to be ``True``.
-        """
-
-        if not self.path_readme or not self.folder_name:
-            return
-
-        directory_path = os.path.join(self.paths.share_drive_peak_fit_root, self.folder_name)
-        carbonyl_files = glob.glob(os.path.join(directory_path, "*_CarbonylPeakArea.csv"))
-
-        if len(carbonyl_files) != 1:
-            is_new_sample = False
-        else:
-            success_value = self._read_field_value("exp_success")
-            is_new_sample = success_value is not None and success_value.lower() == "true"
-
-        log_experiment_parameters(
-            self.path_readme,
-            [
-                {
-                    "name": "is_new_sample",
-                    "description": "Whether this is a new sample.",
-                    "value": is_new_sample,
-                }
-            ],
-        )
 
     def start_pressure_log(
         self,

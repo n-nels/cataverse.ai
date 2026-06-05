@@ -71,10 +71,6 @@ Each step has these fields:
 
 Result: 8 steps × (4 numeric fields + 10 gas one-hot columns) = **112 features** for pretreatments alone.
 
-## Flagged for Deeper Dive
-
-- **Q5:** Whether some targets can be NaN while others aren't. Initial inspection suggests targets are always co-fitted when fit converges — **resolved for now**.
-- **Markov chain / history dependence:** Each experiment's outcome depends on prior experiments (catalyst aging, surface state). Need a strategy to encode experiment history as features — e.g., `notebook` sequence number, cumulative exposure, or previous experiment outcomes.
 
 ## History Encoding
 
@@ -108,14 +104,6 @@ This adds 6 features (previous targets), bringing total feature count to ~121.
 - `distance_from_isref` — count of consecutive `is_reference=false` experiments since the last `is_reference=true`. Resets to 0 when `is_reference=true`.
 
 ## Open Questions
-
-### Q5: Multi-gas encoding (RESOLVED)
-
-Some pretreatment steps have two gases (e.g., `['H2', 'O2']`). Each unique gas combination is treated as its own category for one-hot encoding.
-
-**Known combinations:** `CO2`, `H2`, `H2,O2`, `H2O`, `H2O,O2`, `O2`, `O2,H2`, `O2,H2O`, `RoughPump`, `TurboPump` (10 categories)
-
-Gas order matters: `H2,O2` ≠ `O2,H1`. Unknown combinations should be flagged and halted.
 
 ### Q8: Validation strategy (PENDING)
 

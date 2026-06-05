@@ -8,18 +8,20 @@ Phase 6: Train/test split.
 
 import logging
 from typing import NamedTuple
+from pathlib import Path
 
 import pandas as pd
 
 from extract import ExperimentRecord, extract_data
 from transform import (
     TARGET_COLUMNS,
-    PRETREATMENT_GAS,
     add_previous_targets,
     compute_chain_features,
     extract_current_features,
     extract_targets,
 )
+
+DEFAULT_OUTPUT_DIR = Path(__file__).parent / "outputs"
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,48 @@ class Dataset(NamedTuple):
     records: list[ExperimentRecord]
 
 
+def reduce_features(
+    X: pd.DataFrame,
+    pre_steps_dropped: list[int],
+) -> pd.DataFrame:
+    """
+    Reduce feature set by dropping whole pretreatment steps.
+
+    All columns whose prefix matches ``pre_{step}_`` for each step in
+    ``steps_to_drop`` are removed (both gas one-hot and numeric fields).
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Full feature matrix (from :func:`assemble_dataset`).
+    steps_to_drop : list[int]
+        1-indexed pretreatment step numbers to drop entirely.
+
+    Returns
+    -------
+    pd.DataFrame
+        Reduced feature matrix.
+    """
+
+    cols_to_drop = []
+    for step in pre_steps_dropped:
+        prefix = f"pre_{step}_"
+        cols_to_drop.extend(c for c in X.columns if c.startswith(prefix))
+
+    if cols_to_drop:
+        logger.info(
+            "Dropping %d feature(s) for pretreatment step(s) %s",
+            len(cols_to_drop),
+            pre_steps_dropped,
+        )
+        X = X.drop(columns=cols_to_drop)
+    else:
+        logger.info("No columns matched steps_to_drop=%s", pre_steps_dropped)
+
+    logger.info("Reduced feature matrix: X=%s", X.shape)
+    return X
+
+
 def assemble_dataset(
     records: list[ExperimentRecord],
 ) -> tuple[pd.DataFrame, pd.DataFrame, int]:
@@ -53,6 +97,8 @@ def assemble_dataset(
     ----------
     records : list[ExperimentRecord]
         Chronologically sorted experiment records.
+    pre_steps_dropped : list[int] | None
+        List of pretreatment steps to drop during feature reduction.
 
     Returns
     -------
@@ -73,7 +119,8 @@ def assemble_dataset(
     current_features = [extract_current_features(rec.json_data) for rec in records]
 
     # Compute chain features
-    chain_features = compute_chain_features(records)
+    # chain_features = compute_chain_features(records)
+    chain_features = [{} for _ in records] # disable chain features
 
     # Add previous targets
     prev_features = add_previous_targets(records, targets)
@@ -116,22 +163,10 @@ def validate_dataset(X: pd.DataFrame, y: pd.DataFrame) -> list[str]:
     """
     issues = []
 
-    # Check dimensions
-    expected_features = 121  # Approximate
-    if X.shape[1] < expected_features - 10 or X.shape[1] > expected_features + 10:
-        issues.append(f"Feature count {X.shape[1]} differs from expected ~{expected_features}")
-
     # Check for NaN targets
     nan_targets = y.isna().sum().sum()
     if nan_targets > 0:
         issues.append(f"Found {nan_targets} NaN values in targets")
-
-    # Check for unknown gases in one-hot columns
-    gas_cols = [col for col in X.columns if "_gas_" in col and "exp_" not in col]
-    for col in gas_cols:
-        gas_name = col.split("_gas_")[-1]
-        if gas_name not in PRETREATMENT_GAS and gas_name != "":
-            issues.append(f"Unknown gas in feature: {gas_name}")
 
     # Sanity check value ranges
     temp_cols = [col for col in X.columns if "temp" in col]
@@ -212,6 +247,7 @@ def split_dataset(
 def build_dataset(
     data_root: str = r"X:\peakFit",
     force_refresh: bool = False,
+    pre_steps_dropped: list[int] | None = [1, 2, 4, 6, 8],
 ) -> Dataset:
     """
     Build complete dataset from raw data.
@@ -222,6 +258,8 @@ def build_dataset(
         Root directory containing experiment folders.
     force_refresh : bool
         If True, ignore cache and do full walk.
+    steps_to_drop : list[int] | None
+        List of pretreatment steps to drop during feature reduction.
 
     Returns
     -------
@@ -236,6 +274,9 @@ def build_dataset(
     X, y, zero_count = assemble_dataset(records)
     logger.info("Assembled: X=%s, y=%s, zero_targets=%d", X.shape, y.shape, zero_count)
 
+    # Phase 5a: Feature reduction
+    X = reduce_features(X, pre_steps_dropped=pre_steps_dropped)
+
     # Phase 5b: Validate
     issues = validate_dataset(X, y)
     if issues:
@@ -243,9 +284,6 @@ def build_dataset(
             logger.warning("Validation: %s", issue)
 
     return Dataset(X=X, y=y, records=records)
-
-
-DEFAULT_OUTPUT_DIR = Path(__file__).parent / "outputs"
 
 
 def save_dataset(
@@ -313,7 +351,6 @@ def load_dataset(
 
 
 if __name__ == "__main__":
-    import sys
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 

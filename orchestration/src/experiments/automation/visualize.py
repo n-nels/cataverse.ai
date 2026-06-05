@@ -10,7 +10,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from train import TrainedModel, sanitize_feature_names
+
+from load import load_dataset, split_dataset
+from model import load_model
+from model import DEFAULT_MODEL_DIR, TrainedModel, sanitize_feature_names
+from model import get_feature_importances
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +99,7 @@ def plot_feature_importance(
     output_dir: str | Path | None = None,
 ) -> list[Path]:
     """
-    Plot feature importance from trained models.
+    Plot global feature importance from the multi-output model.
 
     Parameters
     ----------
@@ -119,30 +123,25 @@ def plot_feature_importance(
     # Sanitize feature names to match model
     clean_names = sanitize_feature_names(feature_names)
 
-    saved_paths = []
+    # Feature importance (works for both shared and separate strategies)
+    importance = get_feature_importances(trained_model)
+    indices = np.argsort(importance)[::-1][:top_n]
 
-    for target_name, model in trained_model.models.items():
-        # Get feature importance
-        importance = model.feature_importances_
-        indices = np.argsort(importance)[::-1][:top_n]
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.barh(range(top_n), importance[indices][::-1])
+    ax.set_yticks(range(top_n))
+    ax.set_yticklabels([clean_names[i] for i in indices][::-1])
+    ax.set_xlabel("Importance")
+    ax.set_title("Global Feature Importance (multi-output model)")
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.barh(range(top_n), importance[indices][::-1])
-        ax.set_yticks(range(top_n))
-        ax.set_yticklabels([clean_names[i] for i in indices][::-1])
-        ax.set_xlabel("Importance")
-        ax.set_title(f"Feature Importance: {target_name}")
+    plt.tight_layout()
 
-        plt.tight_layout()
+    save_path = out_dir / "importance_global.tiff"
+    fig.savefig(save_path, format="tiff", bbox_inches="tight")
+    plt.close(fig)
+    logger.info("Saved global feature importance plot: %s", save_path)
 
-        safe_name = target_name.replace("-", "_").replace(".", "_")
-        save_path = out_dir / f"importance_{safe_name}.tiff"
-        fig.savefig(save_path, format="tiff", bbox_inches="tight")
-        plt.close(fig)
-        saved_paths.append(save_path)
-        logger.info("Saved feature importance plot: %s", save_path)
-
-    return saved_paths
+    return [save_path]
 
 
 def plot_predicted_vs_actual(
@@ -252,11 +251,8 @@ def generate_all_visualizations(
     X_test_clean = X_test.copy()
     X_test_clean.columns = clean_names
 
-    y_pred_list = []
-    for target_name in trained_model.models.keys():
-        pred = trained_model.models[target_name].predict(X_test_clean)
-        y_pred_list.append(pred)
-    y_pred = np.column_stack(y_pred_list)
+    # Single multi-output predict returns (n_samples, n_targets)
+    y_pred = trained_model.model.predict(X_test_clean)
 
     # Get y_test (same index as X_test)
     y_test = y.loc[X_test.index]
@@ -265,3 +261,30 @@ def generate_all_visualizations(
 
     logger.info("Generated %d visualizations in %s", len(all_paths), out_dir)
     return all_paths
+
+
+if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    # Load saved dataset from outputs/
+    print("=== Loading dataset ===")
+    X, y = load_dataset(DEFAULT_OUTPUT_DIR)
+
+    # Chronological split to recover X_test
+    print("\n=== Splitting dataset ===")
+    splits = split_dataset(X, y)
+
+    # Load trained model
+    print("\n=== Loading model ===")
+    model_path = DEFAULT_MODEL_DIR / "model.joblib"
+    trained = load_model(model_path)
+
+    # Generate all visualizations
+    print("\n=== Generating visualizations ===")
+    paths = generate_all_visualizations(
+        y, trained, list(X.columns), splits.X_test,
+    )
+    print(f"\nGenerated {len(paths)} visualizations:")
+    for p in paths:
+        print(f"  {p}")

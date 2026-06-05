@@ -27,25 +27,27 @@ TARGET_COLUMNS = [
 ]
 
 
-PRETREATMENT_GAS = {
-    "CO2",
-    "H2",
-    "H2,O2",
-    "H2O",
-    "H2O,O2",
-    "O2",
-    "O2,H2",
-    "O2,H2O",
-    "RoughPump",
-    "TurboPump",
-}
-
-
 VACUUM_GASES = {"RoughPump", "TurboPump"}
+
+
+GAS_ENCODING = {
+    "": 0,
+    "CO2": 1,
+    "H2": 2,
+    "H2,O2": 3,
+    "H2O": 4,
+    "H2O,O2": 5,
+    "O2": 6,
+    "O2,H2": 7,
+    "O2,H2O": 8,
+}
+N_GAS_BITS = 4  # ceil(log2(9)) = 4
 
 MAX_PRETREATMENT_STEPS = 8
 
 STEP_NUMERIC_FIELDS = ["pressure_calc", "temp", "rate", "duration"]
+STEP_NUMERIC_FIELDS = ["temp", "duration"]
+# STEP_NUMERIC_FIELDS = ["temp"]
 
 
 class TargetExtractionError(Exception):
@@ -225,12 +227,13 @@ def extract_pretreatment_features(json_data: dict) -> dict[str, float]:
                 "duration": 0.0,
             }
 
-        # Gas one-hot encoding
-        gas_combo = step_features["gas_combo"]
-        for gas_type in PRETREATMENT_GAS:
-            features[f"{prefix}_gas_{gas_type}"] = (
-                1.0 if gas_combo == gas_type else 0.0
-            )
+        # Gas binary encoding (4 bits, no ordinal bias)
+        gas_value = GAS_ENCODING.get(step_features["gas_combo"], 0)
+        for bit in range(N_GAS_BITS):
+            features[f"{prefix}_gas_bit{bit}"] = float((gas_value >> bit) & 1)
+
+        # # Gas one-hot encoding (single column with categorical values)
+        # features[f"{prefix}_gas"] = float(GAS_ENCODING.get(step_features["gas_combo"], 0))
 
         # Numeric fields
         for field in STEP_NUMERIC_FIELDS:
@@ -383,11 +386,12 @@ def compute_chain_features(
 def add_previous_targets(
     records: list[ExperimentRecord],
     all_targets: list[pd.Series],
+    prev_target_columns: list[str] | None = None,
 ) -> list[dict[str, float]]:
     """
     Phase 4: Add previous experiment targets as features.
 
-    For each experiment, appends the 6 target values from the previous
+    For each experiment, appends target values from the previous
     experiment in the same notebook. First experiment in chain uses zeros.
 
     Parameters
@@ -396,15 +400,21 @@ def add_previous_targets(
         Chronologically sorted experiment records.
     all_targets : list[pd.Series]
         Target values for each record (same order).
+    prev_target_columns : list[str] | None
+        Which target columns to include as previous-target features.
+        Default ``TARGET_COLUMNS[1:2]`` (only ``pfo-sec_q_e_au``).
 
     Returns
     -------
     list[dict[str, float]]
         Previous target features for each record.
     """
+    if prev_target_columns is None:
+        prev_target_columns = TARGET_COLUMNS[1:2]
+
     prev_features = []
 
-    # Per-notebook state: last targets seen
+    # Per-notebook state: last targets seen (full 6-column series)
     notebook_last_targets: dict[str, pd.Series | None] = {}
 
     for rec, targets in zip(records, all_targets):
@@ -416,13 +426,15 @@ def add_previous_targets(
 
         if last_targets is None:
             # First experiment in chain — use zeros
-            prev_features.append({f"prev_{col}": 0.0 for col in TARGET_COLUMNS})
+            prev_features.append(
+                {f"prev_{col}": 0.0 for col in prev_target_columns}
+            )
         else:
             prev_features.append(
-                {f"prev_{col}": float(last_targets[col]) for col in TARGET_COLUMNS}
+                {f"prev_{col}": float(last_targets[col]) for col in prev_target_columns}
             )
 
-        # Update state with current targets
+        # Update state with current targets (full series for next lookup)
         notebook_last_targets[notebook] = targets
 
     return prev_features

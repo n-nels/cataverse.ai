@@ -53,6 +53,8 @@ class AdsorptionExperiment:
     p_cell_calc: float | tuple[float, float] | None = field(default=None)
     dt: Any = field(default=None)
     chiller_state: bool | None = field(default=None)
+    p_mfld_2: float | None = field(default=None)
+    p_cell_calc_2: float | None = field(default=None)
 
     def acquire_ms_spectra(self) -> MassSpecLogger:
         """Start mass-spec streaming with legacy valve/sequence ordering."""
@@ -340,9 +342,6 @@ class AdsorptionExperiment:
         """
 
         self.session.mark_success(success=success)
-        time.sleep(5)
-
-        self.session.is_new_sample_experiment()
         time.sleep(5)
 
         try:
