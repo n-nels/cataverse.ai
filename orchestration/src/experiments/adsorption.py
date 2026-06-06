@@ -362,8 +362,6 @@ class AdsorptionExperiment:
                 ),
             )
 
-            self.ftir.send_opus_request({"readme": True})
-
         except Exception as e:
             logger.info(f"An error occurred while copying the file: {e}")
 
