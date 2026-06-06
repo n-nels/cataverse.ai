@@ -23,5 +23,5 @@ legacy/
 .idea/
 
 # folders
-orchestration/src/experiments/automation/outputs/
-orchestration/src/experiments/automation/notebooks/
+src/experiments/automation/outputs/
+# src/experiments/automation/notebooks/
