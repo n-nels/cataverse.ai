@@ -8,6 +8,7 @@ control/experiments stack. It intentionally avoids the package name
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from .mass_spec_logger import MassSpecLogger
 from .pressure_logger import PressureLogger
@@ -15,6 +16,7 @@ from .temperature_log_writer import TemperatureLogWriter
 
 
 _LOGGING_CONFIGURED = False
+_DEFAULT_LOG_FILE_PATH = Path(r"C:\Data\cataverse.log")
 
 
 def configure_logging(level: int = logging.INFO) -> None:
@@ -29,9 +31,14 @@ def configure_logging(level: int = logging.INFO) -> None:
         logging.getLogger().setLevel(level)
         return
 
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    _DEFAULT_LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    handlers.append(logging.FileHandler(_DEFAULT_LOG_FILE_PATH, mode="w"))
+
     logging.basicConfig(
         level=level,
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        handlers=handlers,
     )
     _LOGGING_CONFIGURED = True
 

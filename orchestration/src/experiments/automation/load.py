@@ -8,18 +8,23 @@ Phase 6: Train/test split.
 
 import logging
 from typing import NamedTuple
+from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 from extract import ExperimentRecord, extract_data
+from model import LOG_TRANSFORM_TARGETS
 from transform import (
     TARGET_COLUMNS,
-    PRETREATMENT_GAS,
     add_previous_targets,
     compute_chain_features,
     extract_current_features,
     extract_targets,
 )
+
+DEFAULT_OUTPUT_DIR = Path(__file__).parent / "outputs"
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +48,48 @@ class Dataset(NamedTuple):
     records: list[ExperimentRecord]
 
 
+def reduce_features(
+    X: pd.DataFrame,
+    pre_steps_dropped: list[int],
+) -> pd.DataFrame:
+    """
+    Reduce feature set by dropping whole pretreatment steps.
+
+    All columns whose prefix matches ``pre_{step}_`` for each step in
+    ``steps_to_drop`` are removed (both gas one-hot and numeric fields).
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Full feature matrix (from :func:`assemble_dataset`).
+    steps_to_drop : list[int]
+        1-indexed pretreatment step numbers to drop entirely.
+
+    Returns
+    -------
+    pd.DataFrame
+        Reduced feature matrix.
+    """
+
+    cols_to_drop = []
+    for step in pre_steps_dropped:
+        prefix = f"pre_{step}_"
+        cols_to_drop.extend(c for c in X.columns if c.startswith(prefix))
+
+    if cols_to_drop:
+        logger.info(
+            "Dropping %d feature(s) for pretreatment step(s) %s",
+            len(cols_to_drop),
+            pre_steps_dropped,
+        )
+        X = X.drop(columns=cols_to_drop)
+    else:
+        logger.info("No columns matched steps_to_drop=%s", pre_steps_dropped)
+
+    logger.info("Reduced feature matrix: X=%s", X.shape)
+    return X
+
+
 def assemble_dataset(
     records: list[ExperimentRecord],
 ) -> tuple[pd.DataFrame, pd.DataFrame, int]:
@@ -53,20 +100,24 @@ def assemble_dataset(
     ----------
     records : list[ExperimentRecord]
         Chronologically sorted experiment records.
+    pre_steps_dropped : list[int] | None
+        List of pretreatment steps to drop during feature reduction.
 
     Returns
     -------
     tuple[pd.DataFrame, pd.DataFrame, int]
         X (features), y (targets), zero_target_count.
     """
-    # Extract targets
+    # Extract targets and max time
     targets = []
+    time_features = []
     zero_count = 0
     for rec in records:
-        target = extract_targets(rec.csv_path)
+        target, max_time_s = extract_targets(rec.csv_path)
         if (target == 0.0).all():
             zero_count += 1
         targets.append(target)
+        time_features.append({"max_time_s": max_time_s})
     logger.info("Extracted targets: %d total, %d zero targets", len(targets), zero_count)
 
     # Extract current features
@@ -74,14 +125,15 @@ def assemble_dataset(
 
     # Compute chain features
     chain_features = compute_chain_features(records)
+    # chain_features = [{} for _ in records] # disable chain features
 
     # Add previous targets
-    prev_features = add_previous_targets(records, targets)
+    prev_features = add_previous_targets(records, targets, prev_target_columns=None)
 
     # Combine features into DataFrame
     X_data = []
-    for curr, chain, prev in zip(current_features, chain_features, prev_features):
-        row = {**curr, **chain, **prev}
+    for curr, chain, prev, time_feat in zip(current_features, chain_features, prev_features, time_features):
+        row = {**curr, **chain, **prev, **time_feat}
         X_data.append(row)
 
     X = pd.DataFrame(X_data, index=[rec.base_name for rec in records])
@@ -92,6 +144,12 @@ def assemble_dataset(
         y_data.append({col: target[col] for col in TARGET_COLUMNS if col in target.index})
 
     y = pd.DataFrame(y_data, index=[rec.base_name for rec in records])
+
+    # Transform previous-target features to match training space
+    for target in LOG_TRANSFORM_TARGETS:
+        col = f"prev_{target}"
+        if col in X.columns:
+            X[col] = np.log(np.maximum(X[col], 1e-12))
 
     logger.info("Assembled dataset: X=%s, y=%s", X.shape, y.shape)
 
@@ -116,22 +174,10 @@ def validate_dataset(X: pd.DataFrame, y: pd.DataFrame) -> list[str]:
     """
     issues = []
 
-    # Check dimensions
-    expected_features = 121  # Approximate
-    if X.shape[1] < expected_features - 10 or X.shape[1] > expected_features + 10:
-        issues.append(f"Feature count {X.shape[1]} differs from expected ~{expected_features}")
-
     # Check for NaN targets
     nan_targets = y.isna().sum().sum()
     if nan_targets > 0:
         issues.append(f"Found {nan_targets} NaN values in targets")
-
-    # Check for unknown gases in one-hot columns
-    gas_cols = [col for col in X.columns if "_gas_" in col and "exp_" not in col]
-    for col in gas_cols:
-        gas_name = col.split("_gas_")[-1]
-        if gas_name not in PRETREATMENT_GAS and gas_name != "":
-            issues.append(f"Unknown gas in feature: {gas_name}")
 
     # Sanity check value ranges
     temp_cols = [col for col in X.columns if "temp" in col]
@@ -175,22 +221,31 @@ def split_dataset(
     DatasetSplit
         Named tuple with X_train, y_train, X_val, y_val, X_test, y_test.
     """
-    n = len(X)
-    test_start = int(n * train_ratio)
-    val_start = int(test_start * (1 - val_ratio))
+    # # Chronological split (no shuffling)
+    # n = len(X)
+    # test_start = int(n * train_ratio)
+    # val_start = int(test_start * (1 - val_ratio))
 
-    # Chronological split — no shuffling
-    X_train_full = X.iloc[:test_start]
-    y_train_full = y.iloc[:test_start]
+    # # Chronological split — no shuffling
+    # X_train_full = X.iloc[:test_start]
+    # y_train_full = y.iloc[:test_start]
 
-    X_test = X.iloc[test_start:]
-    y_test = y.iloc[test_start:]
+    # X_test = X.iloc[test_start:]
+    # y_test = y.iloc[test_start:]
 
-    X_train = X_train_full.iloc[:val_start]
-    y_train = y_train_full.iloc[:val_start]
+    # X_train = X_train_full.iloc[:val_start]
+    # y_train = y_train_full.iloc[:val_start]
 
-    X_val = X_train_full.iloc[val_start:]
-    y_val = y_train_full.iloc[val_start:]
+    # X_val = X_train_full.iloc[val_start:]
+    # y_val = y_train_full.iloc[val_start:]
+
+    # Random split
+    X_train_full, X_test, y_train_full, y_test = train_test_split(
+        X, y, test_size=1.0 - train_ratio, random_state=42,
+    )
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_full, y_train_full, test_size=val_ratio, random_state=42,
+    )
 
     logger.info(
         "Split: train=%d, val=%d, test=%d",
@@ -212,6 +267,7 @@ def split_dataset(
 def build_dataset(
     data_root: str = r"X:\peakFit",
     force_refresh: bool = False,
+    pre_steps_dropped: list[int] | None = [1, 2, 4, 6, 8],
 ) -> Dataset:
     """
     Build complete dataset from raw data.
@@ -222,6 +278,8 @@ def build_dataset(
         Root directory containing experiment folders.
     force_refresh : bool
         If True, ignore cache and do full walk.
+    steps_to_drop : list[int] | None
+        List of pretreatment steps to drop during feature reduction.
 
     Returns
     -------
@@ -236,6 +294,9 @@ def build_dataset(
     X, y, zero_count = assemble_dataset(records)
     logger.info("Assembled: X=%s, y=%s, zero_targets=%d", X.shape, y.shape, zero_count)
 
+    # Phase 5a: Feature reduction
+    X = reduce_features(X, pre_steps_dropped=pre_steps_dropped)
+
     # Phase 5b: Validate
     issues = validate_dataset(X, y)
     if issues:
@@ -245,8 +306,71 @@ def build_dataset(
     return Dataset(X=X, y=y, records=records)
 
 
+def save_dataset(
+    dataset: Dataset,
+    output_dir: str | Path | None = None,
+) -> Path:
+    """
+    Save dataset to disk as parquet files.
+
+    Parameters
+    ----------
+    dataset : Dataset
+        Dataset to save.
+    output_dir : str | Path | None
+        Output directory. Defaults to module-relative outputs/.
+
+    Returns
+    -------
+    Path
+        Path to output directory.
+    """
+    out_dir = Path(output_dir) if output_dir else DEFAULT_OUTPUT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save features
+    X_path = out_dir / "X.parquet"
+    dataset.X.to_parquet(X_path)
+
+    # Save targets
+    y_path = out_dir / "y.parquet"
+    dataset.y.to_parquet(y_path)
+
+    # Save metadata (record base_names)
+    meta_path = out_dir / "records.csv"
+    pd.DataFrame({
+        "base_name": [r.base_name for r in dataset.records],
+        "datetime": [r.datetime.isoformat() for r in dataset.records],
+    }).to_csv(meta_path, index=False)
+
+    logger.info("Saved dataset to %s (X=%s, y=%s)", out_dir, X_path, y_path)
+    return out_dir
+
+
+def load_dataset(
+    input_dir: str | Path,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Load dataset from disk.
+
+    Parameters
+    ----------
+    input_dir : str | Path
+        Directory containing X.parquet and y.parquet.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        X (features), y (targets).
+    """
+    in_dir = Path(input_dir)
+    X = pd.read_parquet(in_dir / "X.parquet")
+    y = pd.read_parquet(in_dir / "y.parquet")
+    logger.info("Loaded dataset: X=%s, y=%s", X.shape, y.shape)
+    return X, y
+
+
 if __name__ == "__main__":
-    import sys
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
