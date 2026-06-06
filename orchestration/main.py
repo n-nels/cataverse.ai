@@ -36,7 +36,7 @@ def run_isotopic_exchange_calibration(inst: Instruments):
         pressure=inst.devices.pressure,
     )
 
-    inst.session.new_experiment()
+    inst.session.new_experiment(is_reference=False)
     success = False
     try:
         iso.chiller_variac_state(chiller_cmd=True, variac_cmd=True, variac_vsl_cmd=True)
@@ -107,7 +107,7 @@ def run_adsorption_reference(inst: Instruments):
     """[pressure_limits_torr]-{single:8.3, dual:[1.6, 6.7]}"""
     
     ads = Adsorption(inst)
-    inst.session.new_experiment(new_sample=False)
+    inst.session.new_experiment(new_sample=False, is_reference=True)
     success = False
     
     try:

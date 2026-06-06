@@ -45,6 +45,7 @@ class ExperimentSession:
         name: str | None = None,
         folder_name: str | None = None,
         new_sample: bool = False,
+        is_reference: bool = False,
         counter: int = 0,
     ) -> tuple[str, str]:
         """Create/resolve experiment IDs and initialize README/material metadata."""
@@ -208,6 +209,18 @@ class ExperimentSession:
                         "name": "exp_success",
                         "description": "Success status of the experiment.",
                         "value": False,
+                    }
+                ],
+            )
+
+        if not self._check_line_exists("## is_reference"):
+            log_experiment_parameters(
+                self.path_readme,
+                [
+                    {
+                        "name": "is_reference",
+                        "description": "Whether this is a reference experiment.",
+                        "value": is_reference,
                     }
                 ],
             )

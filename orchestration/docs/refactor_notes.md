@@ -12,7 +12,7 @@
 - [x] Let's also write the logger to file, but overwrites on each new experiment. We have to define directory.
 - [x] gas_delivery.py, line 711; don't we have default values for close/open?
 - [x] i thought we were going to write is_new_sample in the beginning? Rn, is in api, finalize()
-- [] somehow we forgot is_reference (comes at end, needs to come first)
+- [x] somehow we forgot is_reference (comes at end, needs to come first)
 - [] add .json logic, remove expParams.csv logic
 - [] src.experiments/adsorption.py, line 109; should be argument with default
 - [] src.experiments/adsorption.py, introduce_pretreatment_gas_to_cell(); mixes delivery and heating
