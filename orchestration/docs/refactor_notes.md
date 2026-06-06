@@ -25,4 +25,4 @@
 - [] would then need to build auto pipeline to graph
 - [] why is pressure logger start and stop inside ExperimentSession class?
 - [] temperature_control.py; does the legacy code still make sense or is there a better way to do this?
-- [] setup.py, line 57; If you want confirmation that all devices connected, you'd need to add logger calls inside DeviceManager.connect(). But functionally,         if it didn't raise an exception, the connections succeeded.
+- [] setup.py, line 57; If you want confirmation that all devices connected, you'd need to add logger calls inside DeviceManager.connect(). But functionally, if it didn't raise an exception, the connections succeeded.

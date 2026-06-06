@@ -71,7 +71,7 @@ def run_adsorption_experiment(inst: Instruments):
     """[pressure_limits_torr]-{single:8.3, dual:[1.6, 6.7]}"""
     
     ads = Adsorption(inst)
-    inst.session.new_experiment(new_sample=False)
+    inst.session.new_experiment(is_new=False)
     success = False
     
     try:
@@ -107,7 +107,7 @@ def run_adsorption_reference(inst: Instruments):
     """[pressure_limits_torr]-{single:8.3, dual:[1.6, 6.7]}"""
     
     ads = Adsorption(inst)
-    inst.session.new_experiment(new_sample=False, is_reference=True)
+    inst.session.new_experiment(is_new=False, is_reference=True)
     success = False
     
     try:
