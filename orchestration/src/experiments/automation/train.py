@@ -1,8 +1,4 @@
-"""
-Model training for PFO-Sec parameter prediction.
-
-Trains LightGBM models for each target with early stopping.
-"""
+""" Model training for PFO-Sec parameter prediction."""
 
 import logging
 from pathlib import Path
@@ -13,6 +9,7 @@ from model import (
     ModelConfig,
     train_all_targets,
     evaluate_on_test,
+    evaluate_baseline,
     save_model,
 )
 
@@ -41,11 +38,15 @@ if __name__ == "__main__":
         splits.X_train, splits.y_train,
         splits.X_val, splits.y_val,
         config,
-        strategy="separate",  # "shared" or "separate"
+        strategy="shared",  # "shared" or "separate"
     )
 
     print("\n=== Evaluating on test set ===")
     test_metrics = evaluate_on_test(trained_model, splits.X_test, splits.y_test)
+
+    print("\n=== Baseline (training mean) ===")
+    baseline_metrics = evaluate_baseline(splits.y_train, splits.y_test)
+    print("  Baseline predicts training mean for every test sample — uses no features.")
 
     print("\n=== Saving model ===")
     model_path = save_model(
@@ -72,3 +73,9 @@ if __name__ == "__main__":
         if target != "aggregate":
             print(f"  {target}: RMSE={metrics['rmse']:.6f}, R²={metrics['r2']:.4f}")
     print(f"  Aggregate: RMSE={test_metrics['aggregate']['avg_rmse']:.6f}, R²={test_metrics['aggregate']['avg_r2']:.4f}")
+
+    print(f"\nBaseline Metrics (training mean):")
+    for target, metrics in baseline_metrics.items():
+        if target != "aggregate":
+            print(f"  {target}: RMSE={metrics['rmse']:.6f}, R²={metrics['r2']:.4f}")
+    print(f"  Aggregate: RMSE={baseline_metrics['aggregate']['avg_rmse']:.6f}, R²={baseline_metrics['aggregate']['avg_r2']:.4f}")

@@ -23,6 +23,8 @@ import numpy as np
 import pandas as pd
 import lightgbm as lgb
 from lightgbm import LGBMRegressor
+from scipy import stats
+from scipy.special import inv_boxcox
 from sklearn.metrics import root_mean_squared_error, r2_score
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
@@ -31,6 +33,14 @@ logger = logging.getLogger(__name__)
 
 # Default model directory
 DEFAULT_MODEL_DIR = Path(__file__).parent / "models"
+
+# Targets whose scale spans orders of magnitude — train in log space
+LOG_TRANSFORM_TARGETS = [
+    "pfo-sec_q_inf_au",
+    "pfo-sec_k_a_s-1",
+    "pfo-sec_k_s_s-1",
+    "pfo-sec_k_p_s-1",
+]
 
 
 class ModelConfig(NamedTuple):
@@ -58,6 +68,7 @@ class TrainedModel(NamedTuple):
     config: ModelConfig
     target_names: list[str]
     metrics: dict  # {target_name: {rmse: float, r2: float}}
+    lambdas: dict[str, float] | None = None  # Box-Cox lambdas per target, None = log transform
 
 
 def sanitize_feature_names(columns: list[str]) -> list[str]:
@@ -77,6 +88,106 @@ def sanitize_feature_names(columns: list[str]) -> list[str]:
         Sanitized column names.
     """
     return [re.sub(r"[^\w\.\-]", "_", col) for col in columns]
+
+
+def fit_boxcox_lambdas(
+    y: pd.DataFrame,
+    targets: list[str] | None = None,
+) -> dict[str, float]:
+    """
+    Fit Box-Cox lambda for each target column.
+
+    Parameters
+    ----------
+    y : pd.DataFrame
+        Training targets in original scale.
+    targets : list[str] | None
+        Columns to fit. Defaults to ``LOG_TRANSFORM_TARGETS``.
+
+    Returns
+    -------
+    dict[str, float]
+        Mapping of column name to Box-Cox lambda.
+    """
+    if targets is None:
+        targets = LOG_TRANSFORM_TARGETS
+    lambdas: dict[str, float] = {}
+    for col in targets:
+        if col in y.columns:
+            _, lam = stats.boxcox(np.maximum(y[col].values, 1e-12))
+            lambdas[col] = lam
+    return lambdas
+
+
+def apply_target_transforms(
+    y: pd.DataFrame,
+    lambdas: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """
+    Apply log or Box-Cox transform to specified target columns.
+
+    If ``lambdas`` is provided, uses Box-Cox with those per-column lambdas.
+    Otherwise falls back to ``np.log`` (the previous behavior).
+
+    Parameters
+    ----------
+    y : pd.DataFrame
+        Targets in original scale (one column per target).
+    lambdas : dict[str, float] | None
+        Box-Cox lambdas per column. If None, uses log transform.
+
+    Returns
+    -------
+    pd.DataFrame
+        Transformed targets.
+    """
+    yt = y.copy()
+    if lambdas is not None:
+        for col, lam in lambdas.items():
+            if col in yt.columns:
+                yt[col] = stats.boxcox(np.maximum(yt[col].values, 1e-12), lmbda=lam)
+    else:
+        for col in LOG_TRANSFORM_TARGETS:
+            if col in yt.columns:
+                yt[col] = np.log(np.maximum(yt[col], 1e-12))
+    return yt
+
+
+def inverse_target_transforms(
+    values: np.ndarray,
+    target_names: list[str],
+    lambdas: dict[str, float] | None = None,
+) -> np.ndarray:
+    """
+    Invert log or Box-Cox transform.
+
+    If ``lambdas`` is provided, uses inverse Box-Cox.
+    Otherwise falls back to ``np.exp`` (the previous behavior).
+
+    Parameters
+    ----------
+    values : np.ndarray
+        Predicted or baseline values in transformed space, shape (n, n_targets).
+    target_names : list[str]
+        Column names corresponding to each column of ``values``.
+    lambdas : dict[str, float] | None
+        Box-Cox lambdas per column. If None, uses exp transform.
+
+    Returns
+    -------
+    np.ndarray
+        Values in original scale.
+    """
+    result = values.copy()
+    if lambdas is not None:
+        for i, name in enumerate(target_names):
+            if name in lambdas:
+                result[:, i] = inv_boxcox(result[:, i], lambdas[name])
+    else:
+        for i, name in enumerate(target_names):
+            if name in LOG_TRANSFORM_TARGETS:
+                result[:, i] = np.exp(result[:, i])
+    return result
 
 
 def _sanitize_xy(
@@ -258,28 +369,39 @@ def train_all_targets(
     if config is None:
         config = ModelConfig()
 
+    target_names = list(y_train.columns)
+
+    # Fit Box-Cox lambdas on training targets
+    lambdas = fit_boxcox_lambdas(y_train)
+    y_train_tfm = apply_target_transforms(y_train, lambdas)
+    y_val_tfm = apply_target_transforms(y_val, lambdas)
+
     # Sanitize feature names for LightGBM
     X_train_clean, X_val_clean = _sanitize_xy(X_train, X_val)
 
     logger.info(
-        "Training model (strategy=%s) on %d targets",
+        "Training model (strategy=%s) on %d targets (Box-Cox lambdas: %s)",
         strategy, y_train.shape[1],
+        {k: f"{v:.3f}" for k, v in lambdas.items()},
     )
 
     # Dispatch to selected strategy
     if strategy == "shared":
-        model = _train_shared(X_train_clean, y_train, X_val_clean, y_val, config)
+        model = _train_shared(X_train_clean, y_train_tfm, X_val_clean, y_val_tfm, config)
     elif strategy == "separate":
-        model = _train_separate(X_train_clean, y_train, config)
+        model = _train_separate(X_train_clean, y_train_tfm, config)
     else:
         raise ValueError(f"Unknown strategy: {strategy!r}. Choose 'shared' or 'separate'.")
 
-    # Evaluate per-target on validation set
-    y_pred = model.predict(X_val_clean)  # (n_samples, n_targets)
+    # Evaluate per-target on validation set (invert to original scale)
+    y_pred_tfm = model.predict(X_val_clean)  # (n_samples, n_targets) in transf. space
+    y_pred = inverse_target_transforms(y_pred_tfm, target_names, lambdas)
+    y_val_orig = y_val.values  # already in original scale
+
     all_metrics = {}
-    for i, target_name in enumerate(y_train.columns):
-        rmse = float(root_mean_squared_error(y_val.iloc[:, i], y_pred[:, i]))
-        r2 = float(r2_score(y_val.iloc[:, i], y_pred[:, i]))
+    for i, target_name in enumerate(target_names):
+        rmse = float(root_mean_squared_error(y_val_orig[:, i], y_pred[:, i]))
+        r2 = float(r2_score(y_val_orig[:, i], y_pred[:, i]))
         all_metrics[target_name] = {"rmse": rmse, "r2": r2}
         logger.info("%s - RMSE: %.6f, R²: %.4f", target_name, rmse, r2)
 
@@ -291,8 +413,9 @@ def train_all_targets(
     return TrainedModel(
         model=model,
         config=config,
-        target_names=list(y_train.columns),
+        target_names=target_names,
         metrics=all_metrics,
+        lambdas=lambdas,
     )
 
 
@@ -323,12 +446,16 @@ def evaluate_on_test(
     X_test_clean = X_test.copy()
     X_test_clean.columns = clean_feature_names
 
-    y_pred = trained_model.model.predict(X_test_clean)  # (n_samples, n_targets)
+    # Predict in transformed space, then invert to original scale
+    y_pred_tfm = trained_model.model.predict(X_test_clean)
+    y_pred = inverse_target_transforms(y_pred_tfm, trained_model.target_names, trained_model.lambdas)
+
+    y_test_orig = y_test.values  # already in original scale
 
     test_metrics = {}
     for i, target_name in enumerate(y_test.columns):
-        rmse = float(root_mean_squared_error(y_test.iloc[:, i], y_pred[:, i]))
-        r2 = float(r2_score(y_test.iloc[:, i], y_pred[:, i]))
+        rmse = float(root_mean_squared_error(y_test_orig[:, i], y_pred[:, i]))
+        r2 = float(r2_score(y_test_orig[:, i], y_pred[:, i]))
         test_metrics[target_name] = {"rmse": rmse, "r2": r2}
         logger.info("Test %s - RMSE: %.6f, R²: %.4f", target_name, rmse, r2)
 
@@ -339,6 +466,50 @@ def evaluate_on_test(
     logger.info("Test Aggregate - Avg RMSE: %.6f, Avg R²: %.4f", avg_rmse, avg_r2)
 
     return test_metrics
+
+
+def evaluate_baseline(
+    y_train: pd.DataFrame,
+    y_test: pd.DataFrame,
+) -> dict:
+    """
+    Evaluate a mean-prediction baseline on the test set.
+
+    Predicts the training-set mean for every test sample — a no-information
+    baseline that any real model should meaningfully outperform.
+
+    Parameters
+    ----------
+    y_train : pd.DataFrame
+        Training targets (one column per target).
+    y_test : pd.DataFrame
+        Test targets (one column per target).
+
+    Returns
+    -------
+    dict
+        Baseline metrics per target and aggregates.
+    """
+    # Compute baseline mean in transformed space (matches training space)
+    lambdas = fit_boxcox_lambdas(y_train)
+    y_train_tfm = apply_target_transforms(y_train, lambdas)
+    baseline_tfm = np.tile(y_train_tfm.mean().values, (len(y_test), 1))  # (n_test, n_targets)
+    # Invert to original scale for comparison
+    baseline = inverse_target_transforms(baseline_tfm, list(y_test.columns), lambdas)
+
+    baseline_metrics: dict = {}
+    for i, target_name in enumerate(y_test.columns):
+        rmse = float(root_mean_squared_error(y_test.iloc[:, i], baseline[:, i]))
+        r2 = float(r2_score(y_test.iloc[:, i], baseline[:, i]))
+        baseline_metrics[target_name] = {"rmse": rmse, "r2": r2}
+        logger.info("Baseline %s - RMSE: %.6f, R²: %.4f", target_name, rmse, r2)
+
+    avg_rmse = sum(m["rmse"] for m in baseline_metrics.values()) / len(baseline_metrics)
+    avg_r2 = sum(m["r2"] for m in baseline_metrics.values()) / len(baseline_metrics)
+    baseline_metrics["aggregate"] = {"avg_rmse": avg_rmse, "avg_r2": avg_r2}
+    logger.info("Baseline Aggregate - Avg RMSE: %.6f, Avg R²: %.4f", avg_rmse, avg_r2)
+
+    return baseline_metrics
 
 
 def get_feature_importances(
@@ -412,10 +583,11 @@ def save_model(
         "config": trained_model.config,
         "target_names": trained_model.target_names,
         "metrics": trained_model.metrics,
+        "lambdas": trained_model.lambdas,
         "feature_names": sanitize_feature_names(feature_names),
     }
 
-    model_path = save_dir / "model.joblib"
+    model_path = save_dir / "lightgbm.joblib"
     joblib.dump(artifacts, model_path)
     logger.info("Saved model to %s", model_path)
 
@@ -442,4 +614,5 @@ def load_model(model_path: str | Path) -> TrainedModel:
         config=artifacts["config"],
         target_names=artifacts["target_names"],
         metrics=artifacts["metrics"],
+        lambdas=artifacts.get("lambdas"),
     )

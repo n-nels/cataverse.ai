@@ -8,6 +8,7 @@ Phase 4: Previous experiment targets.
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -18,12 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 TARGET_COLUMNS = [
-    "pfo-sec_k_a_s-1",
+    "pfo-sec_q0_au",
     "pfo-sec_q_e_au",
+    "pfo-sec_q_inf_au",
+    "pfo-sec_k_a_s-1",
     "pfo-sec_k_s_s-1",
     "pfo-sec_k_p_s-1",
-    "pfo-sec_q_inf_au",
-    "pfo-sec_q0_au",
 ]
 
 
@@ -54,7 +55,7 @@ class TargetExtractionError(Exception):
     """Raised when target extraction fails for an experiment."""
 
 
-def extract_targets(csv_path) -> pd.Series:
+def extract_targets(csv_path: Path) -> tuple[pd.Series, float]:
     """
     Phase 2: Extract target values from monomer_sum rows.
 
@@ -71,8 +72,9 @@ def extract_targets(csv_path) -> pd.Series:
 
     Returns
     -------
-    pd.Series
-        The 6 target values for the experiment (or zeros if no valid rows).
+    tuple[pd.Series, float]
+        (targets, max_time_s) — the 6 target values for the experiment
+        (or zeros if no valid rows) and the corresponding max Time (s).
     """
     csv_data = pd.read_csv(csv_path)
 
@@ -81,7 +83,7 @@ def extract_targets(csv_path) -> pd.Series:
 
     if monomer_rows.empty:
         logger.warning("No monomer_sum rows found in %s, returning zeros", csv_path)
-        return pd.Series(0.0, index=TARGET_COLUMNS)
+        return pd.Series(0.0, index=TARGET_COLUMNS), 0.0
 
     # Flatten Delta_Groups — just work with all rows together
     # Find rows where all 6 targets are non-NaN
@@ -92,19 +94,22 @@ def extract_targets(csv_path) -> pd.Series:
             len(target_cols),
             csv_path,
         )
-        return pd.Series(0.0, index=TARGET_COLUMNS)
+        return pd.Series(0.0, index=TARGET_COLUMNS), 0.0
 
     valid_rows = monomer_rows.dropna(subset=target_cols)
 
     if valid_rows.empty:
         logger.info("No rows with all 6 targets populated in %s, returning zeros", csv_path)
-        return pd.Series(0.0, index=TARGET_COLUMNS)
+        return pd.Series(0.0, index=TARGET_COLUMNS), 0.0
 
     # Find row with maximum Time (s)
     max_time_idx = valid_rows["Time (s)"].idxmax()
     targets = valid_rows.loc[max_time_idx, target_cols]
+    max_time_s = float(valid_rows.loc[max_time_idx, "Time (s)"])
 
-    return targets
+
+
+    return targets, max_time_s
 
 
 def normalize_pressure_calc(
@@ -375,9 +380,9 @@ def compute_chain_features(
             state["distance_from_isref"] += 1
 
         chain_features.append({
-            "distance_from_isnew": float(state["distance_from_isnew"]),
-            "consecutive_isref": float(state["consecutive_isref"]),
-            "distance_from_isref": float(state["distance_from_isref"]),
+            "distance_from_isnew": float(state["distance_from_isnew"]), # best for lightgbm
+            # "consecutive_isref": float(state["consecutive_isref"]),
+            # "distance_from_isref": float(state["distance_from_isref"]),
         })
 
     return chain_features
@@ -402,7 +407,7 @@ def add_previous_targets(
         Target values for each record (same order).
     prev_target_columns : list[str] | None
         Which target columns to include as previous-target features.
-        Default ``TARGET_COLUMNS[1:2]`` (only ``pfo-sec_q_e_au``).
+        Default ``TARGET_COLUMNS[:]`` (all targets).
 
     Returns
     -------
@@ -410,7 +415,7 @@ def add_previous_targets(
         Previous target features for each record.
     """
     if prev_target_columns is None:
-        prev_target_columns = TARGET_COLUMNS[1:2]
+        prev_target_columns = TARGET_COLUMNS[:]
 
     prev_features = []
 

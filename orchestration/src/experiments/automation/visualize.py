@@ -13,7 +13,7 @@ import pandas as pd
 
 from load import load_dataset, split_dataset
 from model import load_model
-from model import DEFAULT_MODEL_DIR, TrainedModel, sanitize_feature_names
+from model import DEFAULT_MODEL_DIR, TrainedModel, sanitize_feature_names, inverse_target_transforms
 from model import get_feature_importances
 
 logger = logging.getLogger(__name__)
@@ -191,6 +191,9 @@ def plot_predicted_vs_actual(
         ax.legend()
         ax.grid(True, alpha=0.3)
 
+        # ax.set_yscale("log")
+        # ax.set_xscale("log")
+
         plt.tight_layout()
 
         safe_name = col.replace("-", "_").replace(".", "_")
@@ -251,10 +254,11 @@ def generate_all_visualizations(
     X_test_clean = X_test.copy()
     X_test_clean.columns = clean_names
 
-    # Single multi-output predict returns (n_samples, n_targets)
-    y_pred = trained_model.model.predict(X_test_clean)
+    # Predict in transformed space, then invert to original scale for parity plots
+    y_pred_tfm = trained_model.model.predict(X_test_clean)
+    y_pred = inverse_target_transforms(y_pred_tfm, trained_model.target_names, trained_model.lambdas)
 
-    # Get y_test (same index as X_test)
+    # Get y_test (same index as X_test, already in original scale)
     y_test = y.loc[X_test.index]
     paths = plot_predicted_vs_actual(y_test, y_pred, out_dir)
     all_paths.extend(paths)
@@ -277,7 +281,7 @@ if __name__ == "__main__":
 
     # Load trained model
     print("\n=== Loading model ===")
-    model_path = DEFAULT_MODEL_DIR / "model.joblib"
+    model_path = DEFAULT_MODEL_DIR / "lightgbm.joblib"
     trained = load_model(model_path)
 
     # Generate all visualizations

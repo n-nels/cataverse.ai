@@ -10,9 +10,12 @@ import logging
 from typing import NamedTuple
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 from extract import ExperimentRecord, extract_data
+from model import LOG_TRANSFORM_TARGETS
 from transform import (
     TARGET_COLUMNS,
     add_previous_targets,
@@ -105,30 +108,32 @@ def assemble_dataset(
     tuple[pd.DataFrame, pd.DataFrame, int]
         X (features), y (targets), zero_target_count.
     """
-    # Extract targets
+    # Extract targets and max time
     targets = []
+    time_features = []
     zero_count = 0
     for rec in records:
-        target = extract_targets(rec.csv_path)
+        target, max_time_s = extract_targets(rec.csv_path)
         if (target == 0.0).all():
             zero_count += 1
         targets.append(target)
+        time_features.append({"max_time_s": max_time_s})
     logger.info("Extracted targets: %d total, %d zero targets", len(targets), zero_count)
 
     # Extract current features
     current_features = [extract_current_features(rec.json_data) for rec in records]
 
     # Compute chain features
-    # chain_features = compute_chain_features(records)
-    chain_features = [{} for _ in records] # disable chain features
+    chain_features = compute_chain_features(records)
+    # chain_features = [{} for _ in records] # disable chain features
 
     # Add previous targets
-    prev_features = add_previous_targets(records, targets)
+    prev_features = add_previous_targets(records, targets, prev_target_columns=None)
 
     # Combine features into DataFrame
     X_data = []
-    for curr, chain, prev in zip(current_features, chain_features, prev_features):
-        row = {**curr, **chain, **prev}
+    for curr, chain, prev, time_feat in zip(current_features, chain_features, prev_features, time_features):
+        row = {**curr, **chain, **prev, **time_feat}
         X_data.append(row)
 
     X = pd.DataFrame(X_data, index=[rec.base_name for rec in records])
@@ -139,6 +144,12 @@ def assemble_dataset(
         y_data.append({col: target[col] for col in TARGET_COLUMNS if col in target.index})
 
     y = pd.DataFrame(y_data, index=[rec.base_name for rec in records])
+
+    # Transform previous-target features to match training space
+    for target in LOG_TRANSFORM_TARGETS:
+        col = f"prev_{target}"
+        if col in X.columns:
+            X[col] = np.log(np.maximum(X[col], 1e-12))
 
     logger.info("Assembled dataset: X=%s, y=%s", X.shape, y.shape)
 
@@ -210,22 +221,31 @@ def split_dataset(
     DatasetSplit
         Named tuple with X_train, y_train, X_val, y_val, X_test, y_test.
     """
-    n = len(X)
-    test_start = int(n * train_ratio)
-    val_start = int(test_start * (1 - val_ratio))
+    # # Chronological split (no shuffling)
+    # n = len(X)
+    # test_start = int(n * train_ratio)
+    # val_start = int(test_start * (1 - val_ratio))
 
-    # Chronological split — no shuffling
-    X_train_full = X.iloc[:test_start]
-    y_train_full = y.iloc[:test_start]
+    # # Chronological split — no shuffling
+    # X_train_full = X.iloc[:test_start]
+    # y_train_full = y.iloc[:test_start]
 
-    X_test = X.iloc[test_start:]
-    y_test = y.iloc[test_start:]
+    # X_test = X.iloc[test_start:]
+    # y_test = y.iloc[test_start:]
 
-    X_train = X_train_full.iloc[:val_start]
-    y_train = y_train_full.iloc[:val_start]
+    # X_train = X_train_full.iloc[:val_start]
+    # y_train = y_train_full.iloc[:val_start]
 
-    X_val = X_train_full.iloc[val_start:]
-    y_val = y_train_full.iloc[val_start:]
+    # X_val = X_train_full.iloc[val_start:]
+    # y_val = y_train_full.iloc[val_start:]
+
+    # Random split
+    X_train_full, X_test, y_train_full, y_test = train_test_split(
+        X, y, test_size=1.0 - train_ratio, random_state=42,
+    )
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_full, y_train_full, test_size=val_ratio, random_state=42,
+    )
 
     logger.info(
         "Split: train=%d, val=%d, test=%d",
