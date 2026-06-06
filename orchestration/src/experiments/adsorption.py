@@ -333,7 +333,7 @@ class AdsorptionExperiment:
         )
 
     def finalize(self, success: bool) -> None:
-        """End-of-experiment cleanup: mark success, copy files, notify OPUS.
+        """End-of-experiment cleanup: mark success, copy JSON/pressure files, notify OPUS.
 
         Safe to call multiple times — ``mark_success`` and share-drive copies
         are idempotent (copy overwrites, success field is rewritten).
@@ -346,11 +346,11 @@ class AdsorptionExperiment:
 
         try:
             shutil.copy2(
-                self.session.path_readme,
+                self.session.path_exp_params,
                 os.path.join(
                     self.session.paths.share_drive_peak_fit_root,
                     self.session.folder_name,
-                    f"{self.session.file_name}_README.md",
+                    f"{self.session.file_name}_expParams.json",
                 ),
             )
             shutil.copy2(

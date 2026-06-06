@@ -59,7 +59,7 @@ def _paths_config(tmp_path: Path) -> PathsConfig:
     )
 
 
-def test_new_experiment_creates_directory_and_readme(tmp_path: Path) -> None:
+def test_new_experiment_creates_directory_and_json(tmp_path: Path) -> None:
     session = ExperimentSession(
         sample=_sample_config(),
         volumes=_system_volumes(),
@@ -77,23 +77,17 @@ def test_new_experiment_creates_directory_and_readme(tmp_path: Path) -> None:
     data_root = Path(tmp_path / "data")
     assert (data_root / folder_name).exists()
 
-    assert session.path_readme is not None
-    assert Path(session.path_readme).exists()
-    assert Path(session.path_readme).parent.name == folder_name
     assert session.path_exp_params == str((data_root / folder_name / f"{file_name}_expParams.json"))
     assert Path(session.path_exp_params).exists()
     assert session.path_pressure_log == str((data_root / folder_name / f"{file_name}_pressureLog.csv"))
     assert session.path_ms_log == str((data_root / folder_name / f"{file_name}_msLog.csv"))
 
-    content = Path(session.path_readme).read_text(encoding="utf-8")
-    assert "## notebook" in content
-    assert "## exp_success" in content
-    assert "- Value: False" in content
-
     payload = json.loads(Path(session.path_exp_params).read_text(encoding="utf-8"))
     assert payload["base_name"] == file_name
     assert payload["filename_flags"]["exp_success"] is False
     assert payload["filename_flags"]["has_csv"] is False
+    assert payload["filename_flags"]["is_new"] is False
+    assert payload["filename_flags"]["is_reference"] is False
     assert payload["pretreatments"] == []
     assert payload["exp_conditions"] == {}
 
@@ -108,7 +102,7 @@ def test_new_experiment_creates_directory_and_readme(tmp_path: Path) -> None:
     assert file_name_3.endswith("_001-000")
 
 
-def test_log_pretreatment_and_experimental_parameters_append_to_readme(tmp_path: Path) -> None:
+def test_log_pretreatment_and_experimental_parameters_write_json(tmp_path: Path) -> None:
     session = ExperimentSession(
         sample=_sample_config(),
         volumes=_system_volumes(),
@@ -133,15 +127,6 @@ def test_log_pretreatment_and_experimental_parameters_append_to_readme(tmp_path:
         p_gas_calc=0.48,
         chiller_state=False,
     )
-
-    assert session.path_readme is not None
-    content = Path(session.path_readme).read_text(encoding="utf-8")
-    assert "## pretreatment_1" in content
-    assert "## exp_gas" in content
-    assert "- Value: CO" in content
-    assert "## exp_pressure_meas" in content
-    assert "## exp_pressure_calc" in content
-    assert "## exp_temp" in content
 
     payload = session.build_exp_params_payload()
     assert payload["pretreatments"] == [
@@ -175,11 +160,11 @@ def test_log_pretreatment_and_experimental_parameters_append_to_readme(tmp_path:
         p_gas_calc=0.48,
         chiller_state=False,
     )
-    content_after_repeat = Path(session.path_readme).read_text(encoding="utf-8")
-    assert content_after_repeat.count("## exp_gas") == 1
+    payload_after_repeat = session.build_exp_params_payload()
+    assert payload_after_repeat["exp_conditions"] == payload["exp_conditions"]
 
 
-def test_mark_success_updates_existing_success_value(tmp_path: Path) -> None:
+def test_mark_success_updates_json(tmp_path: Path) -> None:
     session = ExperimentSession(
         sample=_sample_config(),
         volumes=_system_volumes(),
@@ -188,16 +173,11 @@ def test_mark_success_updates_existing_success_value(tmp_path: Path) -> None:
     )
     session.new_experiment(name=None, is_new=False)
 
-    session.mark_success(True)
+    # Verify initial state is False
+    payload = json.loads(Path(session.path_exp_params).read_text(encoding="utf-8"))
+    assert payload["filename_flags"]["exp_success"] is False
 
-    assert session.path_readme is not None
-    content = Path(session.path_readme).read_text(encoding="utf-8")
-    assert content.count("## exp_success") == 1
-    assert "- Value: True" in content
-    exp_success_section = content.split("## exp_success", maxsplit=1)[1].split(
-        "## is_reference", maxsplit=1
-    )[0]
-    assert "- Value: False" not in exp_success_section
+    session.mark_success(True)
 
     payload = json.loads(Path(session.path_exp_params).read_text(encoding="utf-8"))
     assert payload["filename_flags"]["exp_success"] is True

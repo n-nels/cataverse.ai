@@ -16,11 +16,7 @@ if TYPE_CHECKING:
     from src.hardware.mass_spec import ExtrelMassSpec
 
 from src.core.config_loader import PathsConfig, SampleConfig, SystemConstants
-from src.datalog.file_io import (
-    create_directory,
-    log_experiment_parameters,
-    write_material_parameters,
-)
+from src.datalog.file_io import create_directory
 from src.datalog.pressure_logger import PressureLogger
 from src.datalog.mass_spec_logger import MassSpecLogger
 from src.core.physics import SystemVolumes
@@ -28,7 +24,7 @@ from src.core.physics import SystemVolumes
 
 @dataclass
 class ExperimentSession:
-    """Manage experiment ID creation and experiment metadata persistence."""
+    """Manage experiment ID creation and metadata persistence (JSON)."""
 
     sample: SampleConfig
     volumes: SystemVolumes
@@ -36,7 +32,6 @@ class ExperimentSession:
     paths: PathsConfig
     file_name: str | None = None
     folder_name: str | None = None
-    path_readme: str | None = None
     path_exp_params: str | None = None
     path_pressure_log: str | None = None
     path_actuator_log: str | None = None
@@ -56,7 +51,7 @@ class ExperimentSession:
         exp_type: str = "adsorption",
         counter: int = 0,
     ) -> tuple[str, str]:
-        """Create/resolve experiment IDs and initialize metadata artifacts."""
+        """Create/resolve experiment IDs and initialize metadata (JSON, paths)."""
 
         self.counter = counter
 
@@ -185,7 +180,6 @@ class ExperimentSession:
         base_dir = os.path.join(self.paths.data_directory, self.folder_name)
         create_directory(base_dir)
 
-        self.path_readme = os.path.join(base_dir, f"{self.file_name}_README.md")
         self.path_exp_params = os.path.join(base_dir, f"{self.file_name}_expParams.json")
         self.path_pressure_log = os.path.join(base_dir, f"{self.file_name}_pressureLog.csv")
         self.path_actuator_log = os.path.join(base_dir, f"{self.file_name}_actLog.csv")
@@ -196,61 +190,6 @@ class ExperimentSession:
             is_reference=is_reference,
             exp_type=exp_type,
         )
-
-        metal_density = (
-            (self.sample.metal_load_wt_percent / 100)
-            * (1 / self.sample.metal_molar_mass_g_mol)
-            * (6.023e23)
-            * (1 / self.sample.support_surface_area_m2_g)
-            * (1e-9**2)
-        )
-
-        write_material_parameters(
-            path_readme=self.path_readme,
-            notebook=self.sample.notebook,
-            mass=self.sample.mass_g,
-            metal=self.sample.metal,
-            metal_load=self.sample.metal_load_wt_percent,
-            metal_density=metal_density,
-            support=self.sample.support,
-            support_sa=self.sample.support_surface_area_m2_g,
-            v_tot=self.volumes.total,
-        )
-        if not self._check_line_exists("## exp_success"):
-            log_experiment_parameters(
-                self.path_readme,
-                [
-                    {
-                        "name": "exp_success",
-                        "description": "Success status of the experiment.",
-                        "value": False,
-                    }
-                ],
-            )
-
-        if not self._check_line_exists("## is_reference"):
-            log_experiment_parameters(
-                self.path_readme,
-                [
-                    {
-                        "name": "is_reference",
-                        "description": "Whether this is a reference experiment.",
-                        "value": is_reference,
-                    }
-                ],
-            )
-
-        if not self._check_line_exists("## is_new_sample"):
-            log_experiment_parameters(
-                self.path_readme,
-                [
-                    {
-                        "name": "is_new_sample",
-                        "description": "Whether this is a new sample.",
-                        "value": is_new,
-                    }       
-                ],
-            )
 
         if self.file_name is None or self.folder_name is None:
             raise RuntimeError("Failed to generate experiment file/folder identifiers")
@@ -330,8 +269,7 @@ class ExperimentSession:
         }
 
     def _persist_exp_params_json(self) -> None:
-        if not self.path_exp_params:
-            raise RuntimeError("new_experiment must be called before persisting expParams")
+        """Persist the current experiment metadata state to the expParams JSON file."""
 
         payload = self.build_exp_params_payload()
         target = Path(self.path_exp_params)
@@ -340,17 +278,6 @@ class ExperimentSession:
             json.dump(payload, file, indent=2)
             file.write("\n")
         temp_target.replace(target)
-
-    def _check_line_exists(self, header: str) -> bool:
-        if not self.path_readme or not os.path.exists(self.path_readme):
-            return False
-
-        with open(self.path_readme, "r") as file:
-            for line in file:
-                if line.strip() == header:
-                    return True
-        return False
-
 
     def log_pretreatment(
         self,
@@ -362,14 +289,15 @@ class ExperimentSession:
         p_gas_calc: float | tuple[float | None, ...] | None = None,
         chiller_state: bool | None = None,
     ) -> None:
-        """Append one pretreatment block to README metadata."""
+        """Append one pretreatment block to metadata."""
 
-        if not self.path_readme:
+        if not self.path_exp_params:
             raise RuntimeError("new_experiment must be called before log_pretreatment")
 
         self.counter += 1
-        header = f"## pretreatment_{self.counter}"
-        if self._check_line_exists(header):
+
+        # Same-session idempotency guard
+        if any(p["step_index"] == self.counter for p in self._pretreatments):
             return
 
         pressure_meas_mfld, pressure_meas_cell = self._normalize_pressure_meas(p_gas_meas)
@@ -387,51 +315,6 @@ class ExperimentSession:
             }
         )
 
-        parameters = [
-            {
-                "name": f"pretreatment_{self.counter}",
-                "description": "Parameters for pretreatment steps...",
-                "subparameters": [
-                    {
-                        "name": f"pre_gas_{self.counter}",
-                        "description": "Gas identity",
-                        "value": gas,
-                    },
-                    {
-                        "name": f"pre_pressure_meas_{self.counter}",
-                        "description": "Measured pressure of gas in Torr (p_mfld, p_cell).",
-                        "value": p_gas_meas,
-                    },
-                    {
-                        "name": f"pre_pressure_calc_{self.counter}",
-                        "description": "Calculated pressure of gas in Torr.",
-                        "value": p_gas_calc,
-                    },
-                    {
-                        "name": f"pre_temp_{self.counter}",
-                        "description": "Temperature of cell in Celsius.",
-                        "value": t_cell,
-                    },
-                    {
-                        "name": f"pre_rate_{self.counter}",
-                        "description": "Heating rate in Celsius per minute",
-                        "value": rate,
-                    },
-                    {
-                        "name": f"pre_duration_{self.counter}",
-                        "description": "Duration of pretreatment step in hours.",
-                        "value": duration,
-                    },
-                    {
-                        "name": f"pre_chiller_{self.counter}",
-                        "description": "Chiller state during pretreatment.",
-                        "value": chiller_state,
-                    },
-                ],
-            }
-        ]
-
-        log_experiment_parameters(self.path_readme, parameters)
         self._persist_exp_params_json()
 
     def log_experimental_parameters(
@@ -442,15 +325,15 @@ class ExperimentSession:
         p_gas_calc: float | tuple[float | None, ...] | None,
         chiller_state: bool | None = None,
     ) -> None:
-        """Append experiment-gas parameter block to README metadata."""
+        """Append experiment-gas parameter block to metadata."""
 
-        if not self.path_readme:
+        if not self.path_exp_params:
             raise RuntimeError(
                 "new_experiment must be called before log_experimental_parameters"
             )
 
         self.counter = 0
-        if self._exp_conditions or self._check_line_exists("## exp_gas"):
+        if self._exp_conditions:
             return
 
         pressure_meas_mfld, pressure_meas_cell = self._normalize_pressure_meas(p_gas_meas)
@@ -463,74 +346,15 @@ class ExperimentSession:
             "chiller": chiller_state,
         }
 
-        parameters = [
-            {"name": "exp_gas", "description": "Gas identity.", "value": gas},
-            {
-                "name": "exp_pressure_meas",
-                "description": "Pressure of gas in Torr as (p_mfld, p_cell).",
-                "value": p_gas_meas,
-            },
-            {
-                "name": "exp_pressure_calc",
-                "description": "Pressure of gas in Torr.",
-                "value": p_gas_calc,
-            },
-            {
-                "name": "exp_temp",
-                "description": "Temperature of cell in Celsius.",
-                "value": t_cell,
-            },
-            {
-                "name": "exp_chiller",
-                "description": "Chiller state during pretreatment.",
-                "value": chiller_state,
-            },
-        ]
-
-        log_experiment_parameters(self.path_readme, parameters)
         self._persist_exp_params_json()
 
     def mark_success(self, success: bool = True) -> None:
-        """Set/append ``exp_success`` field in README metadata."""
+        """Mark experiment success status in metadata."""
 
-        if not self.path_readme:
+        if not self.path_exp_params:
             raise RuntimeError("new_experiment must be called before mark_success")
 
         self._filename_flags["exp_success"] = success
-
-        if not self._check_line_exists("## exp_success"):
-            log_experiment_parameters(
-                self.path_readme,
-                [
-                    {
-                        "name": "exp_success",
-                        "description": "Success status of the experiment.",
-                        "value": success,
-                    }
-                ],
-            )
-            self._persist_exp_params_json()
-            return
-
-        with open(self.path_readme, "r") as file:
-            lines = file.readlines()
-
-        with open(self.path_readme, "w") as file:
-            found_header = False
-
-            for line in lines:
-                if line.strip().startswith("## exp_success"):
-                    found_header = True
-                    file.write(line)
-                    continue
-
-                if found_header and line.strip().startswith("- Value:"):
-                    file.write(f"- Value: {str(success)}\n")
-                    found_header = False
-                    continue
-
-                file.write(line)
-
         self._persist_exp_params_json()
 
 

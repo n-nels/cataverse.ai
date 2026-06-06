@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import csv
-from pathlib import Path
 
 from src.datalog.file_io import (
     create_directory,
     log_to_csv,
-    write_material_parameters,
 )
 
 
@@ -56,43 +54,4 @@ def test_log_to_csv_appends_rows_without_duplicate_header(tmp_path: Path) -> Non
     assert content == [["A", "B"], ["1", "2"], ["3", "4"]]
 
 
-def test_write_material_parameters_creates_readme_sections(tmp_path: Path) -> None:
-    readme_path = tmp_path / "exp_README.md"
 
-    write_material_parameters(
-        path_readme=str(readme_path),
-        notebook="nn1120-3",
-        mass=0.0164,
-        metal="pd",
-        metal_load=0.04983,
-        metal_density=0.523,
-        support="ceo2",
-        support_sa=54.0,
-        v_tot=0.201552,
-    )
-
-    content = readme_path.read_text(encoding="utf-8")
-    assert "## notebook" in content
-    assert "- Value: nn1120-3" in content
-    assert "## mass" in content
-    assert "## pd_loading" in content
-    assert "## mfldVol" in content
-
-
-def test_write_material_parameters_noop_when_readme_exists(tmp_path: Path) -> None:
-    readme_path = tmp_path / "exp_README.md"
-    readme_path.write_text("existing content\n", encoding="utf-8")
-
-    write_material_parameters(
-        path_readme=str(readme_path),
-        notebook="nn1120-3",
-        mass=0.0164,
-        metal="pd",
-        metal_load=0.04983,
-        metal_density=0.523,
-        support="ceo2",
-        support_sa=54.0,
-        v_tot=0.201552,
-    )
-
-    assert readme_path.read_text(encoding="utf-8") == "existing content\n"
