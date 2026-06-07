@@ -136,13 +136,8 @@ class AdsorptionExperiment:
         self, target_temp: int, hold_time: float, variac_cmd: bool, ramp_rate: int = 0
     ) -> None:
         """Cool the cell to a target temperature. The variac_cmd is used to keep the cell on even at target temperature."""
-        t_cell, rate, duration = self.temp.watlow(
-            self.session.file_name,
-            self.session.folder_name,
-            target_temp,
-            hold_time,
-            ramp_rate,
-            variac_cmd,
+        t_cell, rate, duration = self.heat_cell(
+            target_temp, hold_time, ramp_rate, variac_cmd
         )
         while True:
             current_temp = self.temp.read_temperature()
@@ -156,6 +151,31 @@ class AdsorptionExperiment:
                 logger.info(f"Error occurred while reading temperatures: {e}")
             time.sleep(60)
         self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
+
+    def heat_cell(
+        self,
+        target_temp: int,
+        hold_time: float,
+        ramp_rate: int = 20,
+        variac_cmd: bool = True,
+    ) -> tuple[float, float, float]:
+        """Heat or cool the cell to target temperature with optional ramp and hold.
+
+        Temperature-only operation. Does not change valve states or deliver gas.
+        The caller is responsible for ensuring appropriate pump/vacuum state.
+
+        Returns:
+            Tuple of (target_temp, ramp_rate, hold_duration) as stored by the controller.
+        """
+        t_cell, rate, duration = self.temp.watlow(
+            self.session.file_name,
+            self.session.folder_name,
+            target_temp,
+            hold_time,
+            ramp_rate,
+            variac_cmd,
+        )
+        return t_cell, rate, duration
 
     def supply_gas_to_mfld(self, gas: str, target_pressure: float) -> None:
         """Supply gas to the manifold. The target pressure corresponds to the pressure in the total volume of the system."""
@@ -376,14 +396,9 @@ class AdsorptionExperiment:
         # Deliver gas to cell
         self.gas_controller.deliver_gas_to_cell()
 
-        # Apply temperature ramp/hold using Watlow controller
-        t_cell, rate, duration = self.temp.watlow(
-            self.session.file_name,
-            self.session.folder_name,
-            target_temp,
-            hold_time,
-            ramp_rate,
-            variac_cmd,
+        # Apply temperature ramp/hold
+        t_cell, rate, duration = self.heat_cell(
+            target_temp, hold_time, ramp_rate, variac_cmd
         )
 
         # Read pressure after gas delivery and temperature stabilization
