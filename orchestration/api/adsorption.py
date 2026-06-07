@@ -127,7 +127,7 @@ class Adsorption:
             target_temp=temp, hold_time=time, ramp_rate=0
         )
         self._ads._log_pretreatment(t_cell, rate, duration, log_gas_calc=True)
-        self._ads.heat_under_evacuation(
+        self._ads.evacuate_at_temperature(
             pump_type="TurboPump",
             target_temp=evac_temp,
             hold_time=evac_time,
@@ -178,7 +178,7 @@ class Adsorption:
             target_temp=temp, hold_time=time, ramp_rate=0
         )
         self._ads._log_pretreatment(t_cell, rate, duration, log_gas_calc=True)
-        self._ads.heat_under_evacuation(
+        self._ads.evacuate_at_temperature(
             pump_type="TurboPump",
             target_temp=evac_temp,
             hold_time=evac_time,
