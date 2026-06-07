@@ -98,13 +98,8 @@ class AdsorptionExperiment:
         if enable_ms_stream:
             ms_logger = self.acquire_ms_spectra()
 
-        t_cell, rate, duration = self.temp.watlow(
-            self.session.file_name,
-            self.session.folder_name,
-            target_temp,
-            hold_time,
-            ramp_rate,
-            variac_cmd,
+        t_cell, rate, duration = self.heat_cell(
+            target_temp, hold_time, ramp_rate, variac_cmd
         )
 
         if enable_ms_stream and ms_logger is not None:
