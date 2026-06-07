@@ -123,13 +123,15 @@ class Adsorption:
         )
         self._ads.supply_gas_to_mfld(gas="O2", target_pressure=pressure)
         self._ads.deliver_gas_to_cell()
-        t_cell, rate, duration = self._ads.heat_cell(temp, time, 0)
+        t_cell, rate, duration = self._ads.heat_cell(
+            target_temp=temp, hold_time=time, ramp_rate=0
+        )
         self._ads._log_pretreatment(t_cell, rate, duration, log_gas_calc=True)
         self._ads.heat_under_evacuation(
             pump_type="TurboPump",
             target_temp=evac_temp,
             hold_time=evac_time,
-            ramp_rate=0,
+            ramp_rate=ramp_rate,
         )
 
 
@@ -172,13 +174,15 @@ class Adsorption:
             self._ads.supply_gas_to_mfld(gas=adsorbate, target_pressure=pressure)
 
         self._ads.deliver_gas_to_cell()
-        t_cell, rate, duration = self._ads.heat_cell(temp, time, 0)
+        t_cell, rate, duration = self._ads.heat_cell(
+            target_temp=temp, hold_time=time, ramp_rate=0
+        )
         self._ads._log_pretreatment(t_cell, rate, duration, log_gas_calc=True)
         self._ads.heat_under_evacuation(
             pump_type="TurboPump",
             target_temp=evac_temp,
             hold_time=evac_time,
-            ramp_rate=0,
+            ramp_rate=ramp_rate,
         )
 
 
