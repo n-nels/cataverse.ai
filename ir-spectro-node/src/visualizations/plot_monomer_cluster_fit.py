@@ -629,5 +629,5 @@ if __name__ == "__main__":
             time_unit="s",
             include_primary_component=True,
             include_secondary_effect=True,
-            include_p_state=True,
+            include_p_state=False,
         )
