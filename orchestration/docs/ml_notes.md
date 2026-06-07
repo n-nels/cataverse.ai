@@ -1,27 +1,34 @@
 # Model improvement notes
 
-- log transform of 4/6 params was helpful
-- grouping was helpful
-- random split was helpful b/c started sampling longer times lately
+- log transform of 4/6 params was helpful, box-cox was even better
+- grouping target params was helpful
+- random split was helpful b/c started sampling longer times lately (non-uniform data)
 - using previous targets was helpful
 
 
 # Current Best:
 
-## Test Metrics:
-  pfo-sec_q0_au: RMSE=0.043684, R²=0.5744
-  pfo-sec_q_e_au: RMSE=0.306630, R²=0.6972
-  pfo-sec_q_inf_au: RMSE=0.017978, R²=-0.1072
-  pfo-sec_k_a_s-1: RMSE=0.000125, R²=-0.1778
-  pfo-sec_k_s_s-1: RMSE=0.004596, R²=-0.3134
-  pfo-sec_k_p_s-1: RMSE=0.000105, R²=-0.1276
-  Aggregate: RMSE=0.062186, R²=0.0909
+Test Metrics:
+  pfo-sec_q0_au: RMSE=0.040941, R²=0.6262
+  pfo-sec_q_e_au: RMSE=0.296985, R²=0.7159
+  pfo-sec_q_inf_au: RMSE=0.017979, R²=-0.1073
+  pfo-sec_k_a_s-1: RMSE=0.000094, R²=0.3390
+  pfo-sec_k_s_s-1: RMSE=0.004410, R²=-0.2089
+  pfo-sec_k_p_s-1: RMSE=0.000096, R²=0.0501
+  Aggregate: RMSE=0.060084, R²=0.2358
 
-## Baseline Metrics (training mean):
+Baseline Metrics (training mean):
   pfo-sec_q0_au: RMSE=0.068917, R²=-0.0592
   pfo-sec_q_e_au: RMSE=0.583298, R²=-0.0959
   pfo-sec_q_inf_au: RMSE=0.017979, R²=-0.1073
-  pfo-sec_k_a_s-1: RMSE=0.000131, R²=-0.3018
-  pfo-sec_k_s_s-1: RMSE=0.004599, R²=-0.3150
-  pfo-sec_k_p_s-1: RMSE=0.000105, R²=-0.1317
-  Aggregate: RMSE=0.112505, R²=-0.1685
+  pfo-sec_k_a_s-1: RMSE=0.000119, R²=-0.0713
+  pfo-sec_k_s_s-1: RMSE=0.004598, R²=-0.3143
+  pfo-sec_k_p_s-1: RMSE=0.000103, R²=-0.0906
+  Aggregate: RMSE=0.112502, R²=-0.1231
+
+
+# ML Plan
+- Go through train.py to understand better
+- Do 1-2 more models
+- Implement BO using neural nets
+- Do forecasting

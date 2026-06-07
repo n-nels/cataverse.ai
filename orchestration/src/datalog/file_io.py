@@ -1,10 +1,10 @@
 """Data logging file I/O helpers.
 
-This module provides CSV and markdown writing primitives used by the datalog
+This module provides CSV writing primitives used by the datalog
 layer: directory creation, general-purpose CSV append, actuator/temperature
-CSV logging, and markdown parameter sections for experiment READMEs.
+CSV logging.
 
-Session-bookkeeping functions (experiment ID generation, share-drive copies)
+Session-bookkeeping functions (experiment ID generation, metadata persistence)
 live in ``experiments.session``.
 """
 
@@ -71,84 +71,4 @@ def log_temperature(
     log_to_csv(file_path, headers, rows)
 
 
-def log_experiment_parameters(
-    file_path: str | Path, parameters: list[dict[str, Any]]
-) -> None:
-    """Append experiment parameter sections to a markdown file."""
 
-    p = Path(file_path)
-    mode = "a" if p.exists() else "w"
-    with p.open(mode) as file:
-        for parameter in parameters:
-            file.write(f"## {parameter['name']}\n")
-            file.write(f"- Description: {parameter['description']}\n")
-            if "value" in parameter:
-                file.write(f"- Value: {parameter['value']}\n")
-            if "subparameters" in parameter:
-                for subparam in parameter["subparameters"]:
-                    file.write(f"  - **{subparam['name']}**\n")
-                    file.write(f"    - Description: {subparam['description']}\n")
-                    file.write(f"    - Value: {subparam['value']}\n")
-                file.write("\n")
-
-
-def write_material_parameters(
-    path_readme: str | Path,
-    notebook: str,
-    mass: float,
-    metal: str,
-    metal_load: float,
-    metal_density: float,
-    support: str,
-    support_sa: float,
-    v_tot: float,
-) -> None:
-    """Write one-time material parameter markdown to README path."""
-
-    if Path(path_readme).exists():
-        return
-
-    parameters = [
-        {
-            "name": "notebook",
-            "description": "Notebook number.",
-            "value": notebook,
-        },
-        {
-            "name": "mass",
-            "description": "Catalyst mass in grams.",
-            "value": mass,
-        },
-        {
-            "name": "metal",
-            "description": "Metal identity.",
-            "value": metal,
-        },
-        {
-            "name": metal + "_loading",
-            "description": "Weight percentage of metal used in the experiment.",
-            "value": metal_load,
-        },
-        {
-            "name": metal + "_density",
-            "description": "Surface density of metal in inverse nanometers squared.",
-            "value": metal_density,
-        },
-        {
-            "name": "support",
-            "description": "Support identity.",
-            "value": support,
-        },
-        {
-            "name": support + "_SA",
-            "description": "Surface area of support in square meters per gram.",
-            "value": support_sa,
-        },
-        {
-            "name": "mfldVol",
-            "description": "Volume of the manifold in liters",
-            "value": v_tot,
-        },
-    ]
-
-    log_experiment_parameters(path_readme, parameters)

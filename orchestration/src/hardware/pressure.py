@@ -105,8 +105,8 @@ class MKSPressure:
                 p2_float = float(p2)
             except ValueError:
                 # Cell gauge returns 'Off' when inactive (below range / valve closed)
-                logger.debug("Cell gauge returned non-numeric value: %r, treating as NaN", p2)
-                p2_float = float('nan')
+                logger.debug("Cell gauge returned non-numeric value: %r, returning None", p2)
+                p2_float = None
 
             return PressureReading(datetime.now(), p1_float, p2_float)
 

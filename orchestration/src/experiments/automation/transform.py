@@ -115,7 +115,7 @@ def extract_targets(csv_path: Path) -> tuple[pd.Series, float]:
 def normalize_pressure_calc(
     pressure_calc: Any,
     gas: list[str],
-    pressure_meas_g1: float | None,
+    pressure_meas_mfld: float | None,
 ) -> float:
     """
     Normalize pressure_calc value.
@@ -123,7 +123,7 @@ def normalize_pressure_calc(
     Rules:
     - If pressure_calc is not null: extract scalar from list
     - If pressure_calc is null AND gas is vacuum: use 0
-    - If pressure_calc is null AND gas is not vacuum: use pressure_meas_g1
+    - If pressure_calc is null AND gas is not vacuum: use pressure_meas_mfld
 
     Parameters
     ----------
@@ -131,8 +131,8 @@ def normalize_pressure_calc(
         Raw pressure_calc value from JSON (null or list).
     gas : list[str]
         List of gas names for this step.
-    pressure_meas_g1 : float | None
-        Measured pressure to use as fallback.
+    pressure_meas_mfld : float | None
+        Measured manifold pressure to use as fallback.
 
     Returns
     -------
@@ -156,8 +156,8 @@ def normalize_pressure_calc(
         return 0.0
 
     # Non-vacuum gas with null pressure_calc — use fallback
-    if pressure_meas_g1 is not None:
-        return float(pressure_meas_g1)
+    if pressure_meas_mfld is not None:
+        return float(pressure_meas_mfld)
 
     logger.warning(
         "pressure_calc is null for non-vacuum gas %s with no fallback", gas
@@ -184,7 +184,7 @@ def extract_step_features(step: dict) -> dict[str, float | str]:
     pressure_calc = normalize_pressure_calc(
         step.get("pressure_calc"),
         gas,
-        step.get("pressure_meas_g1"),
+        step.get("pressure_meas_mfld"),
     )
 
     return {
@@ -270,7 +270,7 @@ def extract_exp_conditions_features(json_data: dict) -> dict[str, float]:
     features["exp_pressure_calc"] = normalize_pressure_calc(
         exp_conds.get("pressure_calc"),
         gas,
-        exp_conds.get("pressure_meas_g1"),
+        exp_conds.get("pressure_meas_mfld"),
     )
 
     # temp

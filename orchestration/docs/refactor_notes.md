@@ -13,16 +13,16 @@
 - [x] gas_delivery.py, line 711; don't we have default values for close/open?
 - [x] i thought we were going to write is_new_sample in the beginning? Rn, is in api, finalize()
 - [x] somehow we forgot is_reference (comes at end, needs to come first)
-- [] add .json logic, remove expParams.csv logic
-- [] src.experiments/adsorption.py, line 109; should be argument with default
+- [x] add .json logic, remove expParams.csv logic
+- [] main.py-ads.oxidize_surface() and pretreate_adsorbate() introduce gas before cooling/heating to target temperature. Need to cool/heat beforehand. But need to be careful b/c heating under evac after introducing oxidation (evac_time, temp) works as expected. That is if gas@T, then only expose gas at the temperatures
+- [] api/adsorption.py: oxidize_surface() and pretreat_adsorbate() hardcode ramp rate needs changed to default 20. I guess the default should be 20 and we need to change the logic in temperature_control.py so it does not depend on ramp rate, but rather just measures the current temperature and the target and heats/cools accordingly. That's the root cause for the problem above.
+- [] temperature_control.py; does the legacy code still make sense or is there a better way to do this?
 - [] src.experiments/adsorption.py, introduce_pretreatment_gas_to_cell(); mixes delivery and heating
+- [] session.py has start_pressure_log() and start_mass_spec_log(), weird.
+- [] let's shut heat lines off on final evac. Just put them as args for each function. If introducing pre-gas, true, if evac, false.
+- [] src.experiments/adsorption.py, line 109; should be argument with default
 - [] finalize.py; may consider doing post opus acquisition things here as well for early script exit
 - [] should round dp, gives huge floating
 - [] need to add process_pressure.py & analyze
-- [] main.py-ads.oxidize_surface() introduces gas before cooling to target temperature; they actually all do this. Need to cool/heat beforehand. See CataVerse. But need to be careful b/c heating under evac after introducing oxidation (evac_time, temp) works as expected. That is if gas@T, then only expose gas at the temperatures
-- [] api/adsorption.py: oxidize_surface() and pretreat_adsorbate() hardcode ramp rate needs changed to default 20. I guess the default should be 20 and we need to change the logic in temperature_control.py so it does not depend on ramp rate, but rather just measures the current temperature and the target and heats/cools accordingly. That's the root cause for the problem above.
-- [] let's shut heat lines off on final evac. Just put them as args for each function. If introducing pre-gas, true, if evac, false.
 - [] would then need to build auto pipeline to graph
-- [] why is pressure logger start and stop inside ExperimentSession class?
-- [] temperature_control.py; does the legacy code still make sense or is there a better way to do this?
-- [] setup.py, line 57; If you want confirmation that all devices connected, you'd need to add logger calls inside DeviceManager.connect(). But functionally,         if it didn't raise an exception, the connections succeeded.
+- [] setup.py, line 57; If you want confirmation that all devices connected, you'd need to add logger calls inside DeviceManager.connect(). But functionally, if it didn't raise an exception, the connections succeeded.
