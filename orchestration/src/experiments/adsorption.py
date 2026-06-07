@@ -129,14 +129,24 @@ class AdsorptionExperiment:
         hold_time: float,
         ramp_rate: int,
     ) -> None:
-        """Adjust cell to *target_temp*, then evacuate and hold under vacuum."""
+        """Adjust cell to *target_temp*, evacuate gas, and hold under vacuum."""
 
-        t_cell, rate, _ = self.heat_cell(target_temp, 0, ramp_rate)
-        self.gas = self.gas_controller.evacuate_cell(pump_type)
-        _, _, hold_duration = self.heat_cell(target_temp, hold_time, 0)
+        current_temp = self.temp.read_temperature()
+        if target_temp > current_temp:
+            # Heating needed — evac first to avoid baking gas
+            self.gas = self.gas_controller.evacuate_cell(pump_type)
+            t_cell, rate, duration = self.heat_cell(
+                target_temp, hold_time, ramp_rate
+            )
+        else:
+            # Cooling or same — adjust temp first, then evac
+            t_cell, rate, _ = self.heat_cell(target_temp, 0, ramp_rate)
+            self.gas = self.gas_controller.evacuate_cell(pump_type)
+            _, _, duration = self.heat_cell(target_temp, hold_time, 0)
+
         self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
         self._log_pretreatment(
-            t_cell, rate, hold_duration, p_cell=p_cell, log_gas_calc=False,
+            t_cell, rate, duration, p_cell=p_cell, log_gas_calc=False,
         )
 
     def cool_cell(
