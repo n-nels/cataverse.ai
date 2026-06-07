@@ -195,20 +195,15 @@ class TestAdsorptionExperiment:
         # Verify pressure logging started
         mock_gas_controller.read_pressure.assert_called()
 
-    def test_introduce_pretreatment_gas_to_cell(
-        self, adsorption_experiment, mock_gas_controller, mock_temp_controller
+    def test_deliver_gas_to_cell(
+        self, adsorption_experiment, mock_gas_controller
     ):
-        """Test pretreatment gas introduction."""
-        adsorption_experiment.introduce_pretreatment_gas_to_cell(
-            target_temp=500,
-            hold_time=2.0,
-        )
+        """Test gas delivery to cell."""
+        adsorption_experiment.deliver_gas_to_cell()
 
         # Verify gas delivery to cell
         mock_gas_controller.deliver_gas_to_cell.assert_called_once()
-
-        # Verify Watlow called
-        mock_temp_controller.watlow.assert_called_once()
+        mock_gas_controller.read_pressure.assert_called()
 
     def test_chiller_variac_state(self, adsorption_experiment, mock_temp_controller):
         """Test chiller and variac state control."""
@@ -262,9 +257,9 @@ class TestAdsorptionExperimentSequence:
 
         # Oxidize surface
         adsorption_experiment.supply_gas_to_mfld(gas="O2", target_pressure=5.0)
-        adsorption_experiment.introduce_pretreatment_gas_to_cell(
-            target_temp=500, hold_time=2
-        )
+        adsorption_experiment.deliver_gas_to_cell()
+        adsorption_experiment.heat_cell(target_temp=500, hold_time=2, ramp_rate=0)
+        adsorption_experiment._log_pretreatment(500, 0, 2, log_gas_calc=True)
         adsorption_experiment.heat_under_evacuation(
             pump_type="TurboPump", target_temp=500, hold_time=0.5, ramp_rate=0
         )

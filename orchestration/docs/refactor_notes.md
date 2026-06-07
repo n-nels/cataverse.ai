@@ -14,10 +14,10 @@
 - [x] i thought we were going to write is_new_sample in the beginning? Rn, is in api, finalize()
 - [x] somehow we forgot is_reference (comes at end, needs to come first)
 - [x] add .json logic, remove expParams.csv logic
-- [] main.py-ads.oxidize_surface() and pretreate_adsorbate() introduce gas before cooling/heating to target temperature. Need to cool/heat beforehand. But need to be careful b/c heating under evac after introducing oxidation (evac_time, temp) works as expected. That is if gas@T, then only expose gas at the temperatures
-- [] api/adsorption.py: oxidize_surface() and pretreat_adsorbate() hardcode ramp rate needs changed to default 20. I guess the default should be 20 and we need to change the logic in temperature_control.py so it does not depend on ramp rate, but rather just measures the current temperature and the target and heats/cools accordingly. That's the root cause for the problem above.
+- [x] main.py-ads.oxidize_surface() and pretreate_adsorbate() introduce gas before cooling/heating to target temperature. Need to cool/heat beforehand. But need to be careful b/c heating under evac after introducing oxidation (evac_time, temp) works as expected. That is if gas@T, then only expose gas at the temperatures
+- [x] api/adsorption.py: oxidize_surface() and pretreat_adsorbate() hardcode ramp rate changed to default 20. temperature_control.py logic deferred.
 - [] temperature_control.py; does the legacy code still make sense or is there a better way to do this?
-- [] src.experiments/adsorption.py, introduce_pretreatment_gas_to_cell(); mixes delivery and heating
+- [x] src.experiments/adsorption.py, introduce_pretreatment_gas_to_cell(); replaced with deliver_gas_to_cell() + heat_cell() + _log_pretreatment()
 - [] session.py has start_pressure_log() and start_mass_spec_log(), weird.
 - [] let's shut heat lines off on final evac. Just put them as args for each function. If introducing pre-gas, true, if evac, false.
 - [] src.experiments/adsorption.py, line 109; should be argument with default

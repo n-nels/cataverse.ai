@@ -123,13 +123,8 @@ class AdsorptionExperiment:
         self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
 
         if log_params:
-            self.session.log_pretreatment(
-                gas=self.gas,
-                p_gas_meas=(self.p_mfld, p_cell),
-                t_cell=t_cell,
-                rate=rate,
-                duration=duration,
-                chiller_state=self.chiller_state,
+            self._log_pretreatment(
+                t_cell, rate, duration, p_cell=p_cell, log_gas_calc=False
             )
 
     def cool_cell(
@@ -385,46 +380,48 @@ class AdsorptionExperiment:
         except Exception as e:
             logger.info(f"An error occurred while copying the file: {e}")
 
-    def introduce_pretreatment_gas_to_cell(
-        self,
-        target_temp: int,
-        hold_time: float,
-        ramp_rate: int = 0,
-        variac_cmd: bool = True,
-    ) -> None:
-        """Introduce pretreatment gas to the cell and apply temperature ramp/hold."""
-        # Deliver gas to cell
+    def deliver_gas_to_cell(self) -> None:
+        """Open irCell to admit manifold gas into the cell."""
         self.gas_controller.deliver_gas_to_cell()
+        self.dt, self.p_mfld, _p_cell = self.gas_controller.read_pressure()
 
-        # Apply temperature ramp/hold
-        t_cell, rate, duration = self.heat_cell(
-            target_temp, hold_time, ramp_rate, variac_cmd
+    def _log_pretreatment(
+        self,
+        t_cell: float,
+        rate: float,
+        duration: float,
+        *,
+        p_cell: float | None = None,
+        log_gas_calc: bool = False,
+    ) -> None:
+        """Log pretreatment parameters from current instance state.
+
+        Args:
+            t_cell: Target temperature (°C).
+            rate: Ramp rate (°C/min).
+            duration: Hold duration (hours).
+            p_cell: Measured cell pressure.
+            log_gas_calc: If True, include calculated cell pressure in the log
+                (only meaningful when gas has been supplied to the cell).
+        """
+        gas: Any = (self.gas, self.gas_2) if self.gas_2 else self.gas  # type: ignore[assignment]
+
+        p_gas_calc: Any = None
+        if log_gas_calc:
+            if self.gas_2:
+                p_gas_calc = (self.p_cell_calc, self.p_cell_calc_2)  # type: ignore[assignment]
+            elif self.p_cell_calc is not None:
+                p_gas_calc = self.p_cell_calc
+
+        self.session.log_pretreatment(
+            gas=gas,
+            p_gas_meas=(self.p_mfld, p_cell),
+            t_cell=t_cell,
+            rate=rate,
+            duration=duration,
+            p_gas_calc=p_gas_calc,
+            chiller_state=self.chiller_state,
         )
-
-        # Read pressure after gas delivery and temperature stabilization
-        self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
-
-        # Log pretreatment parameters
-        if self.gas_2:
-            self.session.log_pretreatment(
-                gas=(self.gas, self.gas_2),
-                p_gas_meas=(self.p_mfld, p_cell),
-                t_cell=t_cell,
-                rate=rate,
-                duration=duration,
-                p_gas_calc=(self.p_cell_calc, getattr(self, "p_cell_calc_2", None)),
-                chiller_state=self.chiller_state,
-            )
-        else:
-            self.session.log_pretreatment(
-                gas=self.gas,
-                p_gas_meas=(self.p_mfld, p_cell),
-                t_cell=t_cell,
-                rate=rate,
-                duration=duration,
-                p_gas_calc=self.p_cell_calc,
-                chiller_state=self.chiller_state,
-            )
 
     def chiller_variac_state(
         self, chiller_cmd: bool, variac_cmd: bool, variac_vsl_cmd: bool
