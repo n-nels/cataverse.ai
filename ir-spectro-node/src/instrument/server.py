@@ -41,21 +41,21 @@ def handle_background(do_bckg: bool, reset_fileids: bool) -> Optional[str]:
     return None
 
 
-def handle_readme() -> str:
-    state = get_state()
-    if not state.all_fileids:
-        raise RuntimeError("No file IDs available to build readme.")
-    root_dir = config.get_path("data.readme")  # need new config path
-    fileid = state.all_fileids[-1]
-    fileid = fileid[:-1]
-    foldername = fileid.split("\\")[-2]
-    filename = fileid.split("\\")[-1]
-    sample_name = filename.rsplit(".", 1)[0]
-    path = os.path.join(root_dir, foldername, sample_name)
-    file_name = path + "_README.md"
-    readme_to_csv(file_name)
-    print("readme converted to .csv")
-    return "readme converted to .csv"
+# def handle_readme() -> str:
+#     state = get_state()
+#     if not state.all_fileids:
+#         raise RuntimeError("No file IDs available to build readme.")
+#     root_dir = config.get_path("data.readme")  # need new config path
+#     fileid = state.all_fileids[-1]
+#     fileid = fileid[:-1]
+#     foldername = fileid.split("\\")[-2]
+#     filename = fileid.split("\\")[-1]
+#     sample_name = filename.rsplit(".", 1)[0]
+#     path = os.path.join(root_dir, foldername, sample_name)
+#     file_name = path + "_README.md"
+#     readme_to_csv(file_name)
+#     print("readme converted to .csv")
+#     return "readme converted to .csv"
 
 
 def handle_end_experiment() -> str:
@@ -103,8 +103,8 @@ def handle_end_experiment() -> str:
 def handle_message(message: dict) -> Optional[str]:
     if not isinstance(message, dict) or not message:
         raise ValueError("Empty or invalid message payload")
-    if message.get("readme"):
-        return handle_readme()
+    # if message.get("readme"):
+    #     return handle_readme()
     if message.get("end_experiment"):
         state = get_state()
         state.foldername = message["foldername"]

@@ -33,4 +33,4 @@ def readme_to_csv(file_path: str) -> None:
     df.to_csv(output_file, index=False)
 
 if __name__ == "__main__":
-    readme_to_csv(r"X:\peakFit\nn1120-3_pd_ceo2_004\20260507_124225_pd_ceo2_004-020_README.md")
+    readme_to_csv(r"X:\peakFit\nn1120-3_pd_ceo2_004\20260531_051339_pd_ceo2_004-027_README.md")
