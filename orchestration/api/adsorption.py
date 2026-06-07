@@ -54,6 +54,7 @@ class Adsorption:
         )
         self._inst = inst
 
+
     def clean_surface(
         self,
         evac_temp: float,
@@ -90,6 +91,7 @@ class Adsorption:
             enable_ms_stream=False,
         )
 
+
     def oxidize_surface(
         self,
         pressure: float,
@@ -97,28 +99,41 @@ class Adsorption:
         time: float,
         evac_temp: float,
         evac_time: float,
+        ramp_rate: float = 20,
     ) -> None:
-        """Dose O2 to oxidize the surface, hold at temperature, then evacuate.
-
+        """Heat cell to temp, dose O2, hold, then evacuate.
+        
         Args:
             pressure: O2 target pressure in the total volume (Torr).
             temp: Temperature during oxidation (°C).
             time: Hold time under O2 (hours).
             evac_temp: Temperature during post-oxidation evacuation (°C).
             evac_time: Hold time under turbo pump after oxidation (hours).
+            ramp_rate: Heating ramp rate to *temp* (°C/min).
         """
         logger.info(
             "Oxidizing surface: O2 at %.1f Torr, %s°C for %s hr",
             pressure, temp, time,
         )
-        self._ads.supply_gas_to_mfld(gas="O2", target_pressure=pressure)
-        self._ads.introduce_pretreatment_gas_to_cell(target_temp=temp, hold_time=time)
         self._ads.heat_under_evacuation(
+            pump_type="TurboPump",
+            target_temp=temp,
+            hold_time=0,
+            ramp_rate=ramp_rate,
+        )
+        self._ads.supply_gas_to_mfld(gas="O2", target_pressure=pressure)
+        self._ads.deliver_gas_to_cell()
+        t_cell, rate, duration = self._ads.heat_cell(
+            target_temp=temp, hold_time=time, ramp_rate=0
+        )
+        self._ads._log_pretreatment(t_cell, rate, duration, log_gas_calc=True)
+        self._ads.evacuate_at_temperature(
             pump_type="TurboPump",
             target_temp=evac_temp,
             hold_time=evac_time,
-            ramp_rate=0,
+            ramp_rate=ramp_rate,
         )
+
 
     def pretreat_adsorbate(
         self,
@@ -128,8 +143,9 @@ class Adsorption:
         time: float,
         evac_temp: float,
         evac_time: float,
+        ramp_rate: float = 20,
     ) -> None:
-        """Dose a pretreatment gas (or two co-adsorbates), hold at temperature, then evacuate.
+        """Heat cell to temp, dose pretreatment gas(es), hold, then evacuate.
 
         Args:
             adsorbate: Gas species to dose. Single string (e.g. "H2") or list
@@ -140,26 +156,35 @@ class Adsorption:
             time: Hold time under gas (hours).
             evac_temp: Temperature during post-pretreatment evacuation (°C).
             evac_time: Hold time under turbo pump after pretreatment (hours).
+            ramp_rate: Heating ramp rate to *temp* (°C/min).
         """
+        logger.info(
+            "Pretreating with %s at %s Torr, %s°C for %s hr",
+            adsorbate, pressure, temp, time,
+        )
+        self._ads.heat_under_evacuation(
+            pump_type="TurboPump",
+            target_temp=temp,
+            hold_time=0,
+            ramp_rate=ramp_rate,
+        )
         if isinstance(adsorbate, list):
-            logger.info(
-                "Pretreating with %s at %s Torr, %s°C for %s hr",
-                adsorbate, pressure, temp, time,
-            )
             self._ads.supply_gases_to_mfld(gas=adsorbate, target_pressure=pressure)
         else:
-            logger.info(
-                "Pretreating with %s at %.1f Torr, %s°C for %s hr...",
-                adsorbate, pressure, temp, time,
-            )
             self._ads.supply_gas_to_mfld(gas=adsorbate, target_pressure=pressure)
-        self._ads.introduce_pretreatment_gas_to_cell(target_temp=temp, hold_time=time)
-        self._ads.heat_under_evacuation(
+
+        self._ads.deliver_gas_to_cell()
+        t_cell, rate, duration = self._ads.heat_cell(
+            target_temp=temp, hold_time=time, ramp_rate=0
+        )
+        self._ads._log_pretreatment(t_cell, rate, duration, log_gas_calc=True)
+        self._ads.evacuate_at_temperature(
             pump_type="TurboPump",
             target_temp=evac_temp,
             hold_time=evac_time,
-            ramp_rate=0,
+            ramp_rate=ramp_rate,
         )
+
 
     def monitor_adsorption(
         self,
@@ -205,6 +230,7 @@ class Adsorption:
             do_bckg=do_bckg,
             do_fit=do_fit,
         )
+
 
     def finalize(self, success: bool) -> None:
         """End-of-experiment cleanup: mark success, copy files, notify OPUS."""

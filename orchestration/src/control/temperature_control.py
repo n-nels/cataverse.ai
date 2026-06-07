@@ -96,13 +96,21 @@ class TemperatureController:
         current_temp = self.temperature.read_temperature()
 
         logger.info(
-            "Heating to %s°C for %s hours at %s°C/min",
+            "Temperature target: %s°C for %s hours (rate=%s°C/min)",
             target_temp,
             duration,
             rate,
         )
 
-        if rate != 0:
+        if abs(current_temp - target_temp) <= 5:
+            self._hold_at_target(
+                target_temp=target_temp,
+                duration=duration,
+                variac_cmd=variac_cmd,
+                log_interval=log_interval,
+                log_writer=log_writer,
+            )
+        elif current_temp < target_temp:
             self._ramp_to_target(
                 target_temp=target_temp,
                 duration=duration,
@@ -112,20 +120,12 @@ class TemperatureController:
                 log_interval=log_interval,
                 log_writer=log_writer,
             )
-        elif current_temp > target_temp + 5:
+        else:
             self._cool_to_target(
                 target_temp=target_temp,
                 duration=duration,
                 variac_cmd=variac_cmd,
                 current_temp=current_temp,
-                log_interval=log_interval,
-                log_writer=log_writer,
-            )
-        else:
-            self._hold_at_target(
-                target_temp=target_temp,
-                duration=duration,
-                variac_cmd=variac_cmd,
                 log_interval=log_interval,
                 log_writer=log_writer,
             )
@@ -258,12 +258,21 @@ class TemperatureController:
         rate: float,
         interval: int,
     ) -> list[float]:
-        """Build a list of intermediate set-point temperatures for a ramp."""
+        """Build a list of intermediate set-point temperatures for a ramp.
 
-        total_seconds = float(((end_temp - start_temp) / rate) * 60)
-        steps = int(total_seconds / interval)
+        Handles both ascending and descending ramps.  If ``rate <= 0`` the
+        target is set in a single step (immediate set).
+        """
+
+        diff = end_temp - start_temp
+        if rate <= 0 or diff == 0:
+            steps = 1
+        else:
+            total_seconds = float(abs(diff) / rate * 60)
+            steps = max(int(total_seconds / interval), 1)
+
         return [
-            round(start_temp + (rate * i * interval / 60.0), 1)
+            round(start_temp + diff * i / steps, 1)
             for i in range(steps + 1)
         ]
 
