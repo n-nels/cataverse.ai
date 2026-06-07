@@ -1,8 +1,8 @@
 # Model improvement notes
 
 - log transform of 4/6 params was helpful, box-cox was even better
-- grouping was helpful
-- random split was helpful b/c started sampling longer times lately
+- grouping target params was helpful
+- random split was helpful b/c started sampling longer times lately (non-uniform data)
 - using previous targets was helpful
 
 
@@ -25,3 +25,10 @@ Baseline Metrics (training mean):
   pfo-sec_k_s_s-1: RMSE=0.004598, R²=-0.3143
   pfo-sec_k_p_s-1: RMSE=0.000103, R²=-0.0906
   Aggregate: RMSE=0.112502, R²=-0.1231
+
+
+# ML Plan
+- Go through train.py to understand better
+- Do 1-2 more models
+- Implement BO using neural nets
+- Do forecasting
