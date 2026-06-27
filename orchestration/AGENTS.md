@@ -22,7 +22,7 @@ Before ending a session, update the following as needed:
 
 ## Package Structure
 
-See `docs/directory_structure.md` for the full file listing.
+See `docs/directory_structure.md` for the full file listing if needed.
 
 The active dependency flow is: **experiments -> control + datalog -> hardware -> config/physics**. Package-level `AGENTS.md` files document module-specific constraints where present.
 

@@ -147,10 +147,16 @@ class DeviceManager:
             finally:
                 self._extrel_client = None
 
-        if self._zmq_socket is not None:
+        zmq_socket: zmq.Socket | None = None
+        if self.spectrometer is not None:
+            zmq_socket = self.spectrometer.socket
+        elif self._zmq_socket is not None:
+            zmq_socket = self._zmq_socket
+
+        if zmq_socket is not None:
             try:
-                self._zmq_socket.setsockopt(zmq.LINGER, 0)
-                self._zmq_socket.close()
+                zmq_socket.setsockopt(zmq.LINGER, 0)
+                zmq_socket.close()
             except Exception:
                 logger.exception("Error closing ZMQ socket")
             finally:

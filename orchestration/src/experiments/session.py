@@ -355,6 +355,8 @@ class ExperimentSession:
             raise RuntimeError("new_experiment must be called before mark_success")
 
         self._filename_flags["exp_success"] = success
+        if success:
+            self._filename_flags["has_csv"] = True
         self._persist_exp_params_json()
 
 
