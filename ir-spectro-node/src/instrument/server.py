@@ -6,8 +6,6 @@ from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
-import subprocess
-import time
 from typing import Optional
 
 import zmq
@@ -39,23 +37,6 @@ def handle_background(do_bckg: bool, reset_fileids: bool) -> Optional[str]:
         define_paths()
         return "all_fileids reset"
     return None
-
-
-# def handle_readme() -> str:
-#     state = get_state()
-#     if not state.all_fileids:
-#         raise RuntimeError("No file IDs available to build readme.")
-#     root_dir = config.get_path("data.readme")  # need new config path
-#     fileid = state.all_fileids[-1]
-#     fileid = fileid[:-1]
-#     foldername = fileid.split("\\")[-2]
-#     filename = fileid.split("\\")[-1]
-#     sample_name = filename.rsplit(".", 1)[0]
-#     path = os.path.join(root_dir, foldername, sample_name)
-#     file_name = path + "_README.md"
-#     readme_to_csv(file_name)
-#     print("readme converted to .csv")
-#     return "readme converted to .csv"
 
 
 def handle_end_experiment() -> str:
@@ -93,11 +74,8 @@ def handle_end_experiment() -> str:
                 f"file_path={file_path} folder_name={folder_name} "
                 f"base_name={base_name}: {exc}"
             )
-    # now = datetime.now() + timedelta(minutes=10)
-    # print(f"Waiting until {now} before copying files to cloud...")
-    # time.sleep(10 * 60)
-    # subprocess.run([paths.cloud_script], shell=True, check=True)
-    return True
+
+    return "Experiment ended successfully."
 
 
 def handle_message(message: dict) -> Optional[str]:
