@@ -130,7 +130,9 @@ class TemperatureController:
                 log_writer=log_writer,
             )
 
-        return target_temp, rate, duration
+        actual_temp = self.temperature.read_temperature()
+        
+        return actual_temp, rate, duration
 
     # ------------------------------------------------------------------
     # Private branch methods
