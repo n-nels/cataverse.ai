@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Entry point for launching the OPUS ZMQ server."""
 
+import os
+os.environ.setdefault("MPLBACKEND", "Agg") # disable tkinter backend for matplotlib
 from pathlib import Path
 import sys
 

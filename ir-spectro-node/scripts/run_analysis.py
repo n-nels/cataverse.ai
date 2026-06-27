@@ -90,7 +90,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------------------------------
 
     file_directory = r"C:\Data\OpusConvert_subIFG_lgRfl\nn1120-3_pd_ceo2_004"
-    name = r"20260519_101843_pd_ceo2_004-023"
+    name = r"20260614_043209_pd_ceo2_004-031"
 
     for file_name in os.listdir(file_directory):
         if name in file_name:
