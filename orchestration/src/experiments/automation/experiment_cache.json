@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-06-06T09:28:47.624096",
+  "last_updated": "2026-06-28T11:27:45.463939",
   "records": [
     {
       "base_name": "20241126_112801_pd_ceo2_000-003",
@@ -23748,6 +23748,906 @@
           "chiller": false
         },
         "missing_fields": []
+      }
+    },
+    {
+      "base_name": "20260519_101843_pd_ceo2_004-023",
+      "datetime": "2026-05-19T10:18:43",
+      "json_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260519_101843_pd_ceo2_004-023_expParams.json",
+      "csv_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260519_101843_pd_ceo2_004-023_CarbonylPeakArea.csv",
+      "json_data": {
+        "base_name": "20260519_101843_pd_ceo2_004-023",
+        "datetime": "2026-05-19T10:18:43",
+        "material": {
+          "metal": "pd",
+          "metal_loading": 0.04983,
+          "support": "ceo2",
+          "support_sa": 54,
+          "notebook": "nn1120-3",
+          "mfldVol": 0.201552,
+          "mass_g": 0.0164
+        },
+        "filename_flags": {
+          "exp_type": "adsorption",
+          "has_csv": true,
+          "is_new": false,
+          "is_reference": true,
+          "exp_success": true
+        },
+        "pretreatments": [
+          {
+            "step_index": 1,
+            "gas": [
+              "RoughPump"
+            ],
+            "pressure_meas_mfld": 0.008,
+            "pressure_meas_cell": 0.0088,
+            "pressure_calc": null,
+            "temp": 450.0,
+            "rate": 20,
+            "duration": 0.0,
+            "chiller": false
+          },
+          {
+            "step_index": 2,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0007,
+            "pressure_calc": null,
+            "temp": 449.4,
+            "rate": 0,
+            "duration": 2,
+            "chiller": false
+          },
+          {
+            "step_index": 3,
+            "gas": [
+              "O2"
+            ],
+            "pressure_meas_mfld": 5.17,
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              4.982333492101294
+            ],
+            "temp": 449.4,
+            "rate": 0,
+            "duration": 2.0,
+            "chiller": false
+          },
+          {
+            "step_index": 4,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0008,
+            "pressure_calc": null,
+            "temp": 449.4,
+            "rate": 0,
+            "duration": 0.5,
+            "chiller": false
+          }
+        ],
+        "exp_conditions": {
+          "gas": [
+            "13CO"
+          ],
+          "pressure_meas_mfld": 0.843,
+          "pressure_meas_cell": 0.8531,
+          "pressure_calc": [
+            0.8306660812098118
+          ],
+          "temp": 45.0,
+          "chiller": false
+        }
+      }
+    },
+    {
+      "base_name": "20260522_210041_pd_ceo2_004-024",
+      "datetime": "2026-05-22T21:00:41",
+      "json_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260522_210041_pd_ceo2_004-024_expParams.json",
+      "csv_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260522_210041_pd_ceo2_004-024_CarbonylPeakArea.csv",
+      "json_data": {
+        "base_name": "20260522_210041_pd_ceo2_004-024",
+        "datetime": "2026-05-22T21:00:41",
+        "material": {
+          "metal": "pd",
+          "metal_loading": 0.04983,
+          "support": "ceo2",
+          "support_sa": 54,
+          "notebook": "nn1120-3",
+          "mfldVol": 0.201552,
+          "mass_g": 0.0164
+        },
+        "filename_flags": {
+          "exp_type": "adsorption",
+          "has_csv": true,
+          "is_new": false,
+          "is_reference": true,
+          "exp_success": true
+        },
+        "pretreatments": [
+          {
+            "step_index": 1,
+            "gas": [
+              "RoughPump"
+            ],
+            "pressure_meas_mfld": 0.009,
+            "pressure_meas_cell": 0.0095,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 20,
+            "duration": 0.0,
+            "chiller": false
+          },
+          {
+            "step_index": 2,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0007,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 2.0,
+            "chiller": false
+          },
+          {
+            "step_index": 3,
+            "gas": [
+              "O2"
+            ],
+            "pressure_meas_mfld": "(5.254, nan)",
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              5.092091172501389
+            ],
+            "temp": 450,
+            "rate": 0,
+            "duration": 2.0,
+            "chiller": false
+          },
+          {
+            "step_index": 4,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0009,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 0.5,
+            "chiller": false
+          }
+        ],
+        "exp_conditions": {
+          "gas": [
+            "13CO"
+          ],
+          "pressure_meas_mfld": 0.843,
+          "pressure_meas_cell": 0.8537,
+          "pressure_calc": [
+            0.8306660812098118
+          ],
+          "temp": 44.4,
+          "chiller": false
+        }
+      }
+    },
+    {
+      "base_name": "20260526_091836_pd_ceo2_004-025",
+      "datetime": "2026-05-26T09:18:36",
+      "json_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260526_091836_pd_ceo2_004-025_expParams.json",
+      "csv_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260526_091836_pd_ceo2_004-025_CarbonylPeakArea.csv",
+      "json_data": {
+        "base_name": "20260526_091836_pd_ceo2_004-025",
+        "datetime": "2026-05-26T09:18:36",
+        "material": {
+          "metal": "pd",
+          "metal_loading": 0.04983,
+          "support": "ceo2",
+          "support_sa": 54,
+          "notebook": "nn1120-3",
+          "mfldVol": 0.201552,
+          "mass_g": 0.0164
+        },
+        "filename_flags": {
+          "exp_type": "adsorption",
+          "has_csv": true,
+          "is_new": false,
+          "is_reference": false,
+          "exp_success": true
+        },
+        "pretreatments": [
+          {
+            "step_index": 1,
+            "gas": [
+              "RoughPump"
+            ],
+            "pressure_meas_mfld": 0.008,
+            "pressure_meas_cell": 0.0087,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 20,
+            "duration": 0.0,
+            "chiller": false
+          },
+          {
+            "step_index": 2,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0009,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 1,
+            "chiller": false
+          },
+          {
+            "step_index": 3,
+            "gas": [
+              "O2"
+            ],
+            "pressure_meas_mfld": "(5.157, nan)",
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              5.02640286377709
+            ],
+            "temp": 450,
+            "rate": 0,
+            "duration": 1,
+            "chiller": false
+          },
+          {
+            "step_index": 4,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0008,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 0.5,
+            "chiller": false
+          },
+          {
+            "step_index": 5,
+            "gas": [
+              "H2"
+            ],
+            "pressure_meas_mfld": "(7.012, nan)",
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              6.987074154560609
+            ],
+            "temp": 350,
+            "rate": 0,
+            "duration": 1,
+            "chiller": false
+          },
+          {
+            "step_index": 6,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0005,
+            "pressure_calc": null,
+            "temp": 350,
+            "rate": 0,
+            "duration": 0.5,
+            "chiller": false
+          }
+        ],
+        "exp_conditions": {
+          "gas": [
+            "13CO"
+          ],
+          "pressure_meas_mfld": 0.84,
+          "pressure_meas_cell": 0.8504,
+          "pressure_calc": [
+            0.8389810569976979
+          ],
+          "temp": 44.4,
+          "chiller": false
+        }
+      }
+    },
+    {
+      "base_name": "20260527_083948_pd_ceo2_004-026",
+      "datetime": "2026-05-27T08:39:48",
+      "json_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260527_083948_pd_ceo2_004-026_expParams.json",
+      "csv_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260527_083948_pd_ceo2_004-026_CarbonylPeakArea.csv",
+      "json_data": {
+        "base_name": "20260527_083948_pd_ceo2_004-026",
+        "datetime": "2026-05-27T08:39:48",
+        "material": {
+          "metal": "pd",
+          "metal_loading": 0.04983,
+          "support": "ceo2",
+          "support_sa": 54,
+          "notebook": "nn1120-3",
+          "mfldVol": 0.201552,
+          "mass_g": 0.0164
+        },
+        "filename_flags": {
+          "exp_type": "adsorption",
+          "has_csv": true,
+          "is_new": false,
+          "is_reference": true,
+          "exp_success": true
+        },
+        "pretreatments": [
+          {
+            "step_index": 1,
+            "gas": [
+              "RoughPump"
+            ],
+            "pressure_meas_mfld": 0.009,
+            "pressure_meas_cell": 0.0104,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 20,
+            "duration": 0.0,
+            "chiller": false
+          },
+          {
+            "step_index": 2,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0007,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 2.0,
+            "chiller": false
+          },
+          {
+            "step_index": 3,
+            "gas": [
+              "O2"
+            ],
+            "pressure_meas_mfld": "(5.094, nan)",
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              4.993142960625546
+            ],
+            "temp": 450,
+            "rate": 0,
+            "duration": 2.0,
+            "chiller": false
+          },
+          {
+            "step_index": 4,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.004,
+            "pressure_meas_cell": 0.0008,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 0.5,
+            "chiller": false
+          }
+        ],
+        "exp_conditions": {
+          "gas": [
+            "13CO"
+          ],
+          "pressure_meas_mfld": 0.845,
+          "pressure_meas_cell": 0.8555,
+          "pressure_calc": [
+            0.8331605739461775
+          ],
+          "temp": 44.4,
+          "chiller": false
+        }
+      }
+    },
+    {
+      "base_name": "20260531_051339_pd_ceo2_004-027",
+      "datetime": "2026-05-31T05:13:39",
+      "json_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260531_051339_pd_ceo2_004-027_expParams.json",
+      "csv_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260531_051339_pd_ceo2_004-027_CarbonylPeakArea.csv",
+      "json_data": {
+        "base_name": "20260531_051339_pd_ceo2_004-027",
+        "datetime": "2026-05-31T05:13:39",
+        "material": {
+          "metal": "pd",
+          "metal_loading": 0.04983,
+          "support": "ceo2",
+          "support_sa": 54,
+          "notebook": "nn1120-3",
+          "mfldVol": 0.201552,
+          "mass_g": 0.0164
+        },
+        "filename_flags": {
+          "exp_type": "adsorption",
+          "has_csv": true,
+          "is_new": false,
+          "is_reference": false,
+          "exp_success": true
+        },
+        "pretreatments": [
+          {
+            "step_index": 1,
+            "gas": [
+              "RoughPump"
+            ],
+            "pressure_meas_mfld": 0.008,
+            "pressure_meas_cell": 0.0067,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 20,
+            "duration": 0.0,
+            "chiller": false
+          },
+          {
+            "step_index": 2,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0011,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 1,
+            "chiller": false
+          },
+          {
+            "step_index": 3,
+            "gas": [
+              "O2"
+            ],
+            "pressure_meas_mfld": "(8.083, nan)",
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              7.962420814479637
+            ],
+            "temp": 350,
+            "rate": 0,
+            "duration": 3.0,
+            "chiller": false
+          },
+          {
+            "step_index": 4,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0007,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 0.5,
+            "chiller": false
+          }
+        ],
+        "exp_conditions": {
+          "gas": [
+            "13CO"
+          ],
+          "pressure_meas_mfld": 0.844,
+          "pressure_meas_cell": 0.8541,
+          "pressure_calc": [
+            0.8331605739461775
+          ],
+          "temp": 44.4,
+          "chiller": false
+        }
+      }
+    },
+    {
+      "base_name": "20260603_171511_pd_ceo2_004-028",
+      "datetime": "2026-06-03T17:15:11",
+      "json_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260603_171511_pd_ceo2_004-028_expParams.json",
+      "csv_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260603_171511_pd_ceo2_004-028_CarbonylPeakArea.csv",
+      "json_data": {
+        "base_name": "20260603_171511_pd_ceo2_004-028",
+        "datetime": "2026-06-03T17:15:11",
+        "material": {
+          "metal": "pd",
+          "metal_loading": 0.04983,
+          "support": "ceo2",
+          "support_sa": 54,
+          "notebook": "nn1120-3",
+          "mfldVol": 0.201552,
+          "mass_g": 0.0164
+        },
+        "filename_flags": {
+          "exp_type": "adsorption",
+          "has_csv": true,
+          "is_new": false,
+          "is_reference": true,
+          "exp_success": true
+        },
+        "pretreatments": [
+          {
+            "step_index": 1,
+            "gas": [
+              "RoughPump"
+            ],
+            "pressure_meas_mfld": 0.009,
+            "pressure_meas_cell": 0.0103,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 20,
+            "duration": 0.0,
+            "chiller": false
+          },
+          {
+            "step_index": 2,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0008,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 2.0,
+            "chiller": false
+          },
+          {
+            "step_index": 3,
+            "gas": [
+              "O2"
+            ],
+            "pressure_meas_mfld": "(5.246, nan)",
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              5.059662766928633
+            ],
+            "temp": 450,
+            "rate": 0,
+            "duration": 2.0,
+            "chiller": false
+          },
+          {
+            "step_index": 4,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0009,
+            "pressure_calc": null,
+            "temp": 450,
+            "rate": 0,
+            "duration": 0.5,
+            "chiller": false
+          }
+        ],
+        "exp_conditions": {
+          "gas": [
+            "13CO"
+          ],
+          "pressure_meas_mfld": 0.847,
+          "pressure_meas_cell": 0.8577,
+          "pressure_calc": [
+            0.8348235691037548
+          ],
+          "temp": 45.0,
+          "chiller": false
+        }
+      }
+    },
+    {
+      "base_name": "20260610_154611_pd_ceo2_004-030",
+      "datetime": "2026-06-10T15:46:11",
+      "json_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260610_154611_pd_ceo2_004-030_expParams.json",
+      "csv_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260610_154611_pd_ceo2_004-030_CarbonylPeakArea.csv",
+      "json_data": {
+        "base_name": "20260610_154611_pd_ceo2_004-030",
+        "datetime": "2026-06-10T15:46:11",
+        "material": {
+          "notebook": "nn1120-3",
+          "mass_g": 0.0164,
+          "metal": "pd",
+          "metal_loading": 0.04983,
+          "support": "ceo2",
+          "support_sa": 54,
+          "mfldVol": 0.201552
+        },
+        "filename_flags": {
+          "exp_type": "adsorption",
+          "has_csv": true,
+          "is_new": false,
+          "is_reference": false,
+          "exp_success": true
+        },
+        "pretreatments": [
+          {
+            "step_index": 1,
+            "gas": [
+              "RoughPump"
+            ],
+            "pressure_meas_mfld": 0.009,
+            "pressure_meas_cell": 0.0091,
+            "pressure_calc": null,
+            "temp": 450.0,
+            "rate": 20.0,
+            "duration": 0.0,
+            "chiller": true
+          },
+          {
+            "step_index": 2,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.004,
+            "pressure_meas_cell": 0.0008,
+            "pressure_calc": null,
+            "temp": 450.0,
+            "rate": 0.0,
+            "duration": 1.0,
+            "chiller": true
+          },
+          {
+            "step_index": 3,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0021,
+            "pressure_calc": null,
+            "temp": 550.0,
+            "rate": 20.0,
+            "duration": 0.0,
+            "chiller": true
+          },
+          {
+            "step_index": 4,
+            "gas": [
+              "O2"
+            ],
+            "pressure_meas_mfld": 3.539,
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              3.477322874493927
+            ],
+            "temp": 550.0,
+            "rate": 0.0,
+            "duration": 4.0,
+            "chiller": true
+          },
+          {
+            "step_index": 5,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0007,
+            "pressure_calc": null,
+            "temp": 450.0,
+            "rate": 20.0,
+            "duration": 0.5,
+            "chiller": true
+          }
+        ],
+        "exp_conditions": {
+          "gas": [
+            "13CO"
+          ],
+          "pressure_meas_mfld": 0.846,
+          "pressure_meas_cell": 0.8562,
+          "pressure_calc": [
+            0.8356550666825433
+          ],
+          "temp": 45.0,
+          "chiller": false
+        }
+      }
+    },
+    {
+      "base_name": "20260618_034450_pd_ceo2_004-032",
+      "datetime": "2026-06-18T03:44:50",
+      "json_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260618_034450_pd_ceo2_004-032_expParams.json",
+      "csv_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260618_034450_pd_ceo2_004-032_CarbonylPeakArea.csv",
+      "json_data": {
+        "base_name": "20260618_034450_pd_ceo2_004-032",
+        "datetime": "2026-06-18T03:44:50",
+        "material": {
+          "notebook": "nn1120-3",
+          "mass_g": 0.0164,
+          "metal": "pd",
+          "metal_loading": 0.04983,
+          "support": "ceo2",
+          "support_sa": 54,
+          "mfldVol": 0.201552
+        },
+        "filename_flags": {
+          "exp_type": "adsorption",
+          "has_csv": true,
+          "is_new": false,
+          "is_reference": false,
+          "exp_success": true
+        },
+        "pretreatments": [
+          {
+            "step_index": 1,
+            "gas": [
+              "RoughPump"
+            ],
+            "pressure_meas_mfld": 0.009,
+            "pressure_meas_cell": 0.0129,
+            "pressure_calc": null,
+            "temp": 450.0,
+            "rate": 20.0,
+            "duration": 0.0,
+            "chiller": true
+          },
+          {
+            "step_index": 2,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0014,
+            "pressure_calc": null,
+            "temp": 450.0,
+            "rate": 0.0,
+            "duration": 0.5,
+            "chiller": true
+          },
+          {
+            "step_index": 3,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.007,
+            "pressure_meas_cell": 0.0172,
+            "pressure_calc": null,
+            "temp": 750.0,
+            "rate": 20.0,
+            "duration": 0.0,
+            "chiller": true
+          },
+          {
+            "step_index": 4,
+            "gas": [
+              "O2"
+            ],
+            "pressure_meas_mfld": 4.391,
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              4.275560550130983
+            ],
+            "temp": 749.4,
+            "rate": 0.0,
+            "duration": 1.5,
+            "chiller": true
+          },
+          {
+            "step_index": 5,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0008,
+            "pressure_calc": null,
+            "temp": 450.0,
+            "rate": 20.0,
+            "duration": 0.5,
+            "chiller": true
+          }
+        ],
+        "exp_conditions": {
+          "gas": [
+            "13CO"
+          ],
+          "pressure_meas_mfld": 0.847,
+          "pressure_meas_cell": 0.8564,
+          "pressure_calc": [
+            0.8381495594189091
+          ],
+          "temp": 45.0,
+          "chiller": false
+        }
+      }
+    },
+    {
+      "base_name": "20260621_142245_pd_ceo2_004-033",
+      "datetime": "2026-06-21T14:22:45",
+      "json_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260621_142245_pd_ceo2_004-033_expParams.json",
+      "csv_path": "X:\\peakFit\\nn1120-3_pd_ceo2_004\\20260621_142245_pd_ceo2_004-033_CarbonylPeakArea.csv",
+      "json_data": {
+        "base_name": "20260621_142245_pd_ceo2_004-033",
+        "datetime": "2026-06-21T14:22:45",
+        "material": {
+          "notebook": "nn1120-3",
+          "mass_g": 0.0164,
+          "metal": "pd",
+          "metal_loading": 0.04983,
+          "support": "ceo2",
+          "support_sa": 54,
+          "mfldVol": 0.201552
+        },
+        "filename_flags": {
+          "exp_type": "adsorption",
+          "has_csv": true,
+          "is_new": false,
+          "is_reference": true,
+          "exp_success": true
+        },
+        "pretreatments": [
+          {
+            "step_index": 1,
+            "gas": [
+              "RoughPump"
+            ],
+            "pressure_meas_mfld": 0.009,
+            "pressure_meas_cell": 0.01,
+            "pressure_calc": null,
+            "temp": 450.0,
+            "rate": 20.0,
+            "duration": 0.0,
+            "chiller": false
+          },
+          {
+            "step_index": 2,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.003,
+            "pressure_meas_cell": 0.0008,
+            "pressure_calc": null,
+            "temp": 449.4,
+            "rate": 0.0,
+            "duration": 2.0,
+            "chiller": false
+          },
+          {
+            "step_index": 3,
+            "gas": [
+              "O2"
+            ],
+            "pressure_meas_mfld": 5.081,
+            "pressure_meas_cell": null,
+            "pressure_calc": [
+              4.9964689509407005
+            ],
+            "temp": 450.0,
+            "rate": 0.0,
+            "duration": 2.0,
+            "chiller": false
+          },
+          {
+            "step_index": 4,
+            "gas": [
+              "TurboPump"
+            ],
+            "pressure_meas_mfld": 0.004,
+            "pressure_meas_cell": 0.0008,
+            "pressure_calc": null,
+            "temp": 449.4,
+            "rate": 20.0,
+            "duration": 0.5,
+            "chiller": false
+          }
+        ],
+        "exp_conditions": {
+          "gas": [
+            "13CO"
+          ],
+          "pressure_meas_mfld": 0.842,
+          "pressure_meas_cell": 0.8516,
+          "pressure_calc": [
+            0.8306660812098117
+          ],
+          "temp": 45.0,
+          "chiller": false
+        }
       }
     }
   ]
