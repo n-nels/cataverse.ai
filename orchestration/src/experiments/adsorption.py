@@ -89,6 +89,9 @@ class AdsorptionExperiment:
     ) -> None:
         """Heat cell under evacuation with optional mass-spec stream sequence."""
 
+        current_temp = self.temp.read_temperature()
+        prev_gas = self.gas
+
         if pump_type is not None:
             self.gas = self.gas_controller.evacuate_cell(pump_type)
             if hold_time == 0:
@@ -118,9 +121,15 @@ class AdsorptionExperiment:
         self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
 
         if log_params:
-            self._log_pretreatment(
-                t_cell, rate, duration, p_cell=p_cell, log_gas_calc=False
+            meaningful = (
+                abs(current_temp - t_cell) > 5.0
+                or hold_time > 0
+                or (prev_gas != pump_type if pump_type is not None else True)
             )
+            if meaningful:
+                self._log_pretreatment(
+                    t_cell, rate, duration, p_cell=p_cell, log_gas_calc=False
+                )
 
     def evacuate_at_temperature(
         self,

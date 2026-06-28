@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "github-copilot/claude-opus-4.6",
+  "model": "big-pickle",
   "agent": {
     "coder": {
       "description": "Writes publication-ready open-source code based on project context",
