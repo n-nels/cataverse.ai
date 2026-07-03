@@ -1,15 +1,15 @@
 # Sample and catalyst descriptors passed to experiment_parameters
 
 sample:
-  notebook: nn1120-3
+  notebook: nn1120-4
   metal: pd
   support: ceo2
 
-  # Catalyst mass [g] (includes quartz wool mass as currently used in code)
-  mass: 0.0164
+  # Catalyst mass [g]  (8 mg quartz wool)
+  mass: 0.0167
 
   # Metal loading [wt.%]
-  metal_load: 0.04983
+  metal_load: 0.06645
 
   # Metal molar mass [g/mol] (Pd default)
   metal_molar_mass: 106.42

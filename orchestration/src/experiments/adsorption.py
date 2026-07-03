@@ -122,8 +122,7 @@ class AdsorptionExperiment:
 
         if log_params:
             meaningful = (
-                abs(current_temp - t_cell) > 5.0
-                or hold_time > 0
+                hold_time > 0
                 or (prev_gas != pump_type if pump_type is not None else True)
             )
             if meaningful:
