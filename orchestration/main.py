@@ -103,7 +103,7 @@ def run_adsorption_experiment(inst: Instruments):
         ads.monitor_adsorption(adsorbate="13CO",
                                pressure=0.84,
                                temp=45,
-                               repeat=[10, 5, 15, 150],
+                               repeat=[10, 5, 15, 100],
                                delay=[60, 300, 600, 1800])
         success = True
     
@@ -114,7 +114,7 @@ def run_adsorption_reference(inst: Instruments):
     """[pressure_limits_torr]-{single:8.3, dual:[1.6, 6.7]}"""
     
     ads = Adsorption(inst)
-    inst.session.new_experiment(is_new=False, is_reference=True)
+    inst.session.new_experiment(is_reference=True) # name=<value> erases pretreat data
     success = False
     
     try:
@@ -132,7 +132,7 @@ def run_adsorption_reference(inst: Instruments):
         ads.monitor_adsorption(adsorbate="13CO",
                                pressure=0.84,
                                temp=45,
-                               repeat=[10, 5, 15, 150],
+                               repeat=[10, 5, 15, 100],
                                delay=[60, 300, 600, 1800])
         success = True
     
