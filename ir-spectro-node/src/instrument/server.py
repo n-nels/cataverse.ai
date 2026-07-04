@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -10,7 +9,6 @@ from typing import Optional
 
 import zmq
 
-from ..utils.readme import readme_to_csv
 from ..core import config
 from ..visualizations.plot_spectrum_fit import plot_spectrum_fit
 from ..visualizations.plot_monomer_cluster_fit import plot_kinetic_fit
@@ -81,8 +79,6 @@ def handle_end_experiment() -> str:
 def handle_message(message: dict) -> Optional[str]:
     if not isinstance(message, dict) or not message:
         raise ValueError("Empty or invalid message payload")
-    # if message.get("readme"):
-    #     return handle_readme()
     if message.get("end_experiment"):
         state = get_state()
         state.foldername = message["foldername"]

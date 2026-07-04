@@ -621,7 +621,7 @@ def plot_kinetic_fit(
 
 if __name__ == "__main__":
     # Example usage:
-    directory = SEARCH_ROOT / "nn1120-3_pd_ceo2_004"
+    directory = SEARCH_ROOT / "nn1120-4_pd_ceo2_000"
     # directory = SEARCH_ROOT
     for file in directory.glob("*_CarbonylPeakArea.csv"):
         plot_kinetic_fit(

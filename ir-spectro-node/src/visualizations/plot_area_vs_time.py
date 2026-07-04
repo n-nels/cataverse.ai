@@ -177,5 +177,5 @@ def process_all_area_vs_time(
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     process_all_area_vs_time(
-        "nn1120-3_pd_ceo2_004", include_unknown=False, time_unit="s"
+        "nn1120-4_pd_ceo2_000", include_unknown=False, time_unit="s"
     )
