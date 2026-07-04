@@ -395,7 +395,7 @@ def process_all_plot_spectrum_fit(
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    process_all_plot_spectrum_fit("nn1120-3_pd_ceo2_004")
+    process_all_plot_spectrum_fit("nn1120-4_pd_ceo2_000")
     # plot_spectrum_fit(
     #     r"C:\\Data\\OpusConvert_subIFG_lgRfl\\nn1120-3_pd_ceo2_004\\20260312_160922_pd_ceo2_004-005",
     # )
