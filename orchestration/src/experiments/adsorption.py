@@ -390,6 +390,13 @@ class AdsorptionExperiment:
         time.sleep(5)
 
         try:
+            os.makedirs(
+                os.path.join(
+                    self.session.paths.share_drive_peak_fit_root,
+                    self.session.folder_name,
+                ),
+                exist_ok=True,
+            )
             shutil.copy2(
                 self.session.path_exp_params,
                 os.path.join(
@@ -397,6 +404,13 @@ class AdsorptionExperiment:
                     self.session.folder_name,
                     f"{self.session.file_name}_expParams.json",
                 ),
+            )
+            os.makedirs(
+                os.path.join(
+                    self.session.paths.share_drive_pressure_data_root,
+                    self.session.folder_name,
+                ),
+                exist_ok=True,
             )
             shutil.copy2(
                 self.session.path_pressure_log,

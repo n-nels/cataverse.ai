@@ -1,4 +1,5 @@
 # refactor notes
+- [] main.py: inst.session.new_experiment(name=<value>) erases pre-existing .json file. Should look for existing .json 
 - [] session.py has start_pressure_log() and start_mass_spec_log(), weird.
 - [] let's shut heat lines off on final evac. Just put them as args for each function. If introducing pre-gas, true, if evac, false.
 - [] src.experiments/adsorption.py, line 109; should be argument with default
