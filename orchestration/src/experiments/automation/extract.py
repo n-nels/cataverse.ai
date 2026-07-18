@@ -16,6 +16,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CACHE_PATH = Path(__file__).parent / "experiment_cache.json"
 
 class ExperimentRecord(NamedTuple):
     """Container for a single experiment's loaded data."""
@@ -50,10 +51,6 @@ def _parse_datetime_from_filename(filename: str) -> datetime:
         )
     dt_str = match.group(1) + match.group(2)
     return datetime.strptime(dt_str, "%Y%m%d%H%M%S")
-
-
-# Default cache location: same directory as this module
-DEFAULT_CACHE_PATH = Path(__file__).parent / "experiment_cache.json"
 
 
 def _load_cache(cache_path: Path) -> dict | None:

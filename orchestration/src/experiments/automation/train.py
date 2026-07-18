@@ -1,13 +1,15 @@
-""" Model training for PFO-Sec parameter prediction."""
+"""Model training for PFO-Sec parameter prediction."""
 
+import argparse
 import logging
 from pathlib import Path
 
+import models  # noqa: F401 — trigger model registration
 from load import build_dataset, split_dataset, save_dataset
 from visualize import generate_all_visualizations
 from model import (
+    MODEL_REGISTRY,
     ModelConfig,
-    train_all_targets,
     evaluate_on_test,
     evaluate_baseline,
     save_model,
@@ -15,11 +17,25 @@ from model import (
 
 logger = logging.getLogger(__name__)
 
-# Default model directory
 DEFAULT_MODEL_DIR = Path(__file__).parent / "models"
 
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="Train a PFO-Sec parameter prediction model.")
+    parser.add_argument(
+        "--model",
+        default="lightgbm",
+        choices=sorted(MODEL_REGISTRY),
+        help="Model to train (default: lightgbm)",
+    )
+    parser.add_argument(
+        "--strategy",
+        default="shared",
+        choices=["shared", "separate"],
+        help="Training strategy for LightGBM (default: shared, ignored by other models)",
+    )
+    args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -32,13 +48,16 @@ if __name__ == "__main__":
     print("\n=== Splitting dataset ===")
     splits = split_dataset(dataset.X, dataset.y)
 
-    print("\n=== Training models ===")
+    print(f"\n=== Training model: {args.model} ===")
     config = ModelConfig()
-    trained_model = train_all_targets(
+    trainer = MODEL_REGISTRY[args.model]
+
+    # All trainers accept strategy (unused by some); pass it uniformly
+    trained_model = trainer(
         splits.X_train, splits.y_train,
         splits.X_val, splits.y_val,
         config,
-        strategy="shared",  # "shared" or "separate"
+        strategy=args.strategy,
     )
 
     print("\n=== Evaluating on test set ===")
@@ -53,6 +72,7 @@ if __name__ == "__main__":
         trained_model,
         feature_names=list(dataset.X.columns),
         target_names=list(dataset.y.columns),
+        model_name=args.model,
     )
     print(f"Model saved to: {model_path}")
 
@@ -63,6 +83,7 @@ if __name__ == "__main__":
     print(f"Generated {len(viz_paths)} visualizations")
 
     print("\n=== Summary ===")
+    print(f"Model: {args.model}")
     print(f"Training samples: {len(splits.X_train)}")
     print(f"Validation samples: {len(splits.X_val)}")
     print(f"Test samples: {len(splits.X_test)}")
@@ -71,11 +92,11 @@ if __name__ == "__main__":
     print(f"\nTest Metrics:")
     for target, metrics in test_metrics.items():
         if target != "aggregate":
-            print(f"  {target}: RMSE={metrics['rmse']:.6f}, R²={metrics['r2']:.4f}")
-    print(f"  Aggregate: RMSE={test_metrics['aggregate']['avg_rmse']:.6f}, R²={test_metrics['aggregate']['avg_r2']:.4f}")
+            print(f"  {target}: RMSE={metrics['rmse']:.6f}, R\u00b2={metrics['r2']:.4f}")
+    print(f"  Aggregate: RMSE={test_metrics['aggregate']['avg_rmse']:.6f}, R\u00b2={test_metrics['aggregate']['avg_r2']:.4f}")
 
     print(f"\nBaseline Metrics (training mean):")
     for target, metrics in baseline_metrics.items():
         if target != "aggregate":
-            print(f"  {target}: RMSE={metrics['rmse']:.6f}, R²={metrics['r2']:.4f}")
-    print(f"  Aggregate: RMSE={baseline_metrics['aggregate']['avg_rmse']:.6f}, R²={baseline_metrics['aggregate']['avg_r2']:.4f}")
+            print(f"  {target}: RMSE={metrics['rmse']:.6f}, R\u00b2={metrics['r2']:.4f}")
+    print(f"  Aggregate: RMSE={baseline_metrics['aggregate']['avg_rmse']:.6f}, R\u00b2={baseline_metrics['aggregate']['avg_r2']:.4f}")
