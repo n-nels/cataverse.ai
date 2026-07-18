@@ -108,7 +108,7 @@ def assemble_dataset(
     tuple[pd.DataFrame, pd.DataFrame, int]
         X (features), y (targets), zero_target_count.
     """
-    # Extract targets and max time
+    # Extract pfo-sec targets and max time feature
     targets = []
     time_features = []
     zero_count = 0

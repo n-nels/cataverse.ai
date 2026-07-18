@@ -46,9 +46,9 @@ N_GAS_BITS = 4  # ceil(log2(9)) = 4
 
 MAX_PRETREATMENT_STEPS = 8
 
-STEP_NUMERIC_FIELDS = ["pressure_calc", "temp", "rate", "duration"]
-STEP_NUMERIC_FIELDS = ["temp", "duration"]
-# STEP_NUMERIC_FIELDS = ["temp"]
+STEP_NUMERIC_FIELDS = ["pressure_calc", "temp", "rate", "duration"] # full list
+STEP_NUMERIC_FIELDS = ["temp", "duration"] # downselect
+
 
 
 class TargetExtractionError(Exception):

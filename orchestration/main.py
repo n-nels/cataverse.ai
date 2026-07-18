@@ -71,27 +71,27 @@ def run_adsorption_experiment(inst: Instruments):
     """[pressure_limits_torr]-{single:8.3, dual:[1.6, 6.7]}"""
     
     ads = Adsorption(inst)
-    inst.session.new_experiment(is_new=False)
+    inst.session.new_experiment()
     success = False
     
     try:
         ads.clean_surface(evac_temp=450,
                           evac_time=0.5,
                           enable_ms=False,
-                          chiller=False)
+                          chiller=True)
         
-        ads.oxidize_surface(pressure=6.6,
-                            temp=450,
-                            time=1.0,
-                            evac_temp=450,
+        ads.oxidize_surface(pressure=8.0,
+                            temp=510,
+                            time=5.35,
+                            evac_temp=510,
                             evac_time=0.5)
         
-        ads.pretreat_adsorbate(adsorbate="H2",
-                               pressure=6.0,
-                               temp=150,
-                               time=2.0,
-                               evac_temp=225,
-                               evac_time=0.25)
+        # ads.pretreat_adsorbate(adsorbate="H2O",
+        #                        pressure=0.8,
+        #                        temp=250,
+        #                        time=0.25,
+        #                        evac_temp=250,
+        #                        evac_time=0.50)
         
         # ads.pretreat_adsorbate(adsorbate="O2",
         #                        pressure=3.0,
