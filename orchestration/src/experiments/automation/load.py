@@ -268,6 +268,7 @@ def build_dataset(
     data_root: str = r"X:\peakFit",
     force_refresh: bool = False,
     pre_steps_dropped: list[int] | None = [1, 2, 4, 6, 8],
+    exclude_folders: list[str] | None = ["nn1120-4_pd_ceo2_000"],
 ) -> Dataset:
     """
     Build complete dataset from raw data.
@@ -278,8 +279,10 @@ def build_dataset(
         Root directory containing experiment folders.
     force_refresh : bool
         If True, ignore cache and do full walk.
-    steps_to_drop : list[int] | None
+    pre_steps_dropped : list[int] | None
         List of pretreatment steps to drop during feature reduction.
+    exclude_folders : list[str] | None
+        Folder name substrings to exclude from the dataset.
 
     Returns
     -------
@@ -289,6 +292,12 @@ def build_dataset(
     # Phase 1: Load data
     records = extract_data(data_root=data_root, force_refresh=force_refresh)
     logger.info("Loaded %d records", len(records))
+
+    # Exclude specified folders
+    if exclude_folders:
+        before = len(records)
+        records = [r for r in records if not any(f in str(r.json_path) for f in exclude_folders)]
+        logger.info("Excluded %d records matching folder patterns %s", before - len(records), exclude_folders)
 
     # Phase 5: Assemble dataset
     X, y, zero_count = assemble_dataset(records)
