@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "opencode-go/glm-5.2",
+  "model": "opencode/big-pickle",
   "default_agent": "plan",
   "permission": {
     "edit": "ask",
@@ -30,6 +30,20 @@
       "permission": {
         "edit": "deny",
         "bash": "deny"
+      },
+      "disable": false
+    },
+    "autoresearch": {
+      "description": "Writes simple, high-quality code",
+      "mode": "primary",
+      "model": "opencode-go/deepseek-v4-pro",
+      "temperature": 0.2,
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "*": "allow",
+          "rm *": "deny"
+        }
       },
       "disable": false
     },

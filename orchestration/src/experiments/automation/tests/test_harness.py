@@ -37,7 +37,7 @@ def _write_manifest(tmp_path: Path, **overrides) -> Path:
         "description": "test",
         "model_name": "lightgbm",
         "baseline_experiment": "baseline",
-        "random_seed": 42,
+        "split_seed": 42,
         "primary_metric": "validation_avg_rmse",
         "search_method": "random",
         "allowed_hyperparameters": [
@@ -58,7 +58,7 @@ def _write_manifest(tmp_path: Path, **overrides) -> Path:
 def test_load_manifest_valid(tmp_path):
     m = load_manifest(_write_manifest(tmp_path))
     assert m.experiment_id == "test_v1"
-    assert m.random_seed == CANONICAL_SEED
+    assert m.split_seed == CANONICAL_SEED
     assert len(m.allowed_hyperparameters) == 2
     assert m.maximum_trial_count == 5
 
@@ -73,8 +73,8 @@ def test_load_manifest_missing_field(tmp_path):
 
 
 def test_load_manifest_rejects_noncanonical_seed(tmp_path):
-    p = _write_manifest(tmp_path, random_seed=99)
-    with pytest.raises(ManifestError, match="canonical seed"):
+    p = _write_manifest(tmp_path, split_seed=99)
+    with pytest.raises(ManifestError, match="split_seed must be the canonical seed"):
         load_manifest(p)
 
 
@@ -93,24 +93,25 @@ def test_hyperparameter_spec_bad_type():
         HyperparameterSpec(name="x", type="bogus", choices=[1])
 
 
-def test_is_approved_params_rejects_undeclared(tmp_path):
+def test_is_approved_params_warns_undeclared(tmp_path):
     m = load_manifest(_write_manifest(tmp_path))
     ok, reason = m.is_approved_params({"not_a_field": 1})
-    assert not ok
+    assert ok  # advisory: always True
     assert "not declared" in reason
 
 
-def test_is_approved_params_rejects_out_of_range(tmp_path):
+def test_is_approved_params_warns_out_of_range(tmp_path):
     m = load_manifest(_write_manifest(tmp_path))
     ok, reason = m.is_approved_params({"n_estimators": 99999})
-    assert not ok
+    assert ok  # advisory: always True
     assert "outside declared bounds" in reason
 
 
 def test_is_approved_params_accepts_valid(tmp_path):
     m = load_manifest(_write_manifest(tmp_path))
-    ok, _ = m.is_approved_params({"n_estimators": 200, "strategy": "shared"})
+    ok, reason = m.is_approved_params({"n_estimators": 200, "strategy": "shared"})
     assert ok
+    assert reason == ""  # no warnings for in-bounds declared params
 
 
 # ---------------------------------------------------------------------------
@@ -285,3 +286,18 @@ def test_git_create_branch_rejects_non_autoresearch(tmp_path):
     repo = _init_temp_repo(tmp_path)
     with pytest.raises(gitstate.GitError, match="non-autoresearch"):
         gitstate.create_branch(repo, "feature/x")
+
+
+def test_git_protected_files_changed(tmp_path):
+    repo = _init_temp_repo(tmp_path)
+    # no changes -> empty
+    assert gitstate.protected_files_changed(repo) == []
+    # touch a protected file
+    (repo / "load.py").write_text("changed", encoding="utf-8")
+    changed = gitstate.protected_files_changed(repo)
+    assert "load.py" in changed
+    # touch a non-protected file
+    (repo / "model.py").write_text("changed", encoding="utf-8")
+    changed = gitstate.protected_files_changed(repo)
+    assert "load.py" in changed
+    assert "model.py" not in changed

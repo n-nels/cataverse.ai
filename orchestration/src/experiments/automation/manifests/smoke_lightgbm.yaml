@@ -5,7 +5,7 @@ experiment_id: lgbm_smoke_0001
 description: "Smoke test of the autonomous harness infrastructure."
 model_name: lightgbm
 baseline_experiment: lgbm_baseline
-random_seed: 42
+split_seed: 42
 primary_metric: validation_avg_rmse
 search_method: random
 allowed_hyperparameters:

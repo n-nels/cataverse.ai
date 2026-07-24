@@ -41,24 +41,47 @@ The agent may search for better model configurations. It may not redefine what �
 
 ## Protected Scope
 
-The following are protected and must not be modified by the autonomous experiment agent unless the user explicitly authorizes it in a task:
+The **ETL pipeline** is the protected boundary. The agent must not modify the
+following files or the behavior they implement unless the user explicitly
+authorizes it in a task:
+
+```text
+extract.py        — raw data extraction
+transform.py      — feature engineering, target extraction
+load.py           — dataset assembly, feature reduction, split logic
+```
+
+The following behaviors are also protected (some live in files the agent may
+otherwise edit; the agent must not change the behavior even if it touches the
+file for other reasons):
 
 - Dataset extraction and loading behavior.
 - Curated feature definitions.
 - Feature-engineering logic.
 - Feature-reduction logic.
 - Target definitions.
-- Target transforms.
-- Canonical train/validation/test split behavior.
-- Evaluation metric definitions.
-- Existing baseline model artifacts.
-- Default model selection.
-- Production configuration.
+- Target transforms (Box-Cox lambdas, log transforms).
+- Canonical train/validation/test split behavior (seed 42, split ratios).
+- Evaluation metric definitions (RMSE, R², aggregation).
 - Existing completed experiment artifacts.
-- Dependency files and package versions.
-- Files outside the approved experiment scope.
+- Default model selection and production configuration.
 
-The agent must not attempt to improve performance by changing the dataset, features, target values, split boundaries, or official evaluation metrics.
+The agent **may** modify the following for optimization purposes without
+explicit per-change approval:
+
+- `model.py` — extending `ModelConfig` with new fields, adding new model
+  registrations, adjusting model-internal defaults (but NOT target transforms,
+  evaluation metrics, or split logic).
+- `models/*.py` — adding new model implementations, extending existing trainers
+  with new hyperparameters, adjusting model-internal behavior.
+- `pipeline.py` — adjusting the reusable training pipeline for new model
+  interfaces.
+- `harness/*.py` — adjusting the harness itself.
+- `manifests/*.yaml` — creating and editing experiment manifests.
+- New files within the `automation/` package.
+
+The agent must not attempt to improve performance by changing the dataset,
+features, target values, split boundaries, or official evaluation metrics.
 
 ---
 
@@ -110,7 +133,7 @@ There are two distinct "baselines" in this system. They must not be conflated.
    learning_rate: 0.05
    max_depth: 6
    early_stopping_rounds: 50
-   random seed: 42
+   split seed: 42  # ETL-protected; model seed is a searchable hyperparameter
    ```
 
    These are the defaults of `ModelConfig` plus `strategy="shared"`.
@@ -134,12 +157,14 @@ All candidate experiments must use:
 - The existing canonical train/validation/test split behavior.
 - The canonical random seed, which is **42**.
 
-The canonical seed is hardcoded in the existing split logic (`split_dataset`) and
-in the model trainers (e.g. LightGBM `random_state=42`). The harness records the
-seed in the manifest for traceability but **must not** override the split or model
-seeds, because doing so would require modifying protected split/training logic.
-A different seed may only be used if a human explicitly authorizes changes to the
-split or training code in a separate task.
+The **split seed** is hardcoded at 42 in `split_dataset` and is ETL-protected.
+The harness must not override it. The manifest records it for traceability.
+
+The **model seed** (e.g. LightGBM `random_state`) is a searchable hyperparameter.
+The agent may vary model seeds to test robustness. To do so the agent adds
+`random_state` (or equivalent) as a declared hyperparameter in the manifest and
+extends `ModelConfig` / the model trainer to accept it — this is a model-layer
+change, not an ETL change, and is permitted.
 
 The agent must not:
 
@@ -221,10 +246,10 @@ model_name
 baseline_experiment
 dataset_version or dataset fingerprint
 split identifier or split fingerprint
-random seed
+split seed (must be 42)
 primary metric
 search method
-allowed hyperparameters
+allowed hyperparameters (advisory)
 maximum trial count
 maximum wall-clock duration
 maximum test finalists
@@ -235,7 +260,7 @@ The agent must not run an experiment without a valid manifest.
 
 ### Allowed Hyperparameters Schema
 
-Each entry in `allowed hyperparameters` must specify:
+Each entry in `allowed hyperparameters` specifies:
 
 ```text
 name        # the parameter key the harness sets on the model config
@@ -244,28 +269,60 @@ range       # for numeric: [low, high] inclusive bounds
 choices     # for categorical: the allowed values
 ```
 
-Parameter names must correspond to fields the chosen model's config actually
-consumes (e.g. fields of `ModelConfig`, plus `strategy` for LightGBM). The harness
-must reject any trial that sets a parameter not declared in the manifest or that
-sets a value outside the declared range/choices.
+The declared hyperparameter set is **advisory, not binding**. It serves as a
+starting point for the search. The agent may:
 
-The declared hyperparameter set is **non-exhaustive**. The agent should use its
-best judgement to select relevant, model-appropriate hyperparameters to search.
-For LightGBM this may include fields beyond the current `ModelConfig` defaults
-(e.g. `num_leaves`, `min_child_samples`, `subsample`, `colsample_bytree`,
-`reg_alpha`, `reg_lambda`); extending `ModelConfig` to expose such fields is
-permitted (it is not ETL), but every searchable field must still be declared in
-the manifest before it may be used in a trial.
+- Search beyond the declared set using its own judgement.
+- Set values outside the declared ranges when reasoning suggests it.
+- Introduce new hyperparameters between campaign rounds by editing the manifest
+  and extending `ModelConfig` / the model trainer as needed.
+
+The harness must **log** (not reject) any trial that uses undeclared parameters
+or out-of-range values. All parameters used in a trial must be recorded in the
+trial artifact for traceability.
+
+The agent should use its best judgement to select relevant, model-appropriate
+hyperparameters. For LightGBM this may include fields beyond the current
+`ModelConfig` defaults (e.g. `num_leaves`, `min_child_samples`, `subsample`,
+`colsample_bytree`, `reg_alpha`, `reg_lambda`); extending `ModelConfig` to
+expose such fields is permitted (it is not ETL).
 
 ---
 
 ## Hyperparameter Search Policy
 
-The default search method is bounded random search.
+The default search method is bounded random search within the manifest's
+advisory hyperparameter set.
 
-Grid search may be used only when the total number of combinations is small and explicitly bounded.
+Grid search may be used only when the total number of combinations is small and
+explicitly bounded.
 
-The agent must not invent unsupported parameters or set values outside the configured ranges.
+The agent may go beyond the declared set using its own judgement (see "Allowed
+Hyperparameters Schema" above). All parameters used must be recorded in the
+trial artifact.
+
+---
+
+## Dependency Installation
+
+The agent may install missing Python packages into the active environment when a
+model requires a dependency that is not present (e.g. ForestDiffusion, torch,
+xgboost).
+
+The agent must use `uv pip install <package>` (not plain `pip install` and not
+`uv add`). This project is uv-managed (`[tool.uv] managed = true`); plain `pip`
+installs work in the moment but may be removed by a subsequent `uv sync`, while
+`uv add` modifies `pyproject.toml`. `uv pip install` installs into the venv
+without touching the lockfile or pyproject.
+
+Requirements:
+
+- The agent must record every installed package and version in the experiment's
+  `environment.json` artifact.
+- The agent must not modify the project's pinned dependency files
+  (`pyproject.toml`, `setup.py`, `requirements*.txt`) without explicit human
+  approval — those are outside the optimization scope.
+- If an installation fails, the agent must stop and report (see Stop Conditions).
 
 ---
 
@@ -330,32 +387,58 @@ The agent must not:
 
 ## Autonomous Experiment Loop
 
-For each experiment iteration:
+The agent is the intelligent driver of the search. The harness is a tool that
+provides safety rails and recording. The agent runs campaigns, observes results,
+reasons, and adjusts between rounds.
+
+### Outer loop (agent-driven)
+
+The agent repeats the following until it decides to stop or the overall budget
+is exhausted:
+
+1. Run a campaign (inner loop) with the current manifest and model code.
+2. Observe the results — `results.tsv`, leaderboard, per-target metrics,
+   comparison to baseline.
+3. Reason about what to try next: which hyperparameter ranges to narrow or
+   widen, which new parameters to introduce, whether to extend `ModelConfig`
+   or the model trainer, whether to install a new dependency.
+4. Adjust: edit the manifest (new bounds, new params), extend model code
+   (`model.py`, `models/*.py`), or install dependencies as needed.
+5. Create a new manifest with a new `experiment_id` and run the next campaign.
+
+The agent must not ask for permission between normal outer-loop iterations. It
+should continue within the approved budget.
+
+### Inner loop (campaign, harness-driven)
+
+Within one campaign, the harness executes bounded random search:
 
 1. Inspect the current branch, commit, manifest, and results ledger.
-2. Select one bounded experiment idea.
-3. Sample a candidate parameter configuration from the manifest's allowed
-   hyperparameters. For a hyperparameter search, the "trial change" is this
-   candidate configuration (recorded as a `trial_params.yaml` artifact), **not**
-   a source-code edit. Source files are modified only when the harness itself
-   changes, not per trial.
-4. Commit the candidate configuration on the autoresearch branch so the trial is
-   traceable to a commit hash.
-5. Run the experiment with output redirected to a run log.
-6. Read the structured result output.
-7. Record the result in `results.tsv`, including the trial's commit hash.
-8. Compare validation average RMSE against the current retained best result.
-9. Keep the commit only if it improves the primary metric by the required threshold.
-10. Discard the change if it is equal, worse, invalid, or crashes. The discard
-    mechanism is `git reset --hard <prev_commit>` on the dedicated autoresearch
-    branch (destructive Git operations are permitted **on** the autoresearch
-    branch; they remain forbidden elsewhere). The ledger row for the discarded
-    trial is the durable record and is never removed.
-11. Continue until the configured trial or time budget is exhausted.
+2. Run the campaign baseline if no baseline result exists for the current protocol.
+3. For each trial:
+   a. Sample a candidate parameter configuration from the manifest's advisory
+      hyperparameter set. The "trial change" is this candidate configuration
+      (recorded as a `trial_params.yaml` artifact), **not** a source-code edit.
+   b. Commit the candidate configuration on the autoresearch branch so the
+      trial is traceable to a commit hash.
+   c. Run the experiment with output redirected to a run log.
+   d. Read the structured result output.
+   e. Record the result in `results.tsv`, including the trial's commit hash.
+   f. Compare validation average RMSE against the current retained best result.
+   g. Keep the commit only if it improves the primary metric by the required
+      threshold.
+   h. Discard the change if it is equal, worse, invalid, or crashes. The discard
+      mechanism is `git reset --hard <prev_commit>` on the dedicated autoresearch
+      branch (destructive Git operations are permitted **on** the autoresearch
+      branch; they remain forbidden elsewhere). The ledger row for the discarded
+      trial is the durable record and is never removed.
+4. Continue until the configured trial or time budget for this campaign is
+   exhausted.
+5. Evaluate the top-K finalists on the test set.
 
-The agent must not ask for permission between normal iterations. It should continue within the approved budget.
-
-The agent must stop and report if it encounters a protected-scope change, a missing dependency, invalid data, ambiguous requirements, or a safety concern.
+The agent must stop and report if it encounters a protected-scope (ETL) change,
+a dependency installation failure, invalid data, ambiguous requirements, or a
+safety concern.
 
 ---
 
@@ -369,10 +452,9 @@ A candidate may be retained only when all of the following are true:
    fingerprint alongside the result. The harness does not re-run every kept trial
    unless the manifest explicitly demands a reproducibility re-run check.
 3. The dataset and split fingerprints match the experiment manifest.
-4. The candidate used only approved parameters.
-5. The candidate improves validation average RMSE.
-6. The improvement exceeds the configured minimum threshold.
-7. No protected files were modified.
+4. The candidate improves validation average RMSE.
+5. The improvement exceeds the configured minimum threshold.
+6. No ETL-protected files were modified.
 
 Default minimum improvement threshold:
 
@@ -411,7 +493,7 @@ Examples of failure:
 - Invalid output shape.
 - Missing metrics.
 - Dataset or split mismatch.
-- Any modification to protected scope.
+- Any modification to ETL-protected files (extract.py, transform.py, load.py).
 
 For an obvious implementation mistake, such as a typo or missing import, the agent may attempt up to two fixes.
 
@@ -588,7 +670,7 @@ The agent must stop the campaign when any of the following occurs:
 
 - Maximum trial count is reached.
 - Maximum wall-clock budget is reached.
-- A required dependency is missing and installation was not approved.
+- A dependency installation fails.
 - The dataset cannot be loaded or validated.
 - The split fingerprint differs from the manifest.
 - A protected file would need modification.
@@ -609,7 +691,6 @@ This system does not currently support autonomous changes to:
 - Train/test split strategy.
 - Time-series or walk-forward validation strategy.
 - Ensemble construction.
-- Automatic dependency installation.
 - Automatic model promotion.
 - Automatic merging or pushing to remote repositories.
 - Unlimited experimentation.

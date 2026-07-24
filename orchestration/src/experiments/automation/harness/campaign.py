@@ -120,6 +120,13 @@ def run_campaign(
         branch = state.branch
         starting_commit = state.commit
         candidate_file = auto / "current_candidate.yaml"
+        # ETL protection: refuse to start if protected files are already dirty
+        dirty_protected = gitstate.protected_files_changed(auto, ref="HEAD")
+        if dirty_protected:
+            raise gitstate.GitError(
+                f"ETL-protected files are modified: {dirty_protected}; "
+                "cannot start campaign with dirty ETL files"
+            )
     elif smoke:
         branch = "(smoke)"
         starting_commit = "(smoke)"
@@ -138,7 +145,7 @@ def run_campaign(
     X, y = pipeline.prepare_dataset(data_dir)
     splits = pipeline.prepare_splits(X, y)
     dataset_fp = fingerprints.compute_dataset_fingerprint(X, y, parquet_dir=data_dir)
-    split_fp = fingerprints.compute_split_fingerprint(splits, seed=manifest.random_seed)
+    split_fp = fingerprints.compute_split_fingerprint(splits, seed=manifest.split_seed)
 
     # --- ledger -------------------------------------------------------------
     ledger.init_ledger(auto)
@@ -146,7 +153,7 @@ def run_campaign(
     # --- artifact dir -------------------------------------------------------
     exp_dir = artifacts.init_experiment_dir(auto, manifest.experiment_id)
 
-    rng = random.Random(manifest.random_seed)
+    rng = random.Random(manifest.split_seed)
     summary = CampaignSummary(experiment_id=manifest.experiment_id)
     best_val_rmse: float | None = None
     best_params: dict | None = None
@@ -162,16 +169,9 @@ def run_campaign(
 
     # --- campaign baseline --------------------------------------------------
     bparams = baseline_params()
-    ok, reason = manifest.is_approved_params(bparams)
-    # baseline uses defaults; it is exempt from the declared-range check but we
-    # still verify no undeclared keys.
-    if not ok and "not declared in manifest" in reason:
-        log(f"baseline params rejected: {reason}")
-        summary.recommendation = "experiment failed"
-        _finalize(auto, exp_dir, manifest, summary, dataset_fp, split_fp,
-                  branch, starting_commit, starting_commit, run_log_lines,
-                  best_params, best_val_rmse, baseline_val=None)
-        return summary
+    _, warn = manifest.is_approved_params(bparams)
+    if warn:
+        log(f"baseline params advisory: {warn}")
 
     log("running campaign baseline")
     b_result = _run_one_trial(
@@ -228,22 +228,9 @@ def run_campaign(
 
         trial_idx += 1
         params = trial.sample_params(manifest, rng)
-        ok, reason = manifest.is_approved_params(params)
-        if not ok:
-            log(f"trial {trial_idx} rejected params: {reason}")
-            summary.trials_attempted += 1
-            summary.failed_trials += 1
-            summary.trial_results.append({
-                "status": "invalid", "params": params, "reason": reason,
-                "validation_avg_rmse": None, "validation_avg_r2": None,
-                "runtime_minutes": None, "commit": "",
-            })
-            ledger.append_row(auto, ledger.make_row(
-                commit="", experiment_id=manifest.experiment_id,
-                model=manifest.model_name, status="invalid",
-                description=reason, runtime_minutes=None,
-            ))
-            continue
+        _, warn = manifest.is_approved_params(params)
+        if warn:
+            log(f"trial {trial_idx} params advisory: {warn}")
 
         result = _run_one_trial(
             manifest, data_dir, params, smoke, git, auto,

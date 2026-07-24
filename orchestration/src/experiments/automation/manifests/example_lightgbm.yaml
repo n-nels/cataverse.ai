@@ -7,7 +7,7 @@ experiment_id: lgbm_v1_example
 description: "Bounded random search over LightGBM hyperparameters."
 model_name: lightgbm
 baseline_experiment: lgbm_baseline
-random_seed: 42  # must be 42 (canonical); see spec.md "Dataset and Split Policy"
+split_seed: 42  # ETL-protected split seed; model seed is a searchable hyperparameter
 primary_metric: validation_avg_rmse
 search_method: random
 allowed_hyperparameters:

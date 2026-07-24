@@ -1,8 +1,9 @@
 """Experiment manifest loading and validation.
 
 A manifest is a YAML file that defines the bounds of an autonomous campaign.
-The harness refuses to run without a valid manifest and refuses any trial that
-sets a hyperparameter not declared in the manifest.
+The harness refuses to run without a valid manifest. Hyperparameters declared
+in the manifest are advisory (a starting point); the agent may search beyond
+them. The harness logs (not rejects) undeclared or out-of-range params.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ REQUIRED_FIELDS = (
     "description",
     "model_name",
     "baseline_experiment",
-    "random_seed",
+    "split_seed",
     "primary_metric",
     "search_method",
     "allowed_hyperparameters",
@@ -86,7 +87,7 @@ class Manifest:
     description: str
     model_name: str
     baseline_experiment: str
-    random_seed: int
+    split_seed: int
     primary_metric: str
     search_method: str
     allowed_hyperparameters: list[HyperparameterSpec]
@@ -112,14 +113,22 @@ class Manifest:
         raise ManifestError(f"hyperparameter {name!r} not declared in manifest")
 
     def is_approved_params(self, params: dict) -> tuple[bool, str]:
-        """Return (ok, reason). Ok only if every key is declared and in range."""
+        """Return (ok, reason). Advisory check — logs but does not reject.
+
+        Per spec, declared hyperparameters are advisory (a starting point), not
+        binding. The agent may search beyond them. This method returns (True, "")
+        always, but includes a warning reason when params are undeclared or
+        out-of-range so the caller can log it for traceability.
+        """
+        warnings = []
         for key, value in params.items():
             if key not in self.hyperparameter_names():
-                return False, f"parameter {key!r} not declared in manifest"
+                warnings.append(f"parameter {key!r} not declared in manifest (advisory)")
+                continue
             spec = self.spec_for(key)
             if not spec.contains(value):
-                return False, f"parameter {key!r} value {value!r} outside declared bounds"
-        return True, ""
+                warnings.append(f"parameter {key!r} value {value!r} outside declared bounds (advisory)")
+        return True, "; ".join(warnings)
 
 
 def _parse_hyperparameters(raw: Any) -> list[HyperparameterSpec]:
@@ -155,11 +164,11 @@ def load_manifest(path: str | Path) -> Manifest:
     if missing:
         raise ManifestError(f"manifest missing required fields: {missing}")
 
-    seed = int(raw["random_seed"])
+    seed = int(raw["split_seed"])
     if seed != CANONICAL_SEED:
         raise ManifestError(
-            f"random_seed must be the canonical seed {CANONICAL_SEED} (got {seed}); "
-            "overriding the split/training seed is not permitted"
+            f"split_seed must be the canonical seed {CANONICAL_SEED} (got {seed}); "
+            "the split seed is ETL-protected and may not be overridden"
         )
 
     return Manifest(
@@ -167,7 +176,7 @@ def load_manifest(path: str | Path) -> Manifest:
         description=str(raw["description"]),
         model_name=str(raw["model_name"]),
         baseline_experiment=str(raw["baseline_experiment"]),
-        random_seed=seed,
+        split_seed=seed,
         primary_metric=str(raw.get("primary_metric", DEFAULT_PRIMARY_METRIC)),
         search_method=str(raw.get("search_method", DEFAULT_SEARCH_METHOD)),
         allowed_hyperparameters=_parse_hyperparameters(raw["allowed_hyperparameters"]),

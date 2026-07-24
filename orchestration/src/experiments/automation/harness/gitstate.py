@@ -98,3 +98,35 @@ def create_branch(cwd: str | Path, branch_name: str) -> None:
             f"refusing to create non-autoresearch branch {branch_name!r}"
         )
     _run(["checkout", "-b", branch_name], cwd)
+
+
+# ETL-protected files — the agent must not modify these during a campaign.
+PROTECTED_FILES = (
+    "extract.py",
+    "transform.py",
+    "load.py",
+)
+
+
+def changed_files(cwd: str | Path, ref: str = "HEAD") -> list[str]:
+    """Return the list of files changed vs. ``ref`` (staged + unstaged + untracked)."""
+    files: set[str] = set()
+    # unstaged tracked changes vs ref
+    out = _run(["diff", "--name-only", ref], cwd)
+    files.update(f.strip() for f in out.splitlines() if f.strip())
+    # staged changes vs ref
+    staged = _run(["diff", "--name-only", "--cached", ref], cwd)
+    files.update(f.strip() for f in staged.splitlines() if f.strip())
+    # untracked files (status --porcelain with ?? prefix)
+    status = _run(["status", "--porcelain"], cwd)
+    for line in status.splitlines():
+        if line.startswith("?? "):
+            files.add(line[3:].strip())
+    return sorted(files)
+
+
+def protected_files_changed(cwd: str | Path, ref: str = "HEAD") -> list[str]:
+    """Return the subset of changed files that are ETL-protected."""
+    changed = changed_files(cwd, ref)
+    return [f for f in changed if f in PROTECTED_FILES or
+            any(f.endswith("/" + p) or f.endswith("\\" + p) for p in PROTECTED_FILES)]
