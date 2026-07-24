@@ -1,0 +1,32 @@
+# Smoke-test manifest. Unique experiment_id so the harness can create a fresh
+# artifact directory. Uses a tiny budget to verify infrastructure without
+# consuming the overnight experiment budget.
+experiment_id: lgbm_smoke_0001
+description: "Smoke test of the autonomous harness infrastructure."
+model_name: lightgbm
+baseline_experiment: lgbm_baseline
+random_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+  - name: n_estimators
+    type: numeric
+    range: [100, 300]
+  - name: learning_rate
+    type: numeric
+    range: [0.05, 0.2]
+  - name: max_depth
+    type: numeric
+    range: [3, 8]
+  - name: early_stopping_rounds
+    type: numeric
+    range: [20, 50]
+  - name: strategy
+    type: categorical
+    choices: [shared, separate]
+maximum_trial_count: 30
+maximum_wall_clock_minutes: 120
+maximum_test_finalists: 2
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 10
+artifact_output_location: artifacts/experiments

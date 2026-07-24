@@ -90,6 +90,40 @@ Secondary metrics do not override the primary metric unless the experiment manif
 
 ---
 
+## Baseline Definition
+
+There are two distinct "baselines" in this system. They must not be conflated.
+
+1. **Reference baseline (sanity check).** The mean-prediction baseline produced by
+   `evaluate_baseline` — it predicts the training-set mean for every sample and
+   uses no features. It exists only to confirm a real model outperforms a
+   no-information predictor. It is **not** the keep/discard anchor.
+
+2. **Campaign baseline (keep/discard anchor).** The model configuration against
+   which candidate trials are compared by the keep/discard rule. For the LightGBM
+   campaign this is:
+
+   ```text
+   model_name: lightgbm
+   strategy: shared
+   n_estimators: 1000
+   learning_rate: 0.05
+   max_depth: 6
+   early_stopping_rounds: 50
+   random seed: 42
+   ```
+
+   These are the defaults of `ModelConfig` plus `strategy="shared"`.
+
+If no campaign baseline result exists for the current protocol, the harness must
+run the campaign baseline first and record it in the ledger with status `keep`
+before any candidate trial is evaluated. For a model family with no existing
+baseline, the campaign baseline is the first configuration that outperforms the
+reference baseline; if the default config does not, the harness must stop and
+report rather than search for a baseline.
+
+---
+
 ## Dataset and Split Policy
 
 All candidate experiments must use:
@@ -98,7 +132,14 @@ All candidate experiments must use:
 - The existing target definitions.
 - The existing dataset-building pipeline.
 - The existing canonical train/validation/test split behavior.
-- The same random seed specified in the experiment manifest.
+- The canonical random seed, which is **42**.
+
+The canonical seed is hardcoded in the existing split logic (`split_dataset`) and
+in the model trainers (e.g. LightGBM `random_state=42`). The harness records the
+seed in the manifest for traceability but **must not** override the split or model
+seeds, because doing so would require modifying protected split/training logic.
+A different seed may only be used if a human explicitly authorizes changes to the
+split or training code in a separate task.
 
 The agent must not:
 
@@ -108,6 +149,39 @@ The agent must not:
 - Combine validation and test sets.
 - Train directly on the test set during tuning.
 - Repeatedly inspect test-set performance while searching.
+
+---
+
+## Fingerprints
+
+Fingerprints make results traceable to a specific dataset and split. They are
+recorded as JSON artifacts and compared against the manifest at keep/discard time.
+
+**Dataset fingerprint** (`dataset_fingerprint.json`):
+
+```text
+shape:           [n_rows, n_features] of X, [n_rows, n_targets] of y
+columns:         ordered list of X columns, ordered list of y columns
+hash:            SHA256 of the concatenated bytes of X.parquet and y.parquet
+                 as written by save_dataset
+```
+
+**Split fingerprint** (`split_fingerprint.json`):
+
+```text
+seed:            42
+ratios:          [train_ratio, val_ratio] used by split_dataset
+train_index:     ordered list of row labels in the training partition
+val_index:       ordered list of row labels in the validation partition
+test_index:      ordered list of row labels in the test partition
+hash:            SHA256 of the canonical serialization of the three index lists
+                 above (labels as strings, newline-separated, in train/val/test
+                 order)
+```
+
+A candidate may be retained only when both the dataset fingerprint and the split
+fingerprint match the values recorded in the experiment manifest. A mismatch is a
+stop condition (see Stop Conditions).
 
 ---
 
@@ -138,7 +212,7 @@ The agent must not use test-set metrics to decide which hyperparameter trials to
 
 Every experiment must begin with an experiment manifest.
 
-The manifest must define at least:
+The manifest must be a YAML file (on disk: `manifest.yaml`) and must define at least:
 
 ```text
 experiment_id
@@ -153,12 +227,35 @@ search method
 allowed hyperparameters
 maximum trial count
 maximum wall-clock duration
-maximum parallel workers
 maximum test finalists
 artifact output location
 ```
 
 The agent must not run an experiment without a valid manifest.
+
+### Allowed Hyperparameters Schema
+
+Each entry in `allowed hyperparameters` must specify:
+
+```text
+name        # the parameter key the harness sets on the model config
+type        # "numeric" or "categorical"
+range       # for numeric: [low, high] inclusive bounds
+choices     # for categorical: the allowed values
+```
+
+Parameter names must correspond to fields the chosen model's config actually
+consumes (e.g. fields of `ModelConfig`, plus `strategy` for LightGBM). The harness
+must reject any trial that sets a parameter not declared in the manifest or that
+sets a value outside the declared range/choices.
+
+The declared hyperparameter set is **non-exhaustive**. The agent should use its
+best judgement to select relevant, model-appropriate hyperparameters to search.
+For LightGBM this may include fields beyond the current `ModelConfig` defaults
+(e.g. `num_leaves`, `min_child_samples`, `subsample`, `colsample_bytree`,
+`reg_alpha`, `reg_lambda`); extending `ModelConfig` to expose such fields is
+permitted (it is not ETL), but every searchable field must still be declared in
+the manifest before it may be used in a trial.
 
 ---
 
@@ -179,14 +276,18 @@ Unless an experiment manifest specifies stricter limits, use:
 ```text
 maximum trials: 30
 maximum wall-clock time: 2 hours
-maximum parallel trials: 2
 maximum test finalists: 3
 maximum retries for a broken trial: 2
+per-trial timeout: 10 minutes
 ```
 
 A trial must be stopped and marked as failed if it exceeds the configured per-trial timeout.
 
-The agent must not bypass limits by launching additional processes, changing parallelism settings, or creating extra manifests.
+The agent must not bypass limits by launching additional processes or creating extra manifests.
+
+Model-internal parallelism (e.g. LightGBM `n_jobs=-1`) is left at its existing
+default and is **not** constrained by the harness. The harness performs trials
+sequentially.
 
 ---
 
@@ -233,14 +334,23 @@ For each experiment iteration:
 
 1. Inspect the current branch, commit, manifest, and results ledger.
 2. Select one bounded experiment idea.
-3. Modify only approved configuration or implementation files.
-4. Commit the proposed change on the autoresearch branch.
+3. Sample a candidate parameter configuration from the manifest's allowed
+   hyperparameters. For a hyperparameter search, the "trial change" is this
+   candidate configuration (recorded as a `trial_params.yaml` artifact), **not**
+   a source-code edit. Source files are modified only when the harness itself
+   changes, not per trial.
+4. Commit the candidate configuration on the autoresearch branch so the trial is
+   traceable to a commit hash.
 5. Run the experiment with output redirected to a run log.
 6. Read the structured result output.
-7. Record the result in `results.tsv`.
+7. Record the result in `results.tsv`, including the trial's commit hash.
 8. Compare validation average RMSE against the current retained best result.
 9. Keep the commit only if it improves the primary metric by the required threshold.
-10. Discard or revert the change if it is equal, worse, invalid, or crashes.
+10. Discard the change if it is equal, worse, invalid, or crashes. The discard
+    mechanism is `git reset --hard <prev_commit>` on the dedicated autoresearch
+    branch (destructive Git operations are permitted **on** the autoresearch
+    branch; they remain forbidden elsewhere). The ledger row for the discarded
+    trial is the durable record and is never removed.
 11. Continue until the configured trial or time budget is exhausted.
 
 The agent must not ask for permission between normal iterations. It should continue within the approved budget.
@@ -254,7 +364,10 @@ The agent must stop and report if it encounters a protected-scope change, a miss
 A candidate may be retained only when all of the following are true:
 
 1. The experiment completed successfully.
-2. The result is reproducible.
+2. The result is reproducible. Reproducibility is **attested** by recording the
+   git commit, model configuration, random seed, dataset fingerprint, and split
+   fingerprint alongside the result. The harness does not re-run every kept trial
+   unless the manifest explicitly demands a reproducibility re-run check.
 3. The dataset and split fingerprints match the experiment manifest.
 4. The candidate used only approved parameters.
 5. The candidate improves validation average RMSE.
@@ -319,7 +432,9 @@ Each autonomous campaign must maintain an untracked file named:
 results.tsv
 ```
 
-The file must remain uncommitted unless the user explicitly requests otherwise.
+located at the root of the `automation` package (i.e. `automation/results.tsv`,
+relative to the package directory containing this spec). The file must remain
+uncommitted unless the user explicitly requests otherwise.
 
 The required tab-separated columns are:
 
@@ -366,6 +481,9 @@ Each completed experiment must write artifacts to a unique directory:
 ```text
 artifacts/experiments/<experiment_id>/
 ```
+
+relative to the `automation` package directory containing this spec (i.e.
+`automation/artifacts/experiments/<experiment_id>/`).
 
 Required files:
 

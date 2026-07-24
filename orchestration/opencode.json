@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "opencode/big-pickle",
+  "model": "opencode-go/glm-5.2",
   "default_agent": "plan",
   "permission": {
     "edit": "ask",
@@ -10,7 +10,7 @@
     "coder": {
       "description": "Writes simple, high-quality code",
       "mode": "primary",
-      "model": "opencode/big-pickle",
+      "model": "opencode-go/glm-5.2",
       "temperature": 0.2,
       "permission": {
         "edit": "allow",
@@ -25,7 +25,7 @@
     "architect": {
       "description": "Thinks Deeply. Plan and Designs simply",
       "mode": "primary",
-      "model": "opencode/big-pickle",
+      "model": "opencode-go/glm-5.2",
       "temperature": 0.3,
       "permission": {
         "edit": "deny",
@@ -36,7 +36,7 @@
     "reviewer": {
       "description": "Reviews code for quality, correctness, and conventions",
       "mode": "subagent",
-      "model": "opencode/big-pickle",
+      "model": "opencode-go/qwen3.7-max",
       "prompt": "Look for ways to make the code more succinct and simple while retaining its functionality.",
       "temperature": 0.1,
       "permission": {
@@ -49,7 +49,7 @@
     "lint": {
       "description": "Formats code and fixes import order with ruff",
       "mode": "subagent",
-      "model": "opencode/big-pickle",
+      "model": "opencode-go/qwen3.7-max",
       "temperature": 0.0,
       "permission": {
         "edit": "ask",

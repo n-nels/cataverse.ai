@@ -1,0 +1,34 @@
+# Example manifest for a LightGBM autonomous hyperparameter campaign.
+# Copy and edit (especially experiment_id) before running. The harness refuses
+# to overwrite an existing artifact directory, so each campaign needs a unique
+# experiment_id.
+
+experiment_id: lgbm_v1_example
+description: "Bounded random search over LightGBM hyperparameters."
+model_name: lightgbm
+baseline_experiment: lgbm_baseline
+random_seed: 42  # must be 42 (canonical); see spec.md "Dataset and Split Policy"
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+  - name: n_estimators
+    type: numeric
+    range: [100, 2000]
+  - name: learning_rate
+    type: numeric
+    range: [0.01, 0.3]
+  - name: max_depth
+    type: numeric
+    range: [3, 12]
+  - name: early_stopping_rounds
+    type: numeric
+    range: [10, 100]
+  - name: strategy
+    type: categorical
+    choices: [shared, separate]
+maximum_trial_count: 30
+maximum_wall_clock_minutes: 120
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 10
+artifact_output_location: artifacts/experiments
