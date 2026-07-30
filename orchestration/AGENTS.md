@@ -25,3 +25,7 @@ A strict plan in .md format must be referenced prior to any changes in hardware.
 1. Stop before making changes. Summarize what will change and why. Wait for explicit human go-ahead.
 2. Validate against existing tests. If the task requires it, plan real-hardware revalidation.
 
+## Code Conventions
+
+Before editing code, read and follow `~/.opencode/conventions.md` when it is available.
+
