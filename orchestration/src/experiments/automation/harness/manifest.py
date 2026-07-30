@@ -98,6 +98,7 @@ class Manifest:
     # Optional / defaulted fields
     dataset_version: str | None = None
     split_identifier: str | None = None
+    run_tag: str | None = None  # for branch naming; defaults to experiment_id
     per_trial_timeout_minutes: int = DEFAULT_PER_TRIAL_TIMEOUT_MINUTES
     minimum_improvement_threshold: float = DEFAULT_MIN_IMPROVEMENT
     maximum_retries: int = DEFAULT_MAX_RETRIES
@@ -186,6 +187,7 @@ def load_manifest(path: str | Path) -> Manifest:
         artifact_output_location=str(raw["artifact_output_location"]),
         dataset_version=raw.get("dataset_version"),
         split_identifier=raw.get("split_identifier"),
+        run_tag=raw.get("run_tag"),
         per_trial_timeout_minutes=int(
             raw.get("per_trial_timeout_minutes", DEFAULT_PER_TRIAL_TIMEOUT_MINUTES)
         ),

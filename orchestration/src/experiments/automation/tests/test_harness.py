@@ -301,3 +301,16 @@ def test_git_protected_files_changed(tmp_path):
     changed = gitstate.protected_files_changed(repo)
     assert "load.py" in changed
     assert "model.py" not in changed
+
+
+def test_git_auto_create_autoresearch_branch(tmp_path):
+    """Verify gitstate.create_branch can create an autoresearch branch and
+    current_state then reports it. This mirrors campaign.py's auto-branch logic."""
+    repo = _init_temp_repo(tmp_path)
+    # not on an autoresearch branch initially
+    assert not gitstate.is_autoresearch_branch(gitstate.current_state(repo).branch)
+    # create one
+    gitstate.create_branch(repo, "autoresearch/test-run")
+    state = gitstate.current_state(repo)
+    assert gitstate.is_autoresearch_branch(state.branch)
+    assert state.branch == "autoresearch/test-run"

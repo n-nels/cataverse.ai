@@ -5,8 +5,9 @@ report. Runs the autonomous experiment loop within the configured budget.
 
 Two execution modes:
 
-- **git mode** (``git=True``): requires a clean autoresearch branch, commits each
-  candidate config as ``current_candidate.yaml``, discards via ``git reset --hard``.
+- **git mode** (``git=True``): auto-creates an ``autoresearch/<run_tag>`` branch
+  if not already on one, commits each candidate config as
+  ``current_candidate.yaml``, discards via ``git reset --hard``.
 - **smoke mode** (``smoke=True``): runs in-process on the current branch with no
   git commits and no branch creation. Used to verify the harness without consuming
   the overnight budget.
@@ -116,7 +117,15 @@ def run_campaign(
     branch = ""
     if git:
         gitstate.assert_clean_tree(auto)
-        state = gitstate.assert_autoresearch_branch(auto)
+        # Auto-create the autoresearch branch if not already on one.
+        # Derive the branch name from the manifest's run_tag (or experiment_id).
+        run_tag = getattr(manifest, "run_tag", None) or manifest.experiment_id
+        branch_name = f"autoresearch/{run_tag}"
+        state = gitstate.current_state(auto)
+        if not gitstate.is_autoresearch_branch(state.branch):
+            gitstate.create_branch(auto, branch_name)
+            state = gitstate.current_state(auto)
+            logger.info("created and switched to branch %s", branch_name)
         branch = state.branch
         starting_commit = state.commit
         candidate_file = auto / "current_candidate.yaml"
