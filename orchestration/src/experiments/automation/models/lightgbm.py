@@ -75,6 +75,7 @@ def _train_separate(
         reg_alpha=config.reg_alpha,
         reg_lambda=config.reg_lambda,
         random_state=config.random_state,
+        boosting_type=getattr(config, "boosting_type", "gbdt"),
         verbose=-1,
     )
     model = MultiOutputRegressor(base, n_jobs=-1)
@@ -144,6 +145,7 @@ def _train_shared(
         reg_alpha=config.reg_alpha,
         reg_lambda=config.reg_lambda,
         random_state=config.random_state,
+        boosting_type=getattr(config, "boosting_type", "gbdt"),
         verbose=-1,
     )
 

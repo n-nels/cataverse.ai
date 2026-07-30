@@ -72,6 +72,7 @@ class ModelConfig(NamedTuple):
     reg_lambda: float = 0.0
     early_stopping_rounds: int = 50
     random_state: int = 42
+    boosting_type: str = "gbdt"
 
 
 class TrainedModel(NamedTuple):
