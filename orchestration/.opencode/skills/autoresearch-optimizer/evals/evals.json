@@ -1,0 +1,26 @@
+{
+  "skill_name": "autoresearch-optimizer",
+  "evals": [
+    {
+      "id": 1,
+      "name": "optimize-named-model-default-turns",
+      "prompt": "optimize lightgbm",
+      "expected_output": "Agent runs 3 outer-loop campaigns for lightgbm, each with a unique experiment_id manifest, reads results between turns, reasons about hyperparameter patterns, and gives a cross-campaign summary with best config + test honesty check. Never touches ETL files.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "tune-with-turn-override",
+      "prompt": "tune the random forest, 2 turns",
+      "expected_output": "Agent runs exactly 2 outer-loop campaigns for random_forest (not 3), each with a unique experiment_id, and summarizes across both. Recognizes random_forest has fewer tunable knobs than lightgbm (no num_leaves/learning_rate) and reasons accordingly.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "missing-model-name-asks",
+      "prompt": "find better hyperparameters for the model",
+      "expected_output": "Agent does NOT guess a model. It asks the user to name the model (lightgbm, random_forest, etc.) before proceeding, since the model name is required and selects the trainer.",
+      "files": []
+    }
+  ]
+}
