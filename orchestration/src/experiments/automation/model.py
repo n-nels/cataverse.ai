@@ -64,7 +64,14 @@ class ModelConfig(NamedTuple):
     n_estimators: int = 1000
     learning_rate: float = 0.05
     max_depth: int = 6
+    num_leaves: int = 31
+    min_child_samples: int = 20
+    subsample: float = 1.0
+    colsample_bytree: float = 1.0
+    reg_alpha: float = 0.0
+    reg_lambda: float = 0.0
     early_stopping_rounds: int = 50
+    random_state: int = 42
 
 
 class TrainedModel(NamedTuple):

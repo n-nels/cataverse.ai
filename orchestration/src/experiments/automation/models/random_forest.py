@@ -76,7 +76,7 @@ def train_random_forest(
     base = RandomForestRegressor(
         n_estimators=config.n_estimators,
         max_depth=config.max_depth,
-        random_state=42,
+        random_state=config.random_state,
         verbose=0,
         n_jobs=-1,
     )

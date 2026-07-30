@@ -1,0 +1,35 @@
+commit	experiment_id	model	validation_avg_rmse	validation_avg_r2	test_avg_rmse	test_avg_r2	runtime_minutes	status	description
+	lgbm_v1_0001	lightgbm	0.082424	0.122885			0.04	keep	campaign baseline
+	lgbm_v1_0001	lightgbm	0.118142	-0.067137			0.00	discard	trial 1: rel_improvement=-0.4333 < threshold
+	lgbm_v1_0001	lightgbm	0.130921	-0.140569			0.14	discard	trial 2: rel_improvement=-0.5884 < threshold
+	lgbm_v2_0001	lightgbm	0.082424	0.122885			0.03	keep	campaign baseline
+	lgbm_v2_0001	lightgbm	0.118142	-0.067137			0.00	discard	trial 1: rel_improvement=-0.4333 < threshold
+	lgbm_v2_0001	lightgbm	0.130921	-0.140569			0.13	discard	trial 2: rel_improvement=-0.5884 < threshold
+	lgbm_v2_0001	lightgbm	0.115213	-0.055659			0.00	discard	trial 3: rel_improvement=-0.3978 < threshold
+	lgbm_v2_0001	lightgbm	0.079093	-0.045225			0.12	keep	trial 4: rel_improvement=0.0404
+	lgbm_v2_0001	lightgbm	0.130921	-0.140569			0.00	discard	trial 5: rel_improvement=-0.6553 < threshold
+	lgbm_v2_0001	lightgbm	0.116079	-0.065686			0.00	discard	trial 6: rel_improvement=-0.4676 < threshold
+	lgbm_v2_0001	lightgbm	0.117158	-0.057467			0.00	discard	trial 7: rel_improvement=-0.4813 < threshold
+	lgbm_v2_0001	lightgbm	0.085071	-0.029108			0.03	discard	trial 8: rel_improvement=-0.0756 < threshold
+	lgbm_v2_0001	lightgbm	0.093603	-1.610569			0.02	discard	trial 9: rel_improvement=-0.1835 < threshold
+	lgbm_v2_0001	lightgbm	0.115229	-0.060683			0.00	discard	trial 10: rel_improvement=-0.4569 < threshold
+	lgbm_v2_0001	lightgbm	0.097129	-6.870678			0.01	discard	trial 11: rel_improvement=-0.2280 < threshold
+	lgbm_v2_0001	lightgbm	0.117453	-0.042188			0.00	discard	trial 12: rel_improvement=-0.4850 < threshold
+	lgbm_v2_0001	lightgbm	0.106536	-6.864691			0.02	discard	trial 13: rel_improvement=-0.3470 < threshold
+	lgbm_v2_0001	lightgbm	0.116406	-0.060984			0.01	discard	trial 14: rel_improvement=-0.4718 < threshold
+	lgbm_v2_0001	lightgbm	0.087325	-1.624630			0.01	discard	trial 15: rel_improvement=-0.1041 < threshold
+	lgbm_v2_0001	lightgbm	0.115687	-0.060570			0.00	discard	trial 16: rel_improvement=-0.4627 < threshold
+	lgbm_v2_0001	lightgbm	0.117544	-0.047189			0.00	discard	trial 17: rel_improvement=-0.4862 < threshold
+	lgbm_v2_0001	lightgbm	0.087265	-0.013829			0.02	discard	trial 18: rel_improvement=-0.1033 < threshold
+	lgbm_v2_0001	lightgbm	0.116179	-0.076964			0.00	discard	trial 19: rel_improvement=-0.4689 < threshold
+	lgbm_v2_0001	lightgbm	0.118818	-0.045678			0.00	discard	trial 20: rel_improvement=-0.5023 < threshold
+	lgbm_v2_0001	lightgbm	0.095928	-1.903214			0.02	discard	trial 21: rel_improvement=-0.2129 < threshold
+	lgbm_v2_0001	lightgbm	0.112389	-0.067510			0.00	discard	trial 22: rel_improvement=-0.4210 < threshold
+	lgbm_v2_0001	lightgbm	0.114436	-0.078853			0.00	discard	trial 23: rel_improvement=-0.4469 < threshold
+	lgbm_v2_0001	lightgbm	0.118113	-0.071086			0.00	discard	trial 24: rel_improvement=-0.4933 < threshold
+	lgbm_v2_0001	lightgbm	0.115075	-0.054875			0.00	discard	trial 25: rel_improvement=-0.4549 < threshold
+	lgbm_v2_0001	lightgbm	0.074407	0.013873			0.01	keep	trial 26: rel_improvement=0.0592
+	lgbm_v2_0001	lightgbm	0.116985	-0.061539			0.00	discard	trial 27: rel_improvement=-0.5722 < threshold
+	lgbm_v2_0001	lightgbm	0.130921	-0.140569			0.01	discard	trial 28: rel_improvement=-0.7595 < threshold
+	lgbm_v2_0001	lightgbm	0.130921	-0.140569			0.00	discard	trial 29: rel_improvement=-0.7595 < threshold
+	lgbm_v2_0001	lightgbm	0.115939	-0.043009			0.00	discard	trial 30: rel_improvement=-0.5582 < threshold

@@ -68,7 +68,13 @@ def _train_separate(
         n_estimators=config.n_estimators,
         learning_rate=config.learning_rate,
         max_depth=config.max_depth,
-        random_state=42,
+        num_leaves=config.num_leaves,
+        min_child_samples=config.min_child_samples,
+        subsample=config.subsample,
+        colsample_bytree=config.colsample_bytree,
+        reg_alpha=config.reg_alpha,
+        reg_lambda=config.reg_lambda,
+        random_state=config.random_state,
         verbose=-1,
     )
     model = MultiOutputRegressor(base, n_jobs=-1)
@@ -131,7 +137,13 @@ def _train_shared(
         n_estimators=config.n_estimators,
         learning_rate=config.learning_rate,
         max_depth=config.max_depth,
-        random_state=42,
+        num_leaves=config.num_leaves,
+        min_child_samples=config.min_child_samples,
+        subsample=config.subsample,
+        colsample_bytree=config.colsample_bytree,
+        reg_alpha=config.reg_alpha,
+        reg_lambda=config.reg_lambda,
+        random_state=config.random_state,
         verbose=-1,
     )
 

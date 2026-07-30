@@ -1,0 +1,8 @@
+=== Campaign lgbm_v1_0001 (model=lightgbm) ===
+smoke=True git=False max_trials=2 wall_clock=5.0m
+running campaign baseline
+baseline val_avg_rmse=0.082424
+trial 1 DISCARD val=0.118142 rel=-0.4333
+trial 2 DISCARD val=0.130921 rel=-0.5884
+evaluating finalist baseline on test set
+evaluating baseline on test set

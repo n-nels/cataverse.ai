@@ -1,0 +1,68 @@
+{
+  "baseline_val_rmse": 0.08242391647856441,
+  "best_val_rmse": 0.07440724824253127,
+  "baseline_test_rmse": 0.052264976456840945,
+  "best_test_rmse": 0.052264976456840945,
+  "finalists": [
+    {
+      "trial": "trial_26",
+      "params": {
+        "n_estimators": 1475,
+        "learning_rate": 0.197195,
+        "max_depth": 10,
+        "num_leaves": 95,
+        "min_child_samples": 14,
+        "subsample": 0.504658,
+        "colsample_bytree": 0.734811,
+        "reg_alpha": 0.562994,
+        "reg_lambda": 0.099981,
+        "early_stopping_rounds": 88,
+        "random_state": 3493,
+        "strategy": "separate"
+      },
+      "test_avg_rmse": 8.837343348879907,
+      "test_avg_r2": -2064474.3114132213,
+      "validation_avg_rmse": 0.07440724824253127
+    },
+    {
+      "trial": "trial_04",
+      "params": {
+        "n_estimators": 835,
+        "learning_rate": 0.255773,
+        "max_depth": 12,
+        "num_leaves": 82,
+        "min_child_samples": 10,
+        "subsample": 0.864866,
+        "colsample_bytree": 0.67536,
+        "reg_alpha": 0.973116,
+        "reg_lambda": 0.378534,
+        "early_stopping_rounds": 90,
+        "random_state": 4804,
+        "strategy": "separate"
+      },
+      "test_avg_rmse": 0.05294413239802909,
+      "test_avg_r2": 0.18743812303907906,
+      "validation_avg_rmse": 0.07909299307285185
+    },
+    {
+      "trial": "baseline",
+      "params": {
+        "n_estimators": 1000,
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "num_leaves": 31,
+        "min_child_samples": 20,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "early_stopping_rounds": 50,
+        "random_state": 42,
+        "strategy": "shared"
+      },
+      "test_avg_rmse": 0.052264976456840945,
+      "test_avg_r2": 0.22152682521848124,
+      "validation_avg_rmse": 0.08242391647856441
+    }
+  ]
+}
