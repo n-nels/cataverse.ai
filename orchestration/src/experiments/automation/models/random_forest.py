@@ -1,7 +1,15 @@
 """
 Random Forest model for PFO-Sec parameter prediction.
 
-Trains a ``RandomForestRegressor`` per target via ``MultiOutputRegressor``.
+Supports two strategies:
+
+- **shared** (default): a single ``RandomForestRegressor`` trained on 2D
+  ``y``. Trees are shared across all targets via scikit-learn's native
+  multi-output support.
+
+- **separate**: one ``RandomForestRegressor`` per target via
+  ``MultiOutputRegressor``. Each target gets its own set of trees.
+
 Same Box-Cox target transforms as LightGBM for fair comparison.
 """
 
@@ -23,6 +31,41 @@ from model import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _train_shared(
+    X_train: pd.DataFrame,
+    y_train: pd.DataFrame,
+    config: ModelConfig,
+) -> RandomForestRegressor:
+    """Train a single ``RandomForestRegressor`` on 2D ``y`` (shared trees)."""
+    model = RandomForestRegressor(
+        n_estimators=config.n_estimators,
+        max_depth=config.max_depth,
+        random_state=config.random_state,
+        verbose=0,
+        n_jobs=-1,
+    )
+    model.fit(X_train, y_train.values)
+    return model
+
+
+def _train_separate(
+    X_train: pd.DataFrame,
+    y_train: pd.DataFrame,
+    config: ModelConfig,
+) -> MultiOutputRegressor:
+    """Train one ``RandomForestRegressor`` per target via ``MultiOutputRegressor``."""
+    base = RandomForestRegressor(
+        n_estimators=config.n_estimators,
+        max_depth=config.max_depth,
+        random_state=config.random_state,
+        verbose=0,
+        n_jobs=-1,
+    )
+    model = MultiOutputRegressor(base, n_jobs=-1)
+    model.fit(X_train, y_train.values)
+    return model
 
 
 @register_model("random_forest")
@@ -51,6 +94,8 @@ def train_random_forest(
         Validation targets (one column per target).
     config : ModelConfig | None
         Training configuration. Uses defaults if None.
+    strategy : str
+        ``"shared"`` (default) or ``"separate"``.
 
     Returns
     -------
@@ -68,20 +113,18 @@ def train_random_forest(
     y_val_tfm = apply_target_transforms(y_val, lambdas)
 
     logger.info(
-        "Training Random Forest on %d targets (Box-Cox lambdas: %s)",
+        "Training Random Forest (strategy=%s) on %d targets (Box-Cox lambdas: %s)",
+        strategy,
         y_train.shape[1],
         {k: f"{v:.3f}" for k, v in lambdas.items()},
     )
 
-    base = RandomForestRegressor(
-        n_estimators=config.n_estimators,
-        max_depth=config.max_depth,
-        random_state=config.random_state,
-        verbose=0,
-        n_jobs=-1,
-    )
-    model = MultiOutputRegressor(base)
-    model.fit(X_train, y_train_tfm.values)
+    if strategy == "shared":
+        model = _train_shared(X_train, y_train_tfm, config)
+    elif strategy == "separate":
+        model = _train_separate(X_train, y_train_tfm, config)
+    else:
+        raise ValueError(f"Unknown strategy: {strategy!r}. Choose 'shared' or 'separate'.")
 
     # Evaluate on validation set
     y_pred_tfm = model.predict(X_val)
