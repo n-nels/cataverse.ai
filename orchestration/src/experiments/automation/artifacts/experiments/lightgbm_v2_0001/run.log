@@ -1,0 +1,36 @@
+=== Campaign lightgbm_v2_0001 (model=lightgbm) ===
+smoke=True git=False max_trials=30 wall_clock=120m
+running campaign baseline
+baseline val_avg_rmse=0.123778
+trial 1 DISCARD val=0.139192 rel=-0.1245
+trial 2 DISCARD val=0.141272 rel=-0.1413
+trial 3 DISCARD val=0.141098 rel=-0.1399
+trial 4 DISCARD val=0.139170 rel=-0.1244
+trial 5 DISCARD val=0.138744 rel=-0.1209
+trial 6 DISCARD val=0.140309 rel=-0.1336
+trial 7 DISCARD val=0.138637 rel=-0.1200
+trial 8 DISCARD val=0.138428 rel=-0.1184
+trial 9 DISCARD val=0.141110 rel=-0.1400
+trial 10 DISCARD val=0.137499 rel=-0.1109
+trial 11 DISCARD val=0.138477 rel=-0.1188
+trial 12 DISCARD val=0.137363 rel=-0.1098
+trial 13 DISCARD val=0.138236 rel=-0.1168
+trial 14 DISCARD val=0.140629 rel=-0.1361
+trial 15 DISCARD val=0.137679 rel=-0.1123
+trial 16 DISCARD val=0.138969 rel=-0.1227
+trial 17 DISCARD val=0.138950 rel=-0.1226
+trial 18 DISCARD val=0.141440 rel=-0.1427
+trial 19 DISCARD val=0.138535 rel=-0.1192
+trial 20 DISCARD val=0.139221 rel=-0.1248
+trial 21 DISCARD val=0.138119 rel=-0.1159
+trial 22 DISCARD val=0.140749 rel=-0.1371
+trial 23 DISCARD val=0.140905 rel=-0.1384
+trial 24 DISCARD val=0.137161 rel=-0.1081
+trial 25 DISCARD val=0.138505 rel=-0.1190
+trial 26 DISCARD val=0.141730 rel=-0.1450
+trial 27 DISCARD val=0.138162 rel=-0.1162
+trial 28 DISCARD val=0.139621 rel=-0.1280
+trial 29 DISCARD val=0.140946 rel=-0.1387
+trial 30 DISCARD val=0.140564 rel=-0.1356
+evaluating finalist baseline on test set
+evaluating baseline on test set

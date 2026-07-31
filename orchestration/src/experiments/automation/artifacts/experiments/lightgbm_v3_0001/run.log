@@ -1,0 +1,37 @@
+=== Campaign lightgbm_v3_0001 (model=lightgbm) ===
+smoke=True git=False max_trials=30 wall_clock=120m
+baseline params advisory: parameter 'max_depth' value 6 outside declared bounds (advisory); parameter 'subsample' value 1.0 outside declared bounds (advisory); parameter 'colsample_bytree' value 1.0 outside declared bounds (advisory)
+running campaign baseline
+baseline val_avg_rmse=0.123778
+trial 1 DISCARD val=0.138385 rel=-0.1180
+trial 2 DISCARD val=0.139466 rel=-0.1267
+trial 3 DISCARD val=0.137370 rel=-0.1098
+trial 4 DISCARD val=0.138612 rel=-0.1198
+trial 5 DISCARD val=0.140537 rel=-0.1354
+trial 6 DISCARD val=0.138443 rel=-0.1185
+trial 7 DISCARD val=0.140271 rel=-0.1332
+trial 8 DISCARD val=0.139163 rel=-0.1243
+trial 9 DISCARD val=0.139088 rel=-0.1237
+trial 10 DISCARD val=0.137637 rel=-0.1120
+trial 11 DISCARD val=0.138552 rel=-0.1194
+trial 12 DISCARD val=0.138330 rel=-0.1176
+trial 13 DISCARD val=0.139187 rel=-0.1245
+trial 14 DISCARD val=0.138259 rel=-0.1170
+trial 15 DISCARD val=0.139623 rel=-0.1280
+trial 16 DISCARD val=0.137944 rel=-0.1144
+trial 17 DISCARD val=0.138374 rel=-0.1179
+trial 18 DISCARD val=0.138910 rel=-0.1223
+trial 19 DISCARD val=0.137973 rel=-0.1147
+trial 20 DISCARD val=0.138671 rel=-0.1203
+trial 21 DISCARD val=0.138613 rel=-0.1199
+trial 22 DISCARD val=0.138474 rel=-0.1187
+trial 23 DISCARD val=0.139856 rel=-0.1299
+trial 24 DISCARD val=0.137996 rel=-0.1149
+trial 25 DISCARD val=0.138988 rel=-0.1229
+trial 26 DISCARD val=0.140797 rel=-0.1375
+trial 27 DISCARD val=0.138359 rel=-0.1178
+trial 28 DISCARD val=0.139076 rel=-0.1236
+trial 29 DISCARD val=0.139029 rel=-0.1232
+trial 30 DISCARD val=0.140007 rel=-0.1311
+evaluating finalist baseline on test set
+evaluating baseline on test set

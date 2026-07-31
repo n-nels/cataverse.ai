@@ -1,0 +1,29 @@
+{
+  "baseline_val_rmse": 0.12377768070516328,
+  "best_val_rmse": 0.12377768070516328,
+  "baseline_test_rmse": 0.05742573539228399,
+  "best_test_rmse": 0.05742573539228399,
+  "finalists": [
+    {
+      "trial": "baseline",
+      "params": {
+        "n_estimators": 1000,
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "num_leaves": 31,
+        "min_child_samples": 20,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "early_stopping_rounds": 50,
+        "random_state": 42,
+        "boosting_type": "gbdt",
+        "strategy": "shared"
+      },
+      "test_avg_rmse": 0.05742573539228399,
+      "test_avg_r2": 0.18615757844037253,
+      "validation_avg_rmse": 0.12377768070516328
+    }
+  ]
+}

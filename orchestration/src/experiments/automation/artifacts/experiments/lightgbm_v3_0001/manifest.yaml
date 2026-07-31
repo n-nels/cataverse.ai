@@ -1,0 +1,79 @@
+experiment_id: lightgbm_v3_0001
+description: "Turn 3 \u2014 extreme regularization. Test hypothesis that baseline\
+  \ overfits: very low tree complexity + strong sampling + moderate L1/L2. Strategy=shared,\
+  \ boosting=gbdt fixed."
+model_name: lightgbm
+baseline_experiment: lgbm_baseline
+split_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+- name: n_estimators
+  type: numeric
+  range:
+  - 500
+  - 5000
+- name: learning_rate
+  type: numeric
+  range:
+  - 0.01
+  - 0.08
+- name: max_depth
+  type: numeric
+  range:
+  - 2
+  - 5
+- name: num_leaves
+  type: numeric
+  range:
+  - 7
+  - 31
+- name: min_child_samples
+  type: numeric
+  range:
+  - 20
+  - 120
+- name: subsample
+  type: numeric
+  range:
+  - 0.7
+  - 0.95
+- name: colsample_bytree
+  type: numeric
+  range:
+  - 0.7
+  - 0.95
+- name: reg_alpha
+  type: numeric
+  range:
+  - 0.0
+  - 5.0
+- name: reg_lambda
+  type: numeric
+  range:
+  - 0.0
+  - 5.0
+- name: early_stopping_rounds
+  type: numeric
+  range:
+  - 30
+  - 150
+- name: random_state
+  type: numeric
+  range:
+  - 1
+  - 500
+- name: strategy
+  type: categorical
+  choices:
+  - shared
+- name: boosting_type
+  type: categorical
+  choices:
+  - gbdt
+maximum_trial_count: 30
+maximum_wall_clock_minutes: 120
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 10
+artifact_output_location: artifacts/experiments

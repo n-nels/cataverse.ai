@@ -1,0 +1,79 @@
+experiment_id: lightgbm_v2_0001
+description: "Turn 2 \u2014 narrow around baseline. Fix strategy=shared, boosting=gbdt.\
+  \ Explore lower complexity + stronger regularization + sampling to combat overfitting\
+  \ on small dataset (155 train)."
+model_name: lightgbm
+baseline_experiment: lgbm_baseline
+split_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+- name: n_estimators
+  type: numeric
+  range:
+  - 500
+  - 3000
+- name: learning_rate
+  type: numeric
+  range:
+  - 0.01
+  - 0.15
+- name: max_depth
+  type: numeric
+  range:
+  - 3
+  - 8
+- name: num_leaves
+  type: numeric
+  range:
+  - 15
+  - 63
+- name: min_child_samples
+  type: numeric
+  range:
+  - 10
+  - 80
+- name: subsample
+  type: numeric
+  range:
+  - 0.6
+  - 1.0
+- name: colsample_bytree
+  type: numeric
+  range:
+  - 0.6
+  - 1.0
+- name: reg_alpha
+  type: numeric
+  range:
+  - 0.0
+  - 3.0
+- name: reg_lambda
+  type: numeric
+  range:
+  - 0.0
+  - 3.0
+- name: early_stopping_rounds
+  type: numeric
+  range:
+  - 20
+  - 100
+- name: random_state
+  type: numeric
+  range:
+  - 1
+  - 500
+- name: strategy
+  type: categorical
+  choices:
+  - shared
+- name: boosting_type
+  type: categorical
+  choices:
+  - gbdt
+maximum_trial_count: 30
+maximum_wall_clock_minutes: 120
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 10
+artifact_output_location: artifacts/experiments
