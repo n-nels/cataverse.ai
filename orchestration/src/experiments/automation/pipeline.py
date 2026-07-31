@@ -62,7 +62,7 @@ def train_model(
     splits: DatasetSplit,
     model_name: str,
     config: ModelConfig | None = None,
-    strategy: str = "shared",
+    strategy: str | None = None,
 ) -> TrainedModel:
     """Train a registered model on the given splits."""
     if model_name not in MODEL_REGISTRY:
@@ -70,11 +70,14 @@ def train_model(
             f"Unknown model {model_name!r}. Registered: {sorted(MODEL_REGISTRY)}"
         )
     trainer = MODEL_REGISTRY[model_name]
+    kwargs: dict = {}
+    if strategy is not None:
+        kwargs["strategy"] = strategy
     return trainer(
         splits.X_train, splits.y_train,
         splits.X_val, splits.y_val,
         config,
-        strategy=strategy,
+        **kwargs,
     )
 
 

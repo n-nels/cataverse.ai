@@ -7,6 +7,7 @@ shared evaluation/visualization helpers, and a registry for model discovery.
 Current models:
 - ``lightgbm`` — :mod:`models.lightgbm`
 - ``random_forest`` — :mod:`models.random_forest`
+- ``xgboost`` — :mod:`models.xgboost`
 """
 
 import logging
@@ -58,7 +59,8 @@ class ModelConfig(NamedTuple):
     """Training configuration.
 
     Fields shared across models; unused fields are silently ignored
-    by models that don't need them.
+    by models that don't need them. Per-model defaults live in
+    :data:`DEFAULT_CONFIGS`; use :func:`get_default_config` to look them up.
     """
 
     n_estimators: int = 1000
@@ -74,6 +76,28 @@ class ModelConfig(NamedTuple):
     min_samples_split: int = 2
     random_state: int = 42
     boosting_type: str = "gbdt"
+    min_child_weight: float = 1
+    gamma: float = 0.0
+
+
+# Per-model default configs. Each model module registers its preferred
+# defaults here at import time (models/__init__.py imports all models, so
+# registration is automatic). The harness uses these to build the campaign
+# baseline and to fill in unsampled fields during a trial.
+DEFAULT_CONFIGS: dict[str, ModelConfig] = {}
+
+
+def register_default_config(name: str, config: ModelConfig) -> None:
+    """Register a model's default config."""
+    DEFAULT_CONFIGS[name] = config
+
+
+def get_default_config(model_name: str) -> ModelConfig:
+    """Return the registered default config for ``model_name``.
+
+    Falls back to ``ModelConfig()`` if no default was registered.
+    """
+    return DEFAULT_CONFIGS.get(model_name, ModelConfig())
 
 
 class TrainedModel(NamedTuple):

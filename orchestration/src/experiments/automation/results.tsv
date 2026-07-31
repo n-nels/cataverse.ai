@@ -187,3 +187,4 @@ commit	experiment_id	model	validation_avg_rmse	validation_avg_r2	test_avg_rmse	t
 	rf_v3_0001	random_forest	0.124312	0.027840			0.05	discard	trial 28: rel_improvement=-0.0294 < threshold
 	rf_v3_0001	random_forest	0.125257	0.038296			0.06	discard	trial 29: rel_improvement=-0.0372 < threshold
 	rf_v3_0001	random_forest	0.123596	0.044846			0.06	discard	trial 30: rel_improvement=-0.0235 < threshold
+	

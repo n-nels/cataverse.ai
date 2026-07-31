@@ -27,10 +27,22 @@ from model import (
     fit_boxcox_lambdas,
     apply_target_transforms,
     inverse_target_transforms,
+    register_default_config,
     register_model,
 )
 
 logger = logging.getLogger(__name__)
+
+# Random Forest default config: tuned via autoresearch campaigns rf_v1-v3.
+RF_DEFAULT = ModelConfig(
+    n_estimators=1809,
+    max_depth=23,
+    min_child_samples=1,
+    subsample=0.922465,
+    colsample_bytree=0.348978,
+    random_state=72,
+)
+register_default_config("random_forest", RF_DEFAULT)
 
 
 def _train_shared(
@@ -111,14 +123,7 @@ def train_random_forest(
         Container with trained model, config, and per-target metrics.
     """
     if config is None:
-        config = ModelConfig()._replace(
-            n_estimators=1809,
-            max_depth=23,
-            min_child_samples=1,
-            subsample=0.922465,
-            colsample_bytree=0.348978,
-            random_state=72,
-        )
+        config = RF_DEFAULT
 
     target_names = list(y_train.columns)
 

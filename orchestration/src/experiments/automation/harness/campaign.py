@@ -32,11 +32,12 @@ from harness.manifest import CANONICAL_SEED, Manifest, load_manifest
 
 logger = logging.getLogger(__name__)
 
-# Campaign baseline = ModelConfig defaults + strategy="shared" (spec "Baseline Definition").
-def baseline_params() -> dict:
-    from model import ModelConfig
+# Campaign baseline = the model's registered default config + strategy="shared"
+# (spec "Baseline Definition"). Per-model defaults live in model.DEFAULT_CONFIGS.
+def baseline_params(model_name: str) -> dict:
+    from model import get_default_config
     return {
-        **ModelConfig()._asdict(),
+        **get_default_config(model_name)._asdict(),
         "strategy": "shared",
     }
 
@@ -62,7 +63,7 @@ def _capture_environment() -> dict:
         "python": sys.version,
         "platform": platform.platform(),
     }
-    for pkg in ("lightgbm", "sklearn", "pandas", "numpy", "scipy", "joblib"):
+    for pkg in ("lightgbm", "xgboost", "sklearn", "pandas", "numpy", "scipy", "joblib"):
         try:
             mod = __import__(pkg)
             env[pkg] = getattr(mod, "__version__", "unknown")
@@ -177,7 +178,7 @@ def run_campaign(
     log(f"smoke={smoke} git={git} max_trials={max_trials} wall_clock={wall_clock}m")
 
     # --- campaign baseline --------------------------------------------------
-    bparams = baseline_params()
+    bparams = baseline_params(manifest.model_name)
     _, warn = manifest.is_approved_params(bparams)
     if warn:
         log(f"baseline params advisory: {warn}")
@@ -449,7 +450,7 @@ def _finalize(
         "relative_improvement": rel,
         "threshold": manifest.minimum_improvement_threshold,
         "retained": rel is not None and rel >= manifest.minimum_improvement_threshold
-                     and best_params != baseline_params(),
+                     and best_params != baseline_params(manifest.model_name),
     }
     artifacts.write_comparison(exp_dir, comparison)
 
@@ -474,7 +475,7 @@ def _finalize(
         changed_source_files=[],
         protected_files_unchanged=[
             "load.py", "extract.py", "transform.py", "model.py",
-            "models/lightgbm.py", "models/random_forest.py",
+            "models/lightgbm.py", "models/random_forest.py", "models/xgboost.py",
         ],
     )
     report.write_report(exp_dir, report_text)

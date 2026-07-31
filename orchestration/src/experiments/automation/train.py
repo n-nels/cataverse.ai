@@ -40,14 +40,14 @@ if __name__ == "__main__":
         "--strategy",
         default=None,
         choices=["shared", "separate"],
-        help="Training strategy (default: model-specific; separate for random_forest, shared for lightgbm)",
+        help="Training strategy (default: model-specific; separate for random_forest, shared for lightgbm/xgboost)",
     )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     print("=== Building dataset ===")
-    dataset = build_dataset(force_refresh=True)
+    dataset = build_dataset(force_refresh=False)
 
     print("\n=== Saving dataset ===")
     save_dir = save_dataset(dataset)

@@ -131,7 +131,8 @@ def test_sample_params_respects_bounds(tmp_path):
 def test_build_model_config_filters_unknown_fields():
     cfg = build_model_config({"n_estimators": 50, "learning_rate": 0.1,
                               "max_depth": 3, "early_stopping_rounds": 5,
-                              "strategy": "shared", "bogus": 999})
+                              "strategy": "shared", "bogus": 999},
+                             model_name="lightgbm")
     assert cfg.n_estimators == 50
     assert not hasattr(cfg, "strategy")
     assert not hasattr(cfg, "bogus")

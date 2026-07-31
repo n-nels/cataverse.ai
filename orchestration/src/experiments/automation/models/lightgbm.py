@@ -29,11 +29,17 @@ from model import (
     fit_boxcox_lambdas,
     apply_target_transforms,
     inverse_target_transforms,
+    register_default_config,
     register_model,
 )
 from sklearn.metrics import root_mean_squared_error, r2_score
 
 logger = logging.getLogger(__name__)
+
+# LightGBM default config: conservative baseline (low lr, shallow trees,
+# no regularization, full sampling). This is the campaign baseline anchor.
+LIGHTGBM_DEFAULT = ModelConfig()
+register_default_config("lightgbm", LIGHTGBM_DEFAULT)
 
 
 def _sanitize_feature_names(columns: list[str]) -> list[str]:
@@ -214,7 +220,7 @@ def train_all_targets(
         Container with trained model, config, and per-target metrics.
     """
     if config is None:
-        config = ModelConfig()
+        config = LIGHTGBM_DEFAULT
 
     target_names = list(y_train.columns)
 

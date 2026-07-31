@@ -22,6 +22,7 @@ legacy/
 .cursorignore
 .idea/
 
-# folders
+# files & folders
 src/experiments/automation/outputs/
 # src/experiments/automation/notebooks/
+src/experiments/automation/models/*.joblib

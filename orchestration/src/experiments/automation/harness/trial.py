@@ -55,24 +55,17 @@ def sample_params(manifest, rng: random.Random) -> dict:
     return params
 
 
-def build_model_config(params: dict) -> ModelConfig:
+def build_model_config(params: dict, model_name: str) -> ModelConfig:
     """Build a ModelConfig from a params dict, keeping only known fields.
 
-    Option A: the harness only sets current ModelConfig fields. Hyperparameters
-    that are not ModelConfig fields are ignored here; when the loop-agent later
-    wants new knobs it extends ModelConfig + the model implementation (non-ETL)
-    and declares them in the manifest.
+    Unsampled fields fall back to the model's registered default config
+    (see ``model.get_default_config``), so each model's baseline is respected.
     """
-    ModelConfig = _ModelConfig()
-    fields = set(ModelConfig._fields)
+    from model import get_default_config
+    base = get_default_config(model_name)
+    fields = set(base._fields)
     kwargs = {k: v for k, v in params.items() if k in fields}
-    return ModelConfig(**kwargs)
-
-
-def _ModelConfig():
-    # Lazy import so this module is importable without the ML env.
-    from model import ModelConfig
-    return ModelConfig
+    return base._replace(**kwargs)
 
 
 def get_strategy(params: dict) -> str:
@@ -96,7 +89,7 @@ def train_trial_inprocess(
 
     X, y = pipeline.prepare_dataset(data_dir)
     splits = pipeline.prepare_splits(X, y)
-    config = build_model_config(params)
+    config = build_model_config(params, model_name)
     strategy = get_strategy(params)
     trained = pipeline.train_model(splits, model_name, config, strategy)
     val_rmse = pipeline.validation_avg_rmse(trained)
@@ -122,7 +115,7 @@ def eval_finalist_inprocess(
 
     X, y = pipeline.prepare_dataset(data_dir)
     splits = pipeline.prepare_splits(X, y)
-    config = build_model_config(params)
+    config = build_model_config(params, model_name)
     strategy = get_strategy(params)
     trained = pipeline.train_model(splits, model_name, config, strategy)
     tm = pipeline.test_metrics(trained, splits)
