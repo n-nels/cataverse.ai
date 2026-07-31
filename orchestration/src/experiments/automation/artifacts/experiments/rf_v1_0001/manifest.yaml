@@ -1,0 +1,50 @@
+experiment_id: rf_v1_0001
+description: "Turn 1 \u2014 broad random search over 7 RF hyperparameters. Goal: discover\
+  \ which knobs matter and whether shared/separate strategies differ."
+model_name: random_forest
+baseline_experiment: rf_baseline
+split_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+- name: n_estimators
+  type: numeric
+  range:
+  - 100
+  - 2000
+- name: max_depth
+  type: numeric
+  range:
+  - 3
+  - 30
+- name: min_child_samples
+  type: numeric
+  range:
+  - 1
+  - 100
+- name: subsample
+  type: numeric
+  range:
+  - 0.5
+  - 1.0
+- name: colsample_bytree
+  type: numeric
+  range:
+  - 0.3
+  - 1.0
+- name: random_state
+  type: numeric
+  range:
+  - 1
+  - 500
+- name: strategy
+  type: categorical
+  choices:
+  - shared
+  - separate
+maximum_trial_count: 30
+maximum_wall_clock_minutes: 120
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 10
+artifact_output_location: artifacts/experiments

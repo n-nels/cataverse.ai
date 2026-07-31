@@ -1,0 +1,8 @@
+n_estimators: 1664
+max_depth: 16
+min_child_samples: 1
+min_samples_split: 4
+subsample: 0.843728
+colsample_bytree: 0.351071
+random_state: 14
+strategy: separate

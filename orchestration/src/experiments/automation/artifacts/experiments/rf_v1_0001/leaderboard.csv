@@ -1,0 +1,5 @@
+rank,trial,validation_avg_rmse,validation_avg_r2,params
+1,trial_20,0.121602,0.105580,"{""colsample_bytree"": 0.380186, ""max_depth"": 30, ""min_child_samples"": 2, ""n_estimators"": 1233, ""random_state"": 454, ""strategy"": ""separate"", ""subsample"": 0.840142}"
+2,trial_18,0.124213,0.050850,"{""colsample_bytree"": 0.406989, ""max_depth"": 27, ""min_child_samples"": 7, ""n_estimators"": 286, ""random_state"": 82, ""strategy"": ""separate"", ""subsample"": 0.930551}"
+3,trial_01,0.128150,0.005664,"{""colsample_bytree"": 0.471424, ""max_depth"": 6, ""min_child_samples"": 4, ""n_estimators"": 1409, ""random_state"": 72, ""strategy"": ""shared"", ""subsample"": 0.870775}"
+4,baseline,0.137005,-0.064250,"{""boosting_type"": ""gbdt"", ""colsample_bytree"": 1.0, ""early_stopping_rounds"": 50, ""learning_rate"": 0.05, ""max_depth"": 6, ""min_child_samples"": 20, ""n_estimators"": 1000, ""num_leaves"": 31, ""random_state"": 42, ""reg_alpha"": 0.0, ""reg_lambda"": 0.0, ""strategy"": ""shared"", ""subsample"": 1.0}"

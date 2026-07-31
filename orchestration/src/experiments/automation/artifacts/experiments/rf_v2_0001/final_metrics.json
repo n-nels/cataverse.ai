@@ -1,0 +1,44 @@
+{
+  "baseline_val_rmse": 0.1370046199250025,
+  "best_val_rmse": 0.1193241558568226,
+  "baseline_test_rmse": 0.10265137609380069,
+  "best_test_rmse": 0.05274863152197302,
+  "finalists": [
+    {
+      "trial": "trial_01",
+      "params": {
+        "n_estimators": 1809,
+        "max_depth": 23,
+        "min_child_samples": 1,
+        "subsample": 0.922465,
+        "colsample_bytree": 0.348978,
+        "random_state": 72,
+        "strategy": "separate"
+      },
+      "test_avg_rmse": 0.05274863152197302,
+      "test_avg_r2": 0.2436900549061496,
+      "validation_avg_rmse": 0.1193241558568226
+    },
+    {
+      "trial": "baseline",
+      "params": {
+        "n_estimators": 1000,
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "num_leaves": 31,
+        "min_child_samples": 20,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "early_stopping_rounds": 50,
+        "random_state": 42,
+        "boosting_type": "gbdt",
+        "strategy": "shared"
+      },
+      "test_avg_rmse": 0.10265137609380069,
+      "test_avg_r2": 0.012170979920053338,
+      "validation_avg_rmse": 0.1370046199250025
+    }
+  ]
+}

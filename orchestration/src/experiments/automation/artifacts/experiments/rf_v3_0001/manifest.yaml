@@ -1,0 +1,54 @@
+experiment_id: rf_v3_0001
+description: "Turn 3 \u2014 add min_samples_split to break plateau. Narrow around\
+  \ winners: low colsample (~0.35), low min_leaf (1-2), deep trees, separate strategy."
+model_name: random_forest
+baseline_experiment: rf_baseline
+split_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+- name: n_estimators
+  type: numeric
+  range:
+  - 800
+  - 2000
+- name: max_depth
+  type: numeric
+  range:
+  - 15
+  - 40
+- name: min_child_samples
+  type: numeric
+  range:
+  - 1
+  - 10
+- name: min_samples_split
+  type: numeric
+  range:
+  - 2
+  - 20
+- name: subsample
+  type: numeric
+  range:
+  - 0.8
+  - 1.0
+- name: colsample_bytree
+  type: numeric
+  range:
+  - 0.25
+  - 0.45
+- name: random_state
+  type: numeric
+  range:
+  - 1
+  - 500
+- name: strategy
+  type: categorical
+  choices:
+  - separate
+maximum_trial_count: 30
+maximum_wall_clock_minutes: 120
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 10
+artifact_output_location: artifacts/experiments

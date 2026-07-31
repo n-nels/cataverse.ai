@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 from load import build_dataset, save_dataset
-from model import MODEL_REGISTRY, ModelConfig, save_model
+from model import MODEL_REGISTRY, save_model
 from pipeline import (
     prepare_splits,
     train_model,
@@ -38,16 +38,16 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--strategy",
-        default="shared",
+        default=None,
         choices=["shared", "separate"],
-        help="Training strategy for LightGBM (default: shared, ignored by other models)",
+        help="Training strategy (default: model-specific; separate for random_forest, shared for lightgbm)",
     )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     print("=== Building dataset ===")
-    dataset = build_dataset(force_refresh=False)
+    dataset = build_dataset(force_refresh=True)
 
     print("\n=== Saving dataset ===")
     save_dir = save_dataset(dataset)
@@ -56,8 +56,10 @@ if __name__ == "__main__":
     splits = prepare_splits(dataset.X, dataset.y)
 
     print(f"\n=== Training model: {args.model} ===")
-    config = ModelConfig()
-    trained_model = train_model(splits, args.model, config, strategy=args.strategy)
+    kwargs = {}
+    if args.strategy is not None:
+        kwargs["strategy"] = args.strategy
+    trained_model = train_model(splits, args.model, None, **kwargs)
 
     print("\n=== Evaluating on test set ===")
     test_m = test_metrics(trained_model, splits)

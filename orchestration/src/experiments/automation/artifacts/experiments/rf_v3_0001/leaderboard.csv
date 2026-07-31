@@ -1,0 +1,4 @@
+rank,trial,validation_avg_rmse,validation_avg_r2,params
+1,trial_02,0.120759,0.114068,"{""colsample_bytree"": 0.351071, ""max_depth"": 16, ""min_child_samples"": 1, ""min_samples_split"": 4, ""n_estimators"": 1664, ""random_state"": 14, ""strategy"": ""separate"", ""subsample"": 0.843728}"
+2,trial_01,0.123675,0.065685,"{""colsample_bytree"": 0.397294, ""max_depth"": 15, ""min_child_samples"": 5, ""min_samples_split"": 9, ""n_estimators"": 1028, ""random_state"": 347, ""strategy"": ""separate"", ""subsample"": 0.844642}"
+3,baseline,0.137005,-0.064250,"{""boosting_type"": ""gbdt"", ""colsample_bytree"": 1.0, ""early_stopping_rounds"": 50, ""learning_rate"": 0.05, ""max_depth"": 6, ""min_child_samples"": 20, ""min_samples_split"": 2, ""n_estimators"": 1000, ""num_leaves"": 31, ""random_state"": 42, ""reg_alpha"": 0.0, ""reg_lambda"": 0.0, ""strategy"": ""shared"", ""subsample"": 1.0}"

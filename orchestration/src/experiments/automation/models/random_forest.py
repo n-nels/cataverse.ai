@@ -3,12 +3,12 @@ Random Forest model for PFO-Sec parameter prediction.
 
 Supports two strategies:
 
-- **shared** (default): a single ``RandomForestRegressor`` trained on 2D
+- **separate** (default): one ``RandomForestRegressor`` per target via
+  ``MultiOutputRegressor``. Each target gets its own set of trees.
+
+- **shared**: a single ``RandomForestRegressor`` trained on 2D
   ``y``. Trees are shared across all targets via scikit-learn's native
   multi-output support.
-
-- **separate**: one ``RandomForestRegressor`` per target via
-  ``MultiOutputRegressor``. Each target gets its own set of trees.
 
 Same Box-Cox target transforms as LightGBM for fair comparison.
 """
@@ -42,6 +42,10 @@ def _train_shared(
     model = RandomForestRegressor(
         n_estimators=config.n_estimators,
         max_depth=config.max_depth,
+        min_samples_split=config.min_samples_split,
+        min_samples_leaf=config.min_child_samples,
+        max_features=config.colsample_bytree,
+        max_samples=config.subsample if config.subsample < 1.0 else None,
         random_state=config.random_state,
         verbose=0,
         n_jobs=-1,
@@ -59,6 +63,10 @@ def _train_separate(
     base = RandomForestRegressor(
         n_estimators=config.n_estimators,
         max_depth=config.max_depth,
+        min_samples_split=config.min_samples_split,
+        min_samples_leaf=config.min_child_samples,
+        max_features=config.colsample_bytree,
+        max_samples=config.subsample if config.subsample < 1.0 else None,
         random_state=config.random_state,
         verbose=0,
         n_jobs=-1,
@@ -75,7 +83,7 @@ def train_random_forest(
     X_val: pd.DataFrame,
     y_val: pd.DataFrame,
     config: ModelConfig | None = None,
-    strategy: str = "shared",
+    strategy: str = "separate",
 ) -> TrainedModel:
     """
     Train a multi-output Random Forest model for all targets.
@@ -95,7 +103,7 @@ def train_random_forest(
     config : ModelConfig | None
         Training configuration. Uses defaults if None.
     strategy : str
-        ``"shared"`` (default) or ``"separate"``.
+        ``"separate"`` (default) or ``"shared"``.
 
     Returns
     -------
@@ -103,7 +111,14 @@ def train_random_forest(
         Container with trained model, config, and per-target metrics.
     """
     if config is None:
-        config = ModelConfig()
+        config = ModelConfig()._replace(
+            n_estimators=1809,
+            max_depth=23,
+            min_child_samples=1,
+            subsample=0.922465,
+            colsample_bytree=0.348978,
+            random_state=72,
+        )
 
     target_names = list(y_train.columns)
 

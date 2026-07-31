@@ -71,6 +71,7 @@ class ModelConfig(NamedTuple):
     reg_alpha: float = 0.0
     reg_lambda: float = 0.0
     early_stopping_rounds: int = 50
+    min_samples_split: int = 2
     random_state: int = 42
     boosting_type: str = "gbdt"
 

@@ -1,0 +1,39 @@
+=== Campaign rf_v1_0001 (model=random_forest) ===
+smoke=True git=False max_trials=30 wall_clock=120m
+baseline params advisory: parameter 'learning_rate' not declared in manifest (advisory); parameter 'num_leaves' not declared in manifest (advisory); parameter 'reg_alpha' not declared in manifest (advisory); parameter 'reg_lambda' not declared in manifest (advisory); parameter 'early_stopping_rounds' not declared in manifest (advisory); parameter 'boosting_type' not declared in manifest (advisory)
+running campaign baseline
+baseline val_avg_rmse=0.137005
+trial 1 KEEP val=0.128150 rel=0.0646
+trial 2 DISCARD val=0.146888 rel=-0.1462
+trial 3 DISCARD val=0.146881 rel=-0.1462
+trial 4 DISCARD val=0.147117 rel=-0.1480
+trial 5 DISCARD val=0.146966 rel=-0.1468
+trial 6 DISCARD val=0.146681 rel=-0.1446
+trial 7 DISCARD val=0.146946 rel=-0.1467
+trial 8 DISCARD val=0.128367 rel=-0.0017
+trial 9 DISCARD val=0.146953 rel=-0.1467
+trial 10 DISCARD val=0.131246 rel=-0.0242
+trial 11 DISCARD val=0.146864 rel=-0.1460
+trial 12 DISCARD val=0.129754 rel=-0.0125
+trial 13 DISCARD val=0.146790 rel=-0.1454
+trial 14 DISCARD val=0.128015 rel=0.0011
+trial 15 DISCARD val=0.146935 rel=-0.1466
+trial 16 DISCARD val=0.131108 rel=-0.0231
+trial 17 DISCARD val=0.146947 rel=-0.1467
+trial 18 KEEP val=0.124213 rel=0.0307
+trial 19 DISCARD val=0.146877 rel=-0.1825
+trial 20 KEEP val=0.121602 rel=0.0210
+trial 21 DISCARD val=0.147002 rel=-0.2089
+trial 22 DISCARD val=0.140695 rel=-0.1570
+trial 23 DISCARD val=0.139934 rel=-0.1507
+trial 24 DISCARD val=0.138234 rel=-0.1368
+trial 25 DISCARD val=0.146919 rel=-0.2082
+trial 26 DISCARD val=0.135630 rel=-0.1154
+trial 27 DISCARD val=0.147045 rel=-0.2092
+trial 28 DISCARD val=0.140011 rel=-0.1514
+trial 29 DISCARD val=0.147014 rel=-0.2090
+trial 30 DISCARD val=0.146905 rel=-0.2081
+evaluating finalist trial_20 on test set
+evaluating finalist trial_18 on test set
+evaluating finalist trial_01 on test set
+evaluating baseline on test set

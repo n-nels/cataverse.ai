@@ -1,0 +1,52 @@
+{
+  "x_shape": [
+    243,
+    31
+  ],
+  "y_shape": [
+    243,
+    6
+  ],
+  "x_columns": [
+    "is_new",
+    "is_reference",
+    "metal_loading",
+    "pre_3_gas_bit0",
+    "pre_3_gas_bit1",
+    "pre_3_gas_bit2",
+    "pre_3_gas_bit3",
+    "pre_3_temp",
+    "pre_3_duration",
+    "pre_5_gas_bit0",
+    "pre_5_gas_bit1",
+    "pre_5_gas_bit2",
+    "pre_5_gas_bit3",
+    "pre_5_temp",
+    "pre_5_duration",
+    "pre_7_gas_bit0",
+    "pre_7_gas_bit1",
+    "pre_7_gas_bit2",
+    "pre_7_gas_bit3",
+    "pre_7_temp",
+    "pre_7_duration",
+    "exp_pressure_calc",
+    "exp_temp",
+    "distance_from_isnew",
+    "prev_pfo-sec_q0_au",
+    "prev_pfo-sec_q_e_au",
+    "prev_pfo-sec_q_inf_au",
+    "prev_pfo-sec_k_a_s-1",
+    "prev_pfo-sec_k_s_s-1",
+    "prev_pfo-sec_k_p_s-1",
+    "max_time_s"
+  ],
+  "y_columns": [
+    "pfo-sec_q0_au",
+    "pfo-sec_q_e_au",
+    "pfo-sec_q_inf_au",
+    "pfo-sec_k_a_s-1",
+    "pfo-sec_k_s_s-1",
+    "pfo-sec_k_p_s-1"
+  ],
+  "hash": "ab2c62c60bc8947dbe127d5a79cc377b1e3a5de2bd7067b99ec9b7fbfe085ce09aaf3476196200b82e8a61c946b2e3ff6bc18fa74200c92b302d669d85c67afe"
+}

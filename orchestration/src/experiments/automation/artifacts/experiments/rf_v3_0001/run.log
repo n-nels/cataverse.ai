@@ -1,0 +1,39 @@
+=== Campaign rf_v3_0001 (model=random_forest) ===
+smoke=True git=False max_trials=30 wall_clock=120m
+baseline params advisory: parameter 'learning_rate' not declared in manifest (advisory); parameter 'max_depth' value 6 outside declared bounds (advisory); parameter 'num_leaves' not declared in manifest (advisory); parameter 'min_child_samples' value 20 outside declared bounds (advisory); parameter 'colsample_bytree' value 1.0 outside declared bounds (advisory); parameter 'reg_alpha' not declared in manifest (advisory); parameter 'reg_lambda' not declared in manifest (advisory); parameter 'early_stopping_rounds' not declared in manifest (advisory); parameter 'boosting_type' not declared in manifest (advisory); parameter 'strategy' value 'shared' outside declared bounds (advisory)
+running campaign baseline
+baseline val_avg_rmse=0.137005
+trial 1 KEEP val=0.123675 rel=0.0973
+trial 2 KEEP val=0.120759 rel=0.0236
+trial 3 DISCARD val=0.123405 rel=-0.0219
+trial 4 DISCARD val=0.124086 rel=-0.0275
+trial 5 DISCARD val=0.124615 rel=-0.0319
+trial 6 DISCARD val=0.124702 rel=-0.0327
+trial 7 DISCARD val=0.122273 rel=-0.0125
+trial 8 DISCARD val=0.123815 rel=-0.0253
+trial 9 DISCARD val=0.122717 rel=-0.0162
+trial 10 DISCARD val=0.123914 rel=-0.0261
+trial 11 DISCARD val=0.120606 rel=0.0013
+trial 12 DISCARD val=0.125113 rel=-0.0361
+trial 13 DISCARD val=0.123114 rel=-0.0195
+trial 14 DISCARD val=0.123383 rel=-0.0217
+trial 15 DISCARD val=0.122418 rel=-0.0137
+trial 16 DISCARD val=0.124815 rel=-0.0336
+trial 17 DISCARD val=0.124369 rel=-0.0299
+trial 18 DISCARD val=0.120873 rel=-0.0009
+trial 19 DISCARD val=0.125169 rel=-0.0365
+trial 20 DISCARD val=0.120429 rel=0.0027
+trial 21 DISCARD val=0.123003 rel=-0.0186
+trial 22 DISCARD val=0.123327 rel=-0.0213
+trial 23 DISCARD val=0.124840 rel=-0.0338
+trial 24 DISCARD val=0.123428 rel=-0.0221
+trial 25 DISCARD val=0.121160 rel=-0.0033
+trial 26 DISCARD val=0.121356 rel=-0.0049
+trial 27 DISCARD val=0.125452 rel=-0.0389
+trial 28 DISCARD val=0.124312 rel=-0.0294
+trial 29 DISCARD val=0.125257 rel=-0.0372
+trial 30 DISCARD val=0.123596 rel=-0.0235
+evaluating finalist trial_02 on test set
+evaluating finalist trial_01 on test set
+evaluating finalist baseline on test set
+evaluating baseline on test set
