@@ -106,7 +106,15 @@ def plot_feature_importance(
     out_dir = Path(output_dir) if output_dir else DEFAULT_OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    importance = get_feature_importances(trained_model)
+    try:
+        importance = get_feature_importances(trained_model)
+    except TypeError:
+        logger.warning(
+            "Skipping feature importance plot for model type %s; feature importances are not available.",
+            type(trained_model.model),
+        )
+        return []
+
     indices = np.argsort(importance)[::-1][:top_n]
 
     fig, ax = plt.subplots(figsize=(10, 6))
