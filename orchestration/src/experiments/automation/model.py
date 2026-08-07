@@ -7,6 +7,7 @@ shared evaluation/visualization helpers, and a registry for model discovery.
 Current models:
 - ``knn`` — :mod:`models.knn`
 - ``lightgbm`` — :mod:`models.lightgbm`
+- ``partial_bnn`` — :mod:`models.partial_bnn`
 - ``random_forest`` — :mod:`models.random_forest`
 - ``xgboost`` — :mod:`models.xgboost`
 """
@@ -79,6 +80,11 @@ class ModelConfig(NamedTuple):
     boosting_type: str = "gbdt"
     min_child_weight: float = 1
     gamma: float = 0.0
+    # PartialBNN-specific fields (ignored by tree/boosting models)
+    num_warmup: int = 1000
+    num_samples: int = 1000
+    num_chains: int = 1
+    hidden_dims: tuple = (16,)
     n_neighbors: int = 5
     weights: str = "uniform"
     algorithm: str = "auto"
@@ -87,7 +93,7 @@ class ModelConfig(NamedTuple):
     kernel: str = "rbf"
     C: float = 1.0
     epsilon: float = 0.1
-    gamma: str = "scale"
+    svr_gamma: str = "scale"
     degree: int = 3
     coef0: float = 0.0
 
@@ -356,6 +362,10 @@ def load_model(model_path: str | Path) -> TrainedModel:
         Loaded model container.
     """
     import models.lightgbm  # noqa: F401 — ensure model classes are importable for deserialization
+    try:
+        import models.partial_bnn  # noqa: F401 — PartialBNN wrapper classes
+    except ImportError:
+        pass  # neurobayes optional; non-partial_bnn models still load fine
     # Backward compat: old serialized models reference model._StackedModel
     if not hasattr(sys.modules[__name__], "_StackedModel"):
         setattr(sys.modules[__name__], "_StackedModel", models.lightgbm._StackedModel)

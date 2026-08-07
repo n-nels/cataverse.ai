@@ -1,0 +1,81 @@
+{
+  "baseline_val_rmse": 19255.705193310943,
+  "best_val_rmse": 0.11718052021471943,
+  "baseline_test_rmse": Infinity,
+  "best_test_rmse": 0.054473643448993435,
+  "finalists": [
+    {
+      "trial": "trial_06",
+      "params": {
+        "hidden_dims": [
+          8,
+          4
+        ],
+        "strategy": "separate",
+        "num_chains": 1,
+        "num_warmup": 416,
+        "num_samples": 374
+      },
+      "test_avg_rmse": 0.05642010740090258,
+      "test_avg_r2": 0.18434759881593885,
+      "validation_avg_rmse": 0.11718052021471943
+    },
+    {
+      "trial": "trial_01",
+      "params": {
+        "hidden_dims": [
+          16,
+          16
+        ],
+        "strategy": "separate",
+        "num_chains": 1,
+        "num_warmup": 340,
+        "num_samples": 325
+      },
+      "test_avg_rmse": 0.054473643448993435,
+      "test_avg_r2": 0.19780557377554278,
+      "validation_avg_rmse": 0.11781978259468416
+    },
+    {
+      "trial": "baseline",
+      "params": {
+        "n_estimators": 1000,
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "num_leaves": 31,
+        "min_child_samples": 20,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "early_stopping_rounds": 50,
+        "min_samples_split": 2,
+        "random_state": 42,
+        "boosting_type": "gbdt",
+        "min_child_weight": 1,
+        "gamma": 0.0,
+        "num_warmup": 1000,
+        "num_samples": 1000,
+        "num_chains": 1,
+        "hidden_dims": [
+          16
+        ],
+        "n_neighbors": 5,
+        "weights": "uniform",
+        "algorithm": "auto",
+        "leaf_size": 30,
+        "p": 2,
+        "kernel": "rbf",
+        "C": 1.0,
+        "epsilon": 0.1,
+        "svr_gamma": "scale",
+        "degree": 3,
+        "coef0": 0.0,
+        "strategy": "shared"
+      },
+      "test_avg_rmse": Infinity,
+      "test_avg_r2": -Infinity,
+      "validation_avg_rmse": 19255.705193310943
+    }
+  ]
+}

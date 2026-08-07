@@ -1,0 +1,35 @@
+experiment_id: partial_bnn_v1_0001
+description: "Turn 1 — explore PartialBNN architecture and strategy with fast MCMC settings. Focus on hidden_dims and shared vs separate."
+model_name: partial_bnn
+baseline_experiment: partial_bnn_baseline
+split_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+  - name: hidden_dims
+    type: categorical
+    choices:
+      - [8]
+      - [16]
+      - [32]
+      - [8, 8]
+      - [16, 8]
+      - [16, 16]
+  - name: num_chains
+    type: numeric
+    range: [1, 1]
+  - name: num_warmup
+    type: numeric
+    range: [200, 500]
+  - name: num_samples
+    type: numeric
+    range: [200, 500]
+  - name: strategy
+    type: categorical
+    choices: [shared, separate]
+maximum_trial_count: 8
+maximum_wall_clock_minutes: 300
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 45
+artifact_output_location: artifacts/experiments

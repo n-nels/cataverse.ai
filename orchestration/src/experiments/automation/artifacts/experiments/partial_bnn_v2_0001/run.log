@@ -1,0 +1,14 @@
+=== Campaign partial_bnn_v2_0001 (model=partial_bnn) ===
+smoke=True git=False max_trials=10 wall_clock=300m
+baseline params advisory: parameter 'n_estimators' not declared in manifest (advisory); parameter 'learning_rate' not declared in manifest (advisory); parameter 'max_depth' not declared in manifest (advisory); parameter 'num_leaves' not declared in manifest (advisory); parameter 'min_child_samples' not declared in manifest (advisory); parameter 'subsample' not declared in manifest (advisory); parameter 'colsample_bytree' not declared in manifest (advisory); parameter 'reg_alpha' not declared in manifest (advisory); parameter 'reg_lambda' not declared in manifest (advisory); parameter 'early_stopping_rounds' not declared in manifest (advisory); parameter 'min_samples_split' not declared in manifest (advisory); parameter 'random_state' not declared in manifest (advisory); parameter 'boosting_type' not declared in manifest (advisory); parameter 'min_child_weight' not declared in manifest (advisory); parameter 'gamma' not declared in manifest (advisory); parameter 'num_warmup' value 1000 outside declared bounds (advisory); parameter 'num_samples' value 1000 outside declared bounds (advisory); parameter 'hidden_dims' value (16,) outside declared bounds (advisory); parameter 'n_neighbors' not declared in manifest (advisory); parameter 'weights' not declared in manifest (advisory); parameter 'algorithm' not declared in manifest (advisory); parameter 'leaf_size' not declared in manifest (advisory); parameter 'p' not declared in manifest (advisory); parameter 'kernel' not declared in manifest (advisory); parameter 'C' not declared in manifest (advisory); parameter 'epsilon' not declared in manifest (advisory); parameter 'svr_gamma' not declared in manifest (advisory); parameter 'degree' not declared in manifest (advisory); parameter 'coef0' not declared in manifest (advisory); parameter 'strategy' value 'shared' outside declared bounds (advisory)
+running campaign baseline
+baseline val_avg_rmse=19255.705193
+trial 1 KEEP val=0.117820 rel=1.0000
+trial 3 DISCARD val=0.117640 rel=0.0015
+trial 5 DISCARD val=0.117600 rel=0.0019
+trial 6 KEEP val=0.117181 rel=0.0054
+trial 9 DISCARD val=0.118650 rel=-0.0125
+evaluating finalist trial_06 on test set
+evaluating finalist trial_01 on test set
+evaluating finalist baseline on test set
+evaluating baseline on test set

@@ -1,0 +1,36 @@
+experiment_id: partial_bnn_v2_0001
+description: "Turn 2 — fix strategy=separate (shared is unstable), focus on architecture search, keep MCMC budgets modest."
+model_name: partial_bnn
+baseline_experiment: partial_bnn_baseline
+split_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+  - name: hidden_dims
+    type: categorical
+    choices:
+      - [8]
+      - [16]
+      - [32]
+      - [8, 8]
+      - [16, 8]
+      - [16, 16]
+      - [8, 4]
+  - name: strategy
+    type: categorical
+    choices: [separate]
+  - name: num_chains
+    type: numeric
+    range: [1, 1]
+  - name: num_warmup
+    type: numeric
+    range: [200, 500]
+  - name: num_samples
+    type: numeric
+    range: [200, 500]
+maximum_trial_count: 10
+maximum_wall_clock_minutes: 300
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 45
+artifact_output_location: artifacts/experiments

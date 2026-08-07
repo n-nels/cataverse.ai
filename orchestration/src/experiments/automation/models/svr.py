@@ -44,7 +44,7 @@ def _make_svr(config: ModelConfig) -> SVR:
         kernel=config.kernel,
         C=config.C,
         epsilon=config.epsilon,
-        gamma=config.gamma,
+        gamma=config.svr_gamma,
         degree=config.degree,
         coef0=config.coef0,
     )
@@ -109,7 +109,7 @@ def train_svr(
     if hasattr(y_pred, "shape") and not np.isfinite(y_pred).all():
         raise ValueError(
             "SVR predictions contain NaN/Inf — config likely too extreme "
-            f"(kernel={config.kernel}, C={config.C}, gamma={config.gamma})"
+            f"(kernel={config.kernel}, C={config.C}, svr_gamma={config.svr_gamma})"
         )
     y_val_orig = y_val.values
 

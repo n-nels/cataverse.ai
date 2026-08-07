@@ -1,0 +1,12 @@
+trial,status,validation_avg_rmse,validation_avg_r2,runtime_minutes,params,reason
+1,success,19255.705193310943,-70925929546.90923,0.72,"{""C"": 1.0, ""algorithm"": ""auto"", ""boosting_type"": ""gbdt"", ""coef0"": 0.0, ""colsample_bytree"": 1.0, ""degree"": 3, ""early_stopping_rounds"": 50, ""epsilon"": 0.1, ""gamma"": 0.0, ""hidden_dims"": [16], ""kernel"": ""rbf"", ""leaf_size"": 30, ""learning_rate"": 0.05, ""max_depth"": 6, ""min_child_samples"": 20, ""min_child_weight"": 1, ""min_samples_split"": 2, ""n_estimators"": 1000, ""n_neighbors"": 5, ""num_chains"": 1, ""num_leaves"": 31, ""num_samples"": 1000, ""num_warmup"": 1000, ""p"": 2, ""random_state"": 42, ""reg_alpha"": 0.0, ""reg_lambda"": 0.0, ""strategy"": ""shared"", ""subsample"": 1.0, ""svr_gamma"": ""scale"", ""weights"": ""uniform""}",
+2,success,0.11781978259468416,0.17029645324991396,1.06,"{""hidden_dims"": [16, 16], ""num_chains"": 1, ""num_samples"": 325, ""num_warmup"": 340, ""strategy"": ""separate""}",
+3,crash,,,,"{""hidden_dims"": [16], ""num_chains"": 1, ""num_samples"": 244, ""num_warmup"": 479, ""strategy"": ""separate""}",trainer raised ValueError: Input contains NaN.
+4,success,0.11763989820905485,0.15925240406430938,0.73,"{""hidden_dims"": [16, 8], ""num_chains"": 1, ""num_samples"": 247, ""num_warmup"": 215, ""strategy"": ""separate""}",
+5,crash,,,,"{""hidden_dims"": [16], ""num_chains"": 1, ""num_samples"": 301, ""num_warmup"": 487, ""strategy"": ""separate""}",trainer raised ValueError: Input contains NaN.
+6,success,0.11759950730114997,0.1711889393202012,1.32,"{""hidden_dims"": [16, 16], ""num_chains"": 1, ""num_samples"": 342, ""num_warmup"": 429, ""strategy"": ""separate""}",
+7,success,0.11718052021471943,0.17541917516046399,1.16,"{""hidden_dims"": [8, 4], ""num_chains"": 1, ""num_samples"": 374, ""num_warmup"": 416, ""strategy"": ""separate""}",
+8,crash,,,,"{""hidden_dims"": [32], ""num_chains"": 1, ""num_samples"": 252, ""num_warmup"": 372, ""strategy"": ""separate""}",trainer raised ValueError: Input contains NaN.
+9,crash,,,,"{""hidden_dims"": [8], ""num_chains"": 1, ""num_samples"": 376, ""num_warmup"": 383, ""strategy"": ""separate""}",trainer raised ValueError: Input contains NaN.
+10,success,0.11864960355861447,0.1386818380191411,1.21,"{""hidden_dims"": [16, 8], ""num_chains"": 1, ""num_samples"": 474, ""num_warmup"": 435, ""strategy"": ""separate""}",
+11,crash,,,,"{""hidden_dims"": [8], ""num_chains"": 1, ""num_samples"": 350, ""num_warmup"": 482, ""strategy"": ""separate""}",trainer raised ValueError: Input contains NaN.

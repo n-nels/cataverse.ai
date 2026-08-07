@@ -386,3 +386,31 @@ commit	experiment_id	model	validation_avg_rmse	validation_avg_r2	test_avg_rmse	t
 	svr_v2_0001	svr	0.129503	-0.334562			0.00	discard	trial 28: rel_improvement=-0.1341 < threshold
 	svr_v2_0001	svr	0.129397	-0.348947			0.00	discard	trial 29: rel_improvement=-0.1331 < threshold
 	svr_v2_0001	svr	0.120650	-0.097294			0.00	discard	trial 30: rel_improvement=-0.0565 < threshold
+	partial_bnn_v1_0001	partial_bnn	19255.705193	-70925929546.909225			0.73	keep	campaign baseline
+	partial_bnn_v1_0001	partial_bnn	0.124526	-0.683079			0.42	keep	trial 1: rel_improvement=1.0000
+	partial_bnn_v1_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v1_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v1_0001	partial_bnn	0.118523	0.163901			2.20	keep	trial 4: rel_improvement=0.0482
+	partial_bnn_v1_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v1_0001	partial_bnn	0.115539	0.202304			6.51	keep	trial 6: rel_improvement=0.0252
+	partial_bnn_v1_0001	partial_bnn	64524908815.648285	-796425265839707579744256.000000			0.51	discard	trial 7: rel_improvement=-558469915597.0455 < threshold
+	partial_bnn_v1_0001	partial_bnn	19255.705193	-70925929546.909225			0.70	keep	campaign baseline
+	partial_bnn_v1_0001	partial_bnn	0.230907	-3.416315			0.17	keep	trial 1: rel_improvement=1.0000
+	partial_bnn_v1_0001	partial_bnn	55345097008611483648.000000	-585933779625350624423455374940185670189056.000000			0.17	discard	trial 2: rel_improvement=-239685733080697896960.0000 < threshold
+	partial_bnn_v1_0001	partial_bnn	15.689957	-46523.626830			0.18	discard	trial 3: rel_improvement=-66.9493 < threshold
+	partial_bnn_v1_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v1_0001	partial_bnn	0.119111	0.168228			1.31	keep	trial 5: rel_improvement=0.4842
+	partial_bnn_v1_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v1_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v1_0001	partial_bnn	0.117708	0.200972			0.77	keep	trial 8: rel_improvement=0.0118
+	partial_bnn_v2_0001	partial_bnn	19255.705193	-70925929546.909225			0.72	keep	campaign baseline
+	partial_bnn_v2_0001	partial_bnn	0.117820	0.170296			1.06	keep	trial 1: rel_improvement=1.0000
+	partial_bnn_v2_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v2_0001	partial_bnn	0.117640	0.159252			0.73	discard	trial 3: rel_improvement=0.0015 < threshold
+	partial_bnn_v2_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v2_0001	partial_bnn	0.117600	0.171189			1.32	discard	trial 5: rel_improvement=0.0019 < threshold
+	partial_bnn_v2_0001	partial_bnn	0.117181	0.175419			1.16	keep	trial 6: rel_improvement=0.0054
+	partial_bnn_v2_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v2_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.
+	partial_bnn_v2_0001	partial_bnn	0.118650	0.138682			1.21	discard	trial 9: rel_improvement=-0.0125 < threshold
+	partial_bnn_v2_0001	partial_bnn						crash	trainer raised ValueError: Input contains NaN.

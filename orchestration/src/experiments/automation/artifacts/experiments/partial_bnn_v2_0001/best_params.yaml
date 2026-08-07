@@ -1,0 +1,7 @@
+hidden_dims:
+- 8
+- 4
+strategy: separate
+num_chains: 1
+num_warmup: 416
+num_samples: 374
