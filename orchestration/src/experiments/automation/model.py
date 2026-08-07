@@ -5,11 +5,9 @@ Defines the model interface that all model implementations satisfy,
 shared evaluation/visualization helpers, and a registry for model discovery.
 
 Current models:
-- ``knn`` — :mod:`models.knn`
 - ``lightgbm`` — :mod:`models.lightgbm`
 - ``partial_bnn`` — :mod:`models.partial_bnn`
 - ``random_forest`` — :mod:`models.random_forest`
-- ``xgboost`` — :mod:`models.xgboost`
 """
 
 import logging

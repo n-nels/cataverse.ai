@@ -75,7 +75,7 @@ def _capture_environment() -> dict:
         "python": sys.version,
         "platform": platform.platform(),
     }
-    for pkg in ("lightgbm", "xgboost", "sklearn", "pandas", "numpy", "scipy", "joblib"):
+    for pkg in ("lightgbm", "sklearn", "pandas", "numpy", "scipy", "joblib", "neurobayes"):
         try:
             mod = __import__(pkg)
             env[pkg] = getattr(mod, "__version__", "unknown")
@@ -494,7 +494,7 @@ def _finalize(
         changed_source_files=[],
         protected_files_unchanged=[
             "load.py", "extract.py", "transform.py", "model.py",
-            "models/lightgbm.py", "models/random_forest.py", "models/xgboost.py",
+            "models/lightgbm.py", "models/random_forest.py", "models/partial_bnn.py",
         ],
     )
     report.write_report(exp_dir, report_text)
