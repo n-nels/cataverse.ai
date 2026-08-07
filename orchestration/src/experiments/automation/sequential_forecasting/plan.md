@@ -1,0 +1,413 @@
+# Sequential Forecasting Implementation Plan
+
+Status: discovery and design
+
+This is the working north star for implementing the sequential forecasting
+system described in `spec.md`. Future coding sessions should update the
+checkboxes, record evidence, and resolve questions here before adding model
+complexity.
+
+## 1. Package Boundary
+
+The existing `automation/` directory is the RF model package. Its current RF
+ETL, model registry, experiment harness, manifests, and completed artifacts
+remain in place.
+
+The sequential forecasting task lives in:
+
+```text
+orchestration/src/experiments/automation/sequential_forecasting/
+```
+
+This directory contains:
+
+- `spec.md` - the approved problem specification.
+- `plan.md` - this implementation plan and decision log.
+- New sequential-forecasting code, tests, and documentation added in later phases.
+
+The initial implementation must not move or rewrite the RF package merely to
+make the new package convenient to import. Establish an explicit import
+contract first and keep protected ETL behavior unchanged.
+
+The sequential workflow should reuse the RF ETL as its curated dataset
+boundary rather than independently scanning and selecting a second population
+of experiments. The intended integration is:
+
+- Reuse the existing extraction and experiment-record pairing.
+- Reuse the existing curated reference-target extraction.
+- Reuse the existing RF dataset construction and train/validation/test assignment.
+- Add time-series observations, cutoff rows, fit-availability masks, and intermediate-fit history through additive sequential interfaces.
+- Preserve the existing RF mode, target values, transforms, metrics, and split behavior.
+
+Any edit to a protected ETL file must be additive, narrowly scoped, and
+verified against the unchanged RF workflow before it is accepted.
+
+## 2. Working Rules
+
+- [ ] Treat `spec.md` and this plan as the governing requirements.
+- [ ] Keep `extract.py`, `transform.py`, and `load.py` behavior-protected.
+- [ ] Do not change RF target definitions, target transforms, official metrics, or canonical RF split behavior.
+- [ ] Keep all sequential examples from one underlying experiment in one partition.
+- [ ] Use `Peak_Name == "monomer_sum"` before building examples, fitting the sequential model, or scoring.
+- [ ] Flatten `Delta_Group` without using it as an experiment, feature, target, split, or evaluation group.
+- [ ] Treat missing `pfo-sec_*` values as valid fit-availability data; never convert them to zero or silently discard the experiment.
+- [ ] Record every unresolved assumption in this plan instead of silently choosing one.
+- [ ] Use training experiments only for learned preprocessing, feature selection, and model selection.
+- [ ] Use validation experiments for selection and test experiments only for final confirmation.
+- [ ] Reuse the existing ODE and RF implementations where practical; do not replace either system in the initial version.
+- [ ] Prefer a simple, interpretable model and add complexity only when held-out validation evidence supports it.
+
+## 3. Discovered Repository Context
+
+These facts were established during initial inspection. They are starting
+evidence, not substitutes for validating the real dataset.
+
+- [x] The current RF package is rooted at `orchestration/src/experiments/automation/`.
+- [x] The current RF model is registered as `random_forest` in `models/random_forest.py`.
+- [x] The current RF uses the six target columns in `transform.py` and applies Box-Cox transforms through `model.py`.
+- [x] `transform.py` filters target extraction to `Peak_Name == "monomer_sum"`.
+- [x] `transform.py` currently reads all matching rows together and selects a maximum-time complete target row; this must be audited against `Delta_Group` duplication before sequential examples are trusted.
+- [x] The current RF dataset has one assembled row per `ExperimentRecord`, but the sequential dataset will have multiple cutoff rows per experiment.
+- [x] The current `load.split_dataset()` uses record-level `train_test_split`; it cannot be reused unchanged for cutoff examples because multiple cutoffs from one experiment would be split independently.
+- [x] The current RF harness records dataset and split fingerprints, but it does not yet establish that stored RF predictions are held out for every experiment.
+- [x] The ODE implementation is in the sibling `ir-spectro-node` repository, primarily `src/analysis/kinetics_fitting.py` and `src/utils/kinetic_fit_writer.py`.
+- [x] The secondary PFO ODE parameter order in the fitting code is `k_a, q_e, k_s, k_p, q_inf, q_0`.
+- [x] `orchestration/src/experiments/automation/eda.py` maps the six RF target names into that ODE order and provides a reference implementation of curve solving.
+- [x] The ODE fitting code currently uses a default minimum of four points in several rolling-fit entry points; the actual production rule and data path still require confirmation.
+- [x] The ODE fixes `q_0` to the first observed intensity and initializes the secondary state to zero.
+- [x] The existing secondary-fit implementation uses bounded nonnegative values for several parameters and derives `k_p` from `k_a * k_p_ratio`; these are implementation constraints to verify, not yet the complete project constraint contract.
+- [x] The raw data schema includes at least `Peak_Name`, `Time (s)`, `Cumulative_Peak_Area`, six kinetic target columns, and `Delta_Group` in relevant workflows.
+- [x] The default raw data root in the current RF code is `X:\peakFit`, but the usable data location has not been confirmed for this task.
+
+## 3a. Owner Clarifications Applied
+
+- [x] Use `X:\peakFit\<folder_name>\*CarbonylPeakArea.csv` as the raw experiment source.
+- [x] Exclude folder names `test` and `nn1120-4_pd_ceo2_000` by default.
+- [x] Surface the data root and exclusions as explicit sequential-pipeline arguments so they are easy to find and override.
+- [x] Use the existing RF training workflow with `--model random_forest` and the same train/validation/test assignments.
+- [x] Generate RF predictions for the test experiments and run sequential forecasting on those same test files.
+- [x] Treat `q_0` as known from the first observation, before ODE fitting begins; pass it through into the complete ODE-compatible output rather than learning it.
+- [x] Use `ir-spectro-node/src/analysis/kinetics_fitting.py` as the primary source for secondary-PFO fit eligibility, parameter ordering, bounds, solver behavior, and fit failure behavior.
+- [x] Record that the current `train.py` CLI exposes `--model` and `--strategy`, but not data-root or exclusion arguments; future plumbing must make the RF and sequential runs consume the same explicit selection configuration.
+- [x] Confirm that `X:\peakFit` is available in the working environment.
+- [x] Confirm that no additional owner-supplied physical constraints are required beyond the existing ODE implementation.
+- [x] Use RMSE on observed points strictly after each cutoff as the initial remaining-curve metric unless repository inspection finds an existing project convention.
+- [x] Inspect representative included `CarbonylPeakArea.csv` files and confirm that they already contain rolling `pfo-sec_*` fit columns; early rows are blank until the fit becomes eligible.
+- [x] Confirm that missing `pfo-sec_*` values can persist for part or all of an experiment and must be represented as valid missing-fit data rather than automatic exclusions.
+- [x] Confirm that the sequential workflow should use the existing RF ETL as the curated experiment-selection boundary, with mostly additive time-series fields.
+
+Required data-selection arguments/configuration:
+
+```text
+--data-root X:\peakFit
+--exclude-folder test
+--exclude-folder nn1120-4_pd_ceo2_000
+```
+
+The defaults must be visible in the sequential CLI help and in the saved run
+configuration. The implementation must report the effective root and excluded
+folder names at startup.
+
+## 4. Phase 0: Establish Provenance
+
+Goal: make the project reproducible before producing any training examples.
+
+- [ ] Validate that `X:\peakFit` is readable and enumerate `*_CarbonylPeakArea.csv` files under each included folder.
+- [ ] Use the existing ETL pairing (`*_expParams.json` -> `*_CarbonylPeakArea.csv`) and `ExperimentRecord.base_name` as the canonical experiment ID; verify this against the CSV path/file stem.
+- [ ] Audit all selected `CarbonylPeakArea.csv` files for complete-series and rolling/intermediate `pfo-sec_*` fit coverage; consume the stored fits initially and report files requiring regeneration rather than regenerating them silently.
+- [ ] Record repository commit/version information for both `orchestration` and `ir-spectro-node` when source code from both is used.
+- [ ] Record the current RF dataset fingerprint and RF split fingerprint without modifying the RF ETL.
+- [ ] Identify the existing RF train, validation, and test experiment assignments.
+- [ ] Run the existing RF workflow with `--model random_forest` using the same data root and exclusions.
+- [ ] Add or use non-ETL argument plumbing so the RF invocation receives `--data-root` and both `--exclude-folder` values while preserving existing defaults.
+- [ ] Persist the exact RF split assignments keyed by `base_name`; sequential cutoff rows must inherit these assignments unchanged.
+- [ ] Persist per-experiment RF predictions, including the test predictions used by sequential forecasting. The current `train.py` evaluates the test set but does not visibly export a per-record prediction table, so add a sequential-side export step rather than changing protected ETL behavior.
+- [ ] Define held-out RF predictions for sequential training and validation rows; do not use in-sample RF predictions merely because the RF model artifact exists.
+- [ ] Add a sequential run configuration containing data paths, the two exclusion defaults, minimum fit points, cutoff policy, target order, split seed, and artifact paths.
+
+Exit criteria:
+
+- A new agent can identify every source table/file and reproduce the RF assignment used by the sequential pipeline.
+- RF predictions used for sequential training are labeled as held-out, in-fold, or unknown; unknown predictions are not silently used as realistic training inputs.
+
+## 5. Phase 1: Write the Data Contract
+
+Goal: define one canonical representation of an experiment and its valid
+cutoffs without changing upstream ETL behavior.
+
+- [x] Define the canonical experiment ID initially as `ExperimentRecord.base_name`, linked to its paired `CarbonylPeakArea.csv` path; verify this mapping during Phase 0.
+- [ ] Define the observation table fields, units, ordering, duplicate policy, and missing-value policy.
+- [ ] Filter the sequential source to `Peak_Name == "monomer_sum"` and assert that no other peak enters an example or metric.
+- [ ] Inspect every representation of `Delta_Group` in CSVs, indexes, joins, caches, and generated fit tables.
+- [ ] Define and document the flattening operation across `Delta_Group`.
+- [ ] Quantify whether flattening creates duplicate `(experiment, time)` rows and define a deterministic resolution rule that does not aggregate artificial copies into extra experimental weight.
+- [ ] Verify that flattened rows do not duplicate the complete-series reference target.
+- [ ] Verify that flattening cannot place records from one underlying experiment into different partitions.
+- [ ] Define the known final time and how it is linked to each experiment.
+- [ ] Define valid cutoff points from observed measurements, including irregular schedules and repeated timestamps.
+- [ ] Define the minimum number of observations required for the first ODE fit as configuration, not a hidden constant.
+- [ ] Define the representation of failed, missing, non-finite, and unavailable intermediate fits.
+- [ ] Distinguish fit-not-yet-eligible, fit-missing-for-this-cutoff, fit-partially-populated, fit-missing-for-the-whole-experiment, fit-failed, and fit-valid states.
+- [ ] Preserve a value and an availability mask for each `pfo-sec_*` parameter; missingness is not a numeric zero.
+- [ ] Define the six target names and ordering in one shared contract.
+- [x] Pass `q_0` through from the first observation, exclude it from learned targets, and retain it in the six-value output vector for ODE compatibility.
+- [ ] Document parameter units, ranges, positivity requirements, relationships, invalid combinations, and solver stability limits.
+
+Required validation checks:
+
+- [ ] Every example has exactly one underlying experiment ID and one cutoff ID.
+- [ ] Cutoff observations are sorted and contain no observation after the cutoff.
+- [ ] The reference target comes only from the complete series.
+- [ ] `q_0` in every example equals the first valid `Cumulative_Peak_Area` observation and is never learned from later observations.
+- [ ] Intermediate fit data at cutoff `t` uses only observations at or before `t`.
+- [ ] The final-time row is not used as a feature at earlier cutoffs.
+- [ ] The number of examples, experiments, cutoffs, duplicate rows, failed fits, and excluded records is reported.
+
+Exit criteria:
+
+- A versioned data-contract document and validation report exist.
+- The contract can reconstruct one experiment's full timeline and every eligible cutoff from source data.
+- The duplicate and `Delta_Group` policy is demonstrated on real records, not only unit fixtures.
+
+## 6. Phase 2: Build Leakage-Safe Sequential Examples
+
+Goal: create a reproducible table or serialized structure with one row per
+experiment/cutoff and variable-length histories represented explicitly.
+
+- [ ] Implement the sequential data adapter inside `sequential_forecasting/`, reusing the RF ETL's selected records and curated reference targets rather than creating a parallel experiment-selection path.
+- [ ] Join held-out RF predictions to the canonical experiment ID.
+- [ ] Join raw observations through the current cutoff only.
+- [ ] Join the current intermediate ODE fit and, if selected, prior intermediate fits through the current cutoff only.
+- [ ] Include fit-status and validity indicators instead of silently imputing failed fits as valid values.
+- [ ] Include per-parameter availability masks and an experiment-level coverage summary for `pfo-sec_*` columns.
+- [ ] Do not exclude an experiment merely because one or more intermediate `pfo-sec_*` columns are missing for part or all of its timeline.
+- [ ] Include progress fields only when computable without future information; distinguish observation fraction, elapsed-time fraction, and time remaining.
+- [ ] Attach the complete-series reference target separately from model inputs.
+- [ ] Store an auditable mapping from each example to source files, experiment ID, cutoff time, observation count, fit status, RF prediction provenance, and reference target provenance.
+- [ ] Fit any learned normalization, imputation, dimensionality reduction, or feature selection on training experiments only.
+- [ ] Add tests that deliberately inject future rows and verify they cannot enter earlier examples.
+- [ ] Add tests that verify all cutoffs from one experiment are inseparable during splitting.
+- [ ] Add tests that verify invalid and missing fits are represented and counted.
+
+Candidate initial feature representation:
+
+- [ ] RF prediction vector.
+- [ ] Current ODE parameter vector and fit diagnostics when valid.
+- [ ] Previous ODE parameter vector or compact trajectory summaries when available.
+- [ ] Raw observation summaries through the cutoff, with explicit counts and missingness.
+- [ ] Measurement-time summaries and progress indicators.
+- [ ] Fit-validity and fallback indicators.
+
+The first version should avoid feeding arbitrary padded histories or the
+original RF static features until the simpler representation has a validated
+baseline.
+
+Exit criteria:
+
+- Training examples can be regenerated from source data.
+- A leakage audit passes for representative early, middle, late, irregular, duplicate, and failed-fit cases.
+- The example builder produces no `Delta_Group` feature and no mixed-peak record.
+
+## 7. Phase 3: Create Experiment-Level Splits and RF Inputs
+
+Goal: preserve leakage protection while making RF inputs realistic at
+deployment time.
+
+- [ ] Capture the RF split object produced by the existing workflow keyed by `base_name`, with train/validation/test assignments.
+- [ ] Reuse those exact RF assignments for every cutoff row; do not create a second split for sequential test evaluation.
+- [ ] Assert that every cutoff for an experiment has the same assignment.
+- [ ] Assert that train, validation, and test experiment IDs are disjoint.
+- [ ] Run `train.py --model random_forest` with the shared RF data root, exclusions, and split configuration.
+- [ ] Export RF predictions by `base_name` from the trained RF artifact and the exact RF split object; the sequential test files must match the RF test files one-to-one.
+- [ ] Use RF predictions from the RF model trained without the test experiments for sequential test inference.
+- [ ] For sequential model training and validation, generate held-out RF predictions with fold-specific RF models that exclude the predicted experiments; do not use in-sample train predictions.
+- [ ] Keep RF model artifacts, fold assignments, prediction provenance, and random seeds with the sequential run artifacts.
+- [ ] Add split and prediction-provenance fingerprints.
+
+Exit criteria:
+
+- No sequential training example contains an RF prediction from an RF trained on its own experiment.
+- A test experiment cannot influence RF fitting, preprocessing, feature selection, model selection, or hyperparameter tuning.
+
+## 8. Phase 4: Integrate the Existing ODE Safely
+
+Goal: use the existing secondary PFO model for intermediate fits and forecast
+curves without changing the scientific implementation silently.
+
+- [ ] Decide whether the sequential package can import the existing ODE API directly or needs a narrow adapter.
+- [ ] If an adapter is needed, preserve the existing equation, parameter mapping, solver method, tolerances, and timeout behavior unless explicitly approved otherwise.
+- [ ] Make minimum fit points, fit mode, initial guesses, and prior-fit carry-forward behavior explicit configuration.
+- [ ] Use `min_points=4` as the initial discovered default because the existing rolling-fit helpers use four points, while keeping it configurable.
+- [ ] Validate that each intermediate fit uses the expanding prefix of observations for its cutoff.
+- [ ] Validate the complete-series fit used as the reference target independently from intermediate fits.
+- [ ] Use the secondary-PFO target order `pfo-sec_k_a_s-1`, `pfo-sec_q_e_au`, `pfo-sec_k_s_s-1`, `pfo-sec_k_p_s-1`, `pfo-sec_q_inf_au`, `pfo-sec_q0_au` when reading and writing fit rows.
+- [ ] Require a complete finite parameter vector before using an intermediate fit as the current-ODE baseline or passing it directly to the ODE; partial fits remain valid source data but are never silently completed.
+- [ ] Allow partial-fit values and their masks as sequential-model inputs only when the selected model explicitly supports them; otherwise use the documented RF/previous-valid fallback.
+- [ ] Enforce the current fitter's candidate bounds: `k_a` and `k_s` in `[0, 0.01]`, `q_e` and `q_inf` in `[0, 2 * q_guess]`, and `k_p_ratio` in `[0, 1]` with `k_p = k_a * k_p_ratio`; no additional owner constraints are currently expected.
+- [ ] Preserve `q_0 = intensity[0]` and the ODE initial state `[q_0, 0.0]` for every fit and forecast.
+- [ ] Treat an update as valid only when the optimizer succeeds, the returned parameters are finite, and ODE integration succeeds with finite states.
+- [ ] Preserve the existing solver behavior for the initial adapter: `solve_ivp`, `RK45`, `rtol=1e-8`, and the current timeout/failure signaling.
+- [ ] Implement parameter validation before ODE integration.
+- [ ] Reject or mark non-finite, physically invalid, and numerically unstable predictions.
+- [ ] Implement fallback behavior: previous valid sequential prediction, then RF prediction, with an explicit fallback reason.
+- [ ] Return structured fit and solver status rather than hiding failures behind zeros or NaNs.
+- [ ] Add numerical tests for valid parameters, invalid parameters, solver failure, duplicate times, and a one-observation `q_0` pass-through.
+
+Exit criteria:
+
+- The same parameter vector produces the same curve through the shared ODE path.
+- Every failed fit or forecast is visible in logs and evaluation artifacts.
+- The adapter has no unrecorded scientific behavior changes.
+
+## 9. Phase 5: Implement Required Baselines
+
+Goal: establish the value of incoming time-series information before selecting
+a sequential model.
+
+- [ ] Baseline A: use the held-out RF prediction unchanged at every cutoff.
+- [ ] Baseline B: use the current valid ODE fit as the final-parameter prediction.
+- [ ] Define the fallback for Baseline B when no valid fit exists.
+- [ ] Baseline C: implement a simple RF/ODE blend or correction with parameters selected on training/validation experiments only.
+- [ ] Ensure all three baselines use identical experiment splits, cutoffs, target ordering, parameter validation, and curve scoring.
+- [ ] Save per-example predictions and status for every baseline.
+- [ ] Report parameter metrics and remaining-curve metrics by progress group.
+
+Exit criteria:
+
+- Baseline outputs are reproducible and auditable.
+- The project has a measured early/middle/late reference point for deciding whether a learned sequential model is justified.
+
+## 10. Phase 6: Train the Initial Sequential Model
+
+Goal: select the simplest model that reliably improves held-out validation
+performance over the required baselines.
+
+- [ ] Start with a correction target relative to RF, or an equally simple supervised formulation justified by the data contract.
+- [ ] Use only features available at the current cutoff.
+- [ ] Fit preprocessing on training experiments only.
+- [ ] Begin with data-efficient models appropriate for approximately 240 experiments.
+- [ ] Keep all cutoffs from one experiment together during fitting diagnostics and model selection; do not treat them as independent evidence for partitioning.
+- [ ] Tune only against validation metrics, especially early cutoffs and curve forecasts.
+- [ ] Record each model alternative, configuration, training data fingerprint, and validation result.
+- [ ] Prefer the least complex model that is stable across parameters and progress groups.
+- [ ] Do not add deep sequence models unless simpler models fail for a documented reason.
+
+Initial candidate order:
+
+- [ ] RF-only and ODE-only sanity checks.
+- [ ] Fixed or learned RF/ODE blend.
+- [ ] Regularized correction model using current-state summaries.
+- [ ] Correction model using compact intermediate-fit trajectories.
+- [ ] Sequence-aware model only if the preceding candidates leave a validated gap.
+
+Exit criteria:
+
+- One candidate is selected using training/validation evidence only.
+- Selection evidence includes early, middle, late, parameter-level, and curve-level behavior.
+- The untouched test set remains unopened for model selection.
+
+## 11. Phase 7: Build Sequential Inference
+
+Goal: provide a reproducible cutoff-by-cutoff forecast path for one complete
+experiment.
+
+- [ ] Load the saved model and preprocessing artifacts.
+- [ ] Process measurements in chronological order without looking ahead.
+- [ ] Keep the RF prediction active before the first valid ODE fit.
+- [ ] Update only at eligible cutoffs after a valid intermediate ODE fit.
+- [ ] Return a complete six-parameter vector in the existing ODE-compatible format.
+- [ ] Apply and record physical constraints before curve generation.
+- [ ] Forecast from the current cutoff through the known final time.
+- [ ] Preserve the last valid prediction or RF prediction when an update or integration fails.
+- [ ] Emit one structured record per cutoff containing inputs/provenance, prediction, curve status, fallback status, and errors.
+- [ ] Add an end-to-end test using a small fixture with irregular observations and an induced failed fit.
+
+Exit criteria:
+
+- A single inference run produces a complete, ordered trace from first measurement through final time.
+- No inference record contains future measurements or future fit values.
+- Every eligible cutoff either has a valid update or an explicit fallback reason.
+
+## 12. Phase 8: Evaluate and Report
+
+Goal: establish whether sequential information improves parameter and physical
+curve forecasts as the experiment progresses.
+
+- [ ] Evaluate reference-parameter accuracy per target and in an appropriate scale-aware aggregate.
+- [ ] Preserve the project's official RMSE and R2 definitions where applicable; report any additional scale-aware metric separately.
+- [ ] Evaluate remaining-curve accuracy from current cutoff through known final time against the observed remainder.
+- [ ] Report results by observation count, observation fraction, elapsed-time fraction, and time remaining where each is meaningful.
+- [ ] Show early, middle, and late progress groups without assuming identical schedules.
+- [ ] Measure when the candidate first beats RF-only and current-ODE baselines.
+- [ ] Measure whether aggregate accuracy generally improves with more observations without requiring every individual step to improve.
+- [ ] Identify unstable parameters, invalid forecasts, failed fits, fallbacks, and excluded experiments.
+- [ ] Compare parameter accuracy with curve accuracy rather than assuming they are equivalent.
+- [ ] Generate required plots for reference parameters, RF predictions, intermediate fits, sequential predictions, and predicted versus observed remaining curves.
+- [ ] Run the final test evaluation only after the candidate and settings are frozen from validation work.
+- [ ] Write a report containing data exclusions, constraints, fallback behavior, model alternatives, and the validation-based selection reason.
+
+Exit criteria:
+
+- All required baselines and the selected model are scored on the same held-out experiment assignments and cutoff definitions.
+- Results can be traced from a metric to an experiment, cutoff, source data, model artifact, and split fingerprint.
+- The final test result is clearly separated from validation-based selection evidence.
+
+## 13. Phase 9: Reproducibility and Handoff
+
+- [ ] Add package-level tests for schema validation, flattening, leakage prevention, split integrity, ODE mapping, fallback behavior, and metric aggregation.
+- [ ] Add a documented training command and inference command with explicit configuration paths.
+- [ ] Save model artifacts, preprocessing artifacts, split assignments, fingerprints, configuration, and dependency/version metadata.
+- [ ] Keep raw data, generated caches, and large model artifacts out of source control unless explicitly requested.
+- [ ] Document the exact source revision used for the sibling ODE implementation.
+- [ ] Document all discovered answers and remaining decisions in this plan.
+- [ ] Mark completed checklist items only after their verification command or artifact is recorded.
+- [ ] Update this plan when implementation decisions materially change the proposed architecture.
+
+## 14. Deferred Work
+
+Do not begin these until the initial baselines and candidate sequential model
+are complete and validated:
+
+- [ ] Add original RF input features alongside RF predictions.
+- [ ] Train a model without the RF prediction.
+- [ ] Evaluate a unified or staged static-plus-sequential architecture.
+- [ ] Consider uncertainty intervals.
+- [ ] Consider updating before the first valid ODE fit.
+- [ ] Consider real-time production integration.
+
+Each deferred item requires held-out validation evidence and must not use the
+untouched test set for selection.
+
+## 15. Decision Log
+
+| Date | Decision or observation | Evidence | Consequence |
+| --- | --- | --- | --- |
+| 2026-08-07 | Use `automation/sequential_forecasting/` as the sequential task boundary. | Existing `automation/` contains the RF ETL, models, harness, manifests, and artifacts. | Keep RF package in place; put `spec.md`, `plan.md`, and new sequential code in the subdirectory. |
+| 2026-08-07 | Move the current `spec.md` into the sequential package unchanged. | The working-tree version is the sequential forecasting specification supplied for this task. | Future work reads `sequential_forecasting/spec.md`. |
+| 2026-08-07 | Do not reuse `load.split_dataset()` for cutoff examples. | It performs record-level random splitting; sequential data has multiple cutoffs per experiment. | Add an experiment-level sequential split adapter. |
+| 2026-08-07 | Treat four observations as a discovered default, not a final decision. | Existing ODE code commonly defaults to `min_points=4`. | Confirm the production rule and expose it as configuration. |
+| 2026-08-07 | Use `X:\peakFit` with default exclusions `test` and `nn1120-4_pd_ceo2_000`. | Owner clarification. | Surface `--data-root` and repeatable `--exclude-folder` arguments and report effective values. |
+| 2026-08-07 | Reuse the RF workflow's exact train/validation/test assignments and evaluate sequential forecasting on the same RF test files. | Owner clarification and `train.py`/`load.py` inspection. | Persist RF split assignments by `base_name`; export RF predictions by `base_name` for sequential inference. |
+| 2026-08-07 | Treat `q_0` as known after the first observation and pass it through. | Owner clarification and `fit_secondary_pfo_with_errors()` fixing `q_0` to `intensity[0]`. | Learn only the remaining five parameters while returning the six-parameter ODE vector. |
+| 2026-08-07 | Use the existing secondary-PFO fitter's rules as the initial validity contract. | `ir-spectro-node/src/analysis/kinetics_fitting.py`. | Preserve parameter order, bounds, derived `k_p`, solver settings, and explicit failure status. |
+| 2026-08-07 | Consume stored rolling `pfo-sec_*` fits initially instead of regenerating them. | Representative included `CarbonylPeakArea.csv` files contain fit columns with blank early rows and populated later rows. | Audit fit coverage and use blank/invalid rows as explicit unavailable-fit states. |
+| 2026-08-07 | Preserve missing `pfo-sec_*` values as valid fit-availability information. | Owner clarification and representative CSVs with partial or absent fit columns. | Use masks and status fields; never impute missing fits as zero or silently exclude the experiment. |
+| 2026-08-07 | Reuse the RF ETL as the curated sequential dataset boundary. | Owner clarification. | Extend the existing experiment records/split flow additively with time-series fields instead of creating a parallel selection pipeline. |
+
+## 16. Remaining Questions and Discovery Tasks
+
+The owner clarifications resolve the initial data-root, exclusion, split,
+`q_0`, and primary ODE-source questions. The following items still require
+repository/data discovery or a later owner decision:
+
+1. Audit all selected files for complete-series and rolling secondary-PFO fit coverage. Representative files already contain the columns, so regeneration is not part of the initial path.
+2. Confirm the exact duplicate policy after inspecting real `Delta_Group` rows. The ODE writer explicitly drops duplicate `(Peak_Name, Time (s))` fit keys with `keep="last"`; the sequential data contract must verify whether that behavior is appropriate for flattened training examples.
+3. Confirm the authoritative known final time field or derivation from each selected CSV/experiment record.
+4. Verify the initial remaining-curve metric: RMSE on observed points strictly after each cutoff. No canonical curve metric was found in the current RF training CLI.
+5. Confirm whether direct reuse of the sibling ODE module is acceptable; otherwise use an exported fit/curve adapter while preserving the existing scientific behavior.
+6. No additional owner-supplied physical constraints are currently expected; retain the existing fitter bounds and `k_p = k_a * k_p_ratio` relationship unless data or solver behavior reveals a contradiction.
+
+Until these items are resolved, an implementation agent may perform read-only
+discovery and fixture-based work, but must not silently finalize duplicate
+handling, final-time derivation, official curve scoring, or additional physical
+constraints.

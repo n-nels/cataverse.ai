@@ -16,8 +16,9 @@ dependencies = [
     "python-kasa",  # Don't forget the Kasa library!
     "python-dotenv",
     "lightgbm",
-    "xgboost",
+    "neurobayes",
     "scikit-learn",
+    "scipy",
     "joblib",
     "fastparquet>=2026.5.0",
     "jupyter>=1.1.1",
