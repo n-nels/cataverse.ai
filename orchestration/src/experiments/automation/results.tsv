@@ -187,4 +187,202 @@ commit	experiment_id	model	validation_avg_rmse	validation_avg_r2	test_avg_rmse	t
 	rf_v3_0001	random_forest	0.124312	0.027840			0.05	discard	trial 28: rel_improvement=-0.0294 < threshold
 	rf_v3_0001	random_forest	0.125257	0.038296			0.06	discard	trial 29: rel_improvement=-0.0372 < threshold
 	rf_v3_0001	random_forest	0.123596	0.044846			0.06	discard	trial 30: rel_improvement=-0.0235 < threshold
-	
+		knn_v1_0001	knn	0.121294	0.146045			0.03	keep	campaign baseline
+	knn_v1_0001	knn	0.132638	-0.043650			0.00	discard	trial 1: rel_improvement=-0.0935 < threshold
+	knn_v1_0001	knn	0.136855	-0.069090			0.00	discard	trial 2: rel_improvement=-0.1283 < threshold
+	knn_v1_0001	knn	0.119442	0.075936			0.00	keep	trial 3: rel_improvement=0.0153
+	knn_v1_0001	knn	0.130496	-0.020509			0.00	discard	trial 4: rel_improvement=-0.0925 < threshold
+	knn_v1_0001	knn	0.137486	-0.075022			0.00	discard	trial 5: rel_improvement=-0.1511 < threshold
+	knn_v1_0001	knn	0.131471	-0.029022			0.06	discard	trial 6: rel_improvement=-0.1007 < threshold
+	knn_v1_0001	knn	0.118426	0.060813			0.05	keep	trial 7: rel_improvement=0.0085
+	knn_v1_0001	knn	0.109780	0.157287			0.00	keep	trial 8: rel_improvement=0.0730
+	knn_v1_0001	knn	0.119180	0.110325			0.00	discard	trial 9: rel_improvement=-0.0856 < threshold
+	knn_v1_0001	knn	0.121802	0.037717			0.00	discard	trial 10: rel_improvement=-0.1095 < threshold
+	knn_v1_0001	knn	0.125154	0.004373			0.00	discard	trial 11: rel_improvement=-0.1400 < threshold
+	knn_v1_0001	knn	0.131463	-0.038187			0.00	discard	trial 12: rel_improvement=-0.1975 < threshold
+	knn_v1_0001	knn	0.126396	0.006123			0.00	discard	trial 13: rel_improvement=-0.1514 < threshold
+	knn_v1_0001	knn	0.122892	0.031288			0.00	discard	trial 14: rel_improvement=-0.1194 < threshold
+	knn_v1_0001	knn	0.119467	0.051918			0.00	discard	trial 15: rel_improvement=-0.0882 < threshold
+	knn_v1_0001	knn	0.127671	-0.003845			0.00	discard	trial 16: rel_improvement=-0.1630 < threshold
+	knn_v1_0001	knn	0.119442	0.075936			0.00	discard	trial 17: rel_improvement=-0.0880 < threshold
+	knn_v1_0001	knn	0.133635	-0.048845			0.00	discard	trial 18: rel_improvement=-0.2173 < threshold
+	knn_v1_0001	knn	0.131966	-0.041287			0.00	discard	trial 19: rel_improvement=-0.2021 < threshold
+	knn_v1_0001	knn	0.115150	0.122747			0.00	discard	trial 20: rel_improvement=-0.0489 < threshold
+	knn_v1_0001	knn	0.131172	-0.032890			0.00	discard	trial 21: rel_improvement=-0.1949 < threshold
+	knn_v1_0001	knn	0.112825	0.109891			0.00	discard	trial 22: rel_improvement=-0.0277 < threshold
+	knn_v1_0001	knn	0.130645	-0.027511			0.00	discard	trial 23: rel_improvement=-0.1901 < threshold
+	knn_v1_0001	knn	0.122182	0.026340			0.00	discard	trial 24: rel_improvement=-0.1130 < threshold
+	knn_v1_0001	knn	0.115267	0.112298			0.00	discard	trial 25: rel_improvement=-0.0500 < threshold
+	knn_v1_0001	knn	0.131691	-0.039187			0.00	discard	trial 26: rel_improvement=-0.1996 < threshold
+	knn_v1_0001	knn	0.125352	0.037417			0.00	discard	trial 27: rel_improvement=-0.1418 < threshold
+	knn_v1_0001	knn	0.131813	-0.039307			0.00	discard	trial 28: rel_improvement=-0.2007 < threshold
+	knn_v1_0001	knn	0.109058	0.199490			0.00	keep	trial 29: rel_improvement=0.0066
+	knn_v1_0001	knn	0.124208	0.023958			0.00	discard	trial 30: rel_improvement=-0.1389 < threshold
+	knn_v2_0001	knn	0.121294	0.146045			0.03	keep	campaign baseline
+	knn_v2_0001	knn	0.112807	0.107933			0.07	keep	trial 1: rel_improvement=0.0700
+	knn_v2_0001	knn	0.110282	0.170838			0.00	keep	trial 2: rel_improvement=0.0224
+	knn_v2_0001	knn	0.110971	0.134101			0.00	discard	trial 3: rel_improvement=-0.0062 < threshold
+	knn_v2_0001	knn	0.110282	0.170838			0.05	discard	trial 4: rel_improvement=0.0000 < threshold
+	knn_v2_0001	knn	0.111027	0.133161			0.00	discard	trial 5: rel_improvement=-0.0068 < threshold
+	knn_v2_0001	knn	0.110971	0.134101			0.00	discard	trial 6: rel_improvement=-0.0062 < threshold
+	knn_v2_0001	knn	0.113483	0.098933			0.00	discard	trial 7: rel_improvement=-0.0290 < threshold
+	knn_v2_0001	knn	0.109058	0.199490			0.00	keep	trial 8: rel_improvement=0.0111
+	knn_v2_0001	knn	0.107321	0.229011			0.00	keep	trial 9: rel_improvement=0.0159
+	knn_v2_0001	knn	0.113237	0.113229			0.00	discard	trial 10: rel_improvement=-0.0551 < threshold
+	knn_v2_0001	knn	0.105646	0.229695			0.00	keep	trial 11: rel_improvement=0.0156
+	knn_v2_0001	knn	0.115003	0.090688			0.00	discard	trial 12: rel_improvement=-0.0886 < threshold
+	knn_v2_0001	knn	0.111027	0.133161			0.00	discard	trial 13: rel_improvement=-0.0509 < threshold
+	knn_v2_0001	knn	0.110597	0.169541			0.00	discard	trial 14: rel_improvement=-0.0469 < threshold
+	knn_v2_0001	knn	0.113155	0.101194			0.00	discard	trial 15: rel_improvement=-0.0711 < threshold
+	knn_v2_0001	knn	0.109576	0.163447			0.00	discard	trial 16: rel_improvement=-0.0372 < threshold
+	knn_v2_0001	knn	0.114279	0.094758			0.00	discard	trial 17: rel_improvement=-0.0817 < threshold
+	knn_v2_0001	knn	0.105646	0.229695			0.00	discard	trial 18: rel_improvement=0.0000 < threshold
+	knn_v2_0001	knn	0.110947	0.130550			0.00	discard	trial 19: rel_improvement=-0.0502 < threshold
+	knn_v2_0001	knn	0.109626	0.201421			0.00	discard	trial 20: rel_improvement=-0.0377 < threshold
+	knn_v2_0001	knn	0.112825	0.109891			0.00	discard	trial 21: rel_improvement=-0.0680 < threshold
+	knn_v2_0001	knn	0.111973	0.123044			0.00	discard	trial 22: rel_improvement=-0.0599 < threshold
+	knn_v2_0001	knn	0.109058	0.199490			0.00	discard	trial 23: rel_improvement=-0.0323 < threshold
+	knn_v2_0001	knn	0.105646	0.229695			0.00	discard	trial 24: rel_improvement=0.0000 < threshold
+	knn_v2_0001	knn	0.109576	0.163447			0.00	discard	trial 25: rel_improvement=-0.0372 < threshold
+	knn_v2_0001	knn	0.112807	0.107933			0.00	discard	trial 26: rel_improvement=-0.0678 < threshold
+	knn_v2_0001	knn	0.109213	0.183038			0.00	discard	trial 27: rel_improvement=-0.0338 < threshold
+	knn_v2_0001	knn	0.111973	0.123044			0.00	discard	trial 28: rel_improvement=-0.0599 < threshold
+	knn_v2_0001	knn	0.112807	0.107933			0.00	discard	trial 29: rel_improvement=-0.0678 < threshold
+	knn_v2_0001	knn	0.109213	0.183038			0.00	discard	trial 30: rel_improvement=-0.0338 < threshold
+	knn_v3_0001	knn	0.121294	0.146045			0.03	keep	campaign baseline
+	knn_v3_0001	knn	0.109213	0.183038			0.07	keep	trial 1: rel_improvement=0.0996
+	knn_v3_0001	knn	0.107321	0.229011			0.05	keep	trial 2: rel_improvement=0.0173
+	knn_v3_0001	knn	0.109058	0.199490			0.00	discard	trial 3: rel_improvement=-0.0162 < threshold
+	knn_v3_0001	knn	0.107321	0.229011			0.00	discard	trial 4: rel_improvement=0.0000 < threshold
+	knn_v3_0001	knn	0.109058	0.199490			0.00	discard	trial 5: rel_improvement=-0.0162 < threshold
+	knn_v3_0001	knn	0.109058	0.199490			0.00	discard	trial 6: rel_improvement=-0.0162 < threshold
+	knn_v3_0001	knn	0.105646	0.229695			0.00	keep	trial 7: rel_improvement=0.0156
+	knn_v3_0001	knn	0.105646	0.229695			0.00	discard	trial 8: rel_improvement=0.0000 < threshold
+	knn_v3_0001	knn	0.109058	0.199490			0.00	discard	trial 9: rel_improvement=-0.0323 < threshold
+	knn_v3_0001	knn	0.105646	0.229695			0.00	discard	trial 10: rel_improvement=0.0000 < threshold
+	knn_v3_0001	knn	0.109213	0.183038			0.00	discard	trial 11: rel_improvement=-0.0338 < threshold
+	knn_v3_0001	knn	0.107321	0.229011			0.00	discard	trial 12: rel_improvement=-0.0159 < threshold
+	knn_v3_0001	knn	0.109213	0.183038			0.00	discard	trial 13: rel_improvement=-0.0338 < threshold
+	knn_v3_0001	knn	0.107321	0.229011			0.00	discard	trial 14: rel_improvement=-0.0159 < threshold
+	knn_v3_0001	knn	0.109213	0.183038			0.00	discard	trial 15: rel_improvement=-0.0338 < threshold
+	knn_v3_0001	knn	0.105646	0.229695			0.00	discard	trial 16: rel_improvement=0.0000 < threshold
+	knn_v3_0001	knn	0.111311	0.222245			0.00	discard	trial 17: rel_improvement=-0.0536 < threshold
+	knn_v3_0001	knn	0.107321	0.229011			0.00	discard	trial 18: rel_improvement=-0.0159 < threshold
+	knn_v3_0001	knn	0.109213	0.183038			0.00	discard	trial 19: rel_improvement=-0.0338 < threshold
+	knn_v3_0001	knn	0.107321	0.229011			0.00	discard	trial 20: rel_improvement=-0.0159 < threshold
+	knn_v3_0001	knn	0.107321	0.229011			0.00	discard	trial 21: rel_improvement=-0.0159 < threshold
+	knn_v3_0001	knn	0.111311	0.222245			0.00	discard	trial 22: rel_improvement=-0.0536 < threshold
+	knn_v3_0001	knn	0.109213	0.183038			0.00	discard	trial 23: rel_improvement=-0.0338 < threshold
+	knn_v3_0001	knn	0.109626	0.201421			0.00	discard	trial 24: rel_improvement=-0.0377 < threshold
+	knn_v3_0001	knn	0.109213	0.183038			0.00	discard	trial 25: rel_improvement=-0.0338 < threshold
+	knn_v3_0001	knn	0.105646	0.229695			0.00	discard	trial 26: rel_improvement=0.0000 < threshold
+	knn_v3_0001	knn	0.109213	0.183038			0.00	discard	trial 27: rel_improvement=-0.0338 < threshold
+	knn_v3_0001	knn	0.109213	0.183038			0.00	discard	trial 28: rel_improvement=-0.0338 < threshold
+	knn_v3_0001	knn	0.107321	0.229011			0.00	discard	trial 29: rel_improvement=-0.0159 < threshold
+	knn_v3_0001	knn	0.111311	0.222245			0.00	discard	trial 30: rel_improvement=-0.0536 < threshold
+	svr_v1_0001	svr	0.116519	0.050461			0.07	keep	campaign baseline
+	svr_v1_0001	svr	0.116519	0.050461			0.07	keep	campaign baseline
+	svr_v1_0001	svr	0.133514	-3.587699			0.05	discard	trial 1: rel_improvement=-0.1459 < threshold
+	svr_v1_0001	svr	0.123580	-1.248972			0.04	discard	trial 2: rel_improvement=-0.0606 < threshold
+	svr_v1_0001	svr	0.139573	-26.902866			0.00	discard	trial 3: rel_improvement=-0.1979 < threshold
+	svr_v1_0001	svr	0.116519	0.050461			0.07	keep	campaign baseline
+	svr_v1_0001	svr	0.133514	-3.587699			0.06	discard	trial 1: rel_improvement=-0.1459 < threshold
+	svr_v1_0001	svr	0.123580	-1.248972			0.03	discard	trial 2: rel_improvement=-0.0606 < threshold
+	svr_v1_0001	svr	0.139573	-26.902866			0.00	discard	trial 3: rel_improvement=-0.1979 < threshold
+	svr_v1_0001	svr	0.116519	0.050461			0.07	keep	campaign baseline
+	svr_v1_0001	svr	0.133514	-3.587699			0.05	discard	trial 1: rel_improvement=-0.1459 < threshold
+	svr_v1_0001	svr	0.123580	-1.248972			0.03	discard	trial 2: rel_improvement=-0.0606 < threshold
+	svr_v1_0001	svr	0.139573	-26.902866			0.00	discard	trial 3: rel_improvement=-0.1979 < threshold
+	svr_v1_0001	svr	0.116519	0.050461			0.07	keep	campaign baseline
+	svr_v1_0001	svr	0.133514	-3.587699			0.05	discard	trial 1: rel_improvement=-0.1459 < threshold
+	svr_v1_0001	svr	0.123580	-1.248972			0.03	discard	trial 2: rel_improvement=-0.0606 < threshold
+	svr_v1_0001	svr	0.139573	-26.902866			0.00	discard	trial 3: rel_improvement=-0.1979 < threshold
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=rbf, C=80.944951, gamma=scale)
+	svr_v1_0001	svr	0.140127	-0.651864			0.00	discard	trial 5: rel_improvement=-0.2026 < threshold
+	svr_v1_0001	svr	0.194469	-35.109802			0.00	discard	trial 6: rel_improvement=-0.6690 < threshold
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=sigmoid, C=7.889232, gamma=auto)
+	svr_v1_0001	svr	0.143634	-26.644095			0.00	discard	trial 8: rel_improvement=-0.2327 < threshold
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=sigmoid, C=27.804581, gamma=auto)
+	svr_v1_0001	svr	0.391108	-12231.599831			0.00	discard	trial 10: rel_improvement=-2.3566 < threshold
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=poly, C=16.348615, gamma=scale)
+	svr_v1_0001	svr	0.123632	-1.402238			0.02	discard	trial 12: rel_improvement=-0.0610 < threshold
+	svr_v1_0001	svr	1.386816	-21967.486790			0.00	discard	trial 13: rel_improvement=-10.9021 < threshold
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=sigmoid, C=88.469469, gamma=scale)
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=rbf, C=74.703911, gamma=auto)
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=poly, C=50.957534, gamma=scale)
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=poly, C=79.210016, gamma=scale)
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=sigmoid, C=52.916143, gamma=scale)
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=rbf, C=76.862187, gamma=auto)
+	svr_v1_0001	svr	0.150094	-18.891801			0.01	discard	trial 20: rel_improvement=-0.2882 < threshold
+	svr_v1_0001	svr	0.133382	-3.296201			0.01	discard	trial 21: rel_improvement=-0.1447 < threshold
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=poly, C=53.942509, gamma=scale)
+	svr_v1_0001	svr	0.150249	-18.459904			0.01	discard	trial 23: rel_improvement=-0.2895 < threshold
+	svr_v1_0001	svr	0.136022	-13.479360			0.00	discard	trial 24: rel_improvement=-0.1674 < threshold
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=sigmoid, C=94.685399, gamma=auto)
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=poly, C=71.297768, gamma=auto)
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=sigmoid, C=12.10921, gamma=auto)
+	svr_v1_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=poly, C=58.848127, gamma=scale)
+	svr_v1_0001	svr	0.124513	-1.390274			0.02	discard	trial 29: rel_improvement=-0.0686 < threshold
+	svr_v1_0001	svr	0.795506	-4594.149068			0.00	discard	trial 30: rel_improvement=-5.8273 < threshold
+	svr_v2_0001	svr	0.116519	0.050461			0.07	keep	campaign baseline
+	svr_v2_0001	svr	0.114195	0.186449			0.05	keep	trial 1: rel_improvement=0.0199
+	svr_v2_0001	svr	0.116136	-0.001511			0.00	discard	trial 2: rel_improvement=-0.0170 < threshold
+	svr_v2_0001	svr	0.131551	-0.324937			0.00	discard	trial 3: rel_improvement=-0.1520 < threshold
+	svr_v2_0001	svr	0.116297	0.131571			0.00	discard	trial 4: rel_improvement=-0.0184 < threshold
+	svr_v2_0001	svr	0.113820	0.175632			0.00	discard	trial 5: rel_improvement=0.0033 < threshold
+	svr_v2_0001	svr	0.126339	-0.288723			0.00	discard	trial 6: rel_improvement=-0.1063 < threshold
+	svr_v2_0001	svr	0.119720	-0.002422			0.00	discard	trial 7: rel_improvement=-0.0484 < threshold
+	svr_v2_0001	svr	0.127451	-0.325653			0.00	discard	trial 8: rel_improvement=-0.1161 < threshold
+	svr_v2_0001	svr	0.127782	-0.373381			0.00	discard	trial 9: rel_improvement=-0.1190 < threshold
+	svr_v2_0001	svr	0.114284	0.196679			0.00	discard	trial 10: rel_improvement=-0.0008 < threshold
+	svr_v2_0001	svr	0.132133	-0.320270			0.00	discard	trial 11: rel_improvement=-0.1571 < threshold
+	svr_v2_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=rbf, C=3.46848, gamma=scale)
+	svr_v2_0001	svr	0.118909	-0.039858			0.00	discard	trial 13: rel_improvement=-0.0413 < threshold
+	svr_v2_0001	svr	0.115481	0.114608			0.00	discard	trial 14: rel_improvement=-0.0113 < threshold
+	svr_v2_0001	svr	0.129986	-0.335087			0.00	discard	trial 15: rel_improvement=-0.1383 < threshold
+	svr_v2_0001	svr	0.132846	-0.313070			0.00	discard	trial 16: rel_improvement=-0.1633 < threshold
+	svr_v2_0001	svr	0.134822	-0.289584			0.00	discard	trial 17: rel_improvement=-0.1806 < threshold
+	svr_v2_0001	svr	0.127471	-0.354286			0.00	discard	trial 18: rel_improvement=-0.1163 < threshold
+	svr_v2_0001	svr	0.130288	-0.333253			0.00	discard	trial 19: rel_improvement=-0.1409 < threshold
+	svr_v2_0001	svr	0.129623	-0.334936			0.00	discard	trial 20: rel_improvement=-0.1351 < threshold
+	svr_v2_0001	svr	0.114894	0.175397			0.00	discard	trial 21: rel_improvement=-0.0061 < threshold
+	svr_v2_0001	svr	0.116875	-0.049054			0.00	discard	trial 22: rel_improvement=-0.0235 < threshold
+	svr_v2_0001	svr	0.117198	0.000405			0.00	discard	trial 23: rel_improvement=-0.0263 < threshold
+	svr_v2_0001	svr	0.118466	-0.040662			0.00	discard	trial 24: rel_improvement=-0.0374 < threshold
+	svr_v2_0001	svr	0.119520	-0.057394			0.00	discard	trial 25: rel_improvement=-0.0466 < threshold
+	svr_v2_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=rbf, C=3.764792, gamma=scale)
+	svr_v2_0001	svr	0.134585	-0.302594			0.00	discard	trial 27: rel_improvement=-0.1786 < threshold
+	svr_v2_0001	svr	0.129503	-0.334562			0.00	discard	trial 28: rel_improvement=-0.1341 < threshold
+	svr_v2_0001	svr	0.129397	-0.348947			0.00	discard	trial 29: rel_improvement=-0.1331 < threshold
+	svr_v2_0001	svr	0.120650	-0.097294			0.00	discard	trial 30: rel_improvement=-0.0565 < threshold
+	svr_v2_0001	svr	0.116519	0.050461			0.07	keep	campaign baseline
+	svr_v2_0001	svr	0.114195	0.186449			0.05	keep	trial 1: rel_improvement=0.0199
+	svr_v2_0001	svr	0.116136	-0.001511			0.00	discard	trial 2: rel_improvement=-0.0170 < threshold
+	svr_v2_0001	svr	0.131551	-0.324937			0.00	discard	trial 3: rel_improvement=-0.1520 < threshold
+	svr_v2_0001	svr	0.116297	0.131571			0.00	discard	trial 4: rel_improvement=-0.0184 < threshold
+	svr_v2_0001	svr	0.113820	0.175632			0.00	discard	trial 5: rel_improvement=0.0033 < threshold
+	svr_v2_0001	svr	0.126339	-0.288723			0.00	discard	trial 6: rel_improvement=-0.1063 < threshold
+	svr_v2_0001	svr	0.119720	-0.002422			0.00	discard	trial 7: rel_improvement=-0.0484 < threshold
+	svr_v2_0001	svr	0.127451	-0.325653			0.00	discard	trial 8: rel_improvement=-0.1161 < threshold
+	svr_v2_0001	svr	0.127782	-0.373381			0.00	discard	trial 9: rel_improvement=-0.1190 < threshold
+	svr_v2_0001	svr	0.114284	0.196679			0.00	discard	trial 10: rel_improvement=-0.0008 < threshold
+	svr_v2_0001	svr	0.132133	-0.320270			0.00	discard	trial 11: rel_improvement=-0.1571 < threshold
+	svr_v2_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=rbf, C=3.46848, gamma=scale)
+	svr_v2_0001	svr	0.118909	-0.039858			0.00	discard	trial 13: rel_improvement=-0.0413 < threshold
+	svr_v2_0001	svr	0.115481	0.114608			0.00	discard	trial 14: rel_improvement=-0.0113 < threshold
+	svr_v2_0001	svr	0.129986	-0.335087			0.00	discard	trial 15: rel_improvement=-0.1383 < threshold
+	svr_v2_0001	svr	0.132846	-0.313070			0.00	discard	trial 16: rel_improvement=-0.1633 < threshold
+	svr_v2_0001	svr	0.134822	-0.289584			0.00	discard	trial 17: rel_improvement=-0.1806 < threshold
+	svr_v2_0001	svr	0.127471	-0.354286			0.00	discard	trial 18: rel_improvement=-0.1163 < threshold
+	svr_v2_0001	svr	0.130288	-0.333253			0.00	discard	trial 19: rel_improvement=-0.1409 < threshold
+	svr_v2_0001	svr	0.129623	-0.334936			0.00	discard	trial 20: rel_improvement=-0.1351 < threshold
+	svr_v2_0001	svr	0.114894	0.175397			0.00	discard	trial 21: rel_improvement=-0.0061 < threshold
+	svr_v2_0001	svr	0.116875	-0.049054			0.00	discard	trial 22: rel_improvement=-0.0235 < threshold
+	svr_v2_0001	svr	0.117198	0.000405			0.00	discard	trial 23: rel_improvement=-0.0263 < threshold
+	svr_v2_0001	svr	0.118466	-0.040662			0.00	discard	trial 24: rel_improvement=-0.0374 < threshold
+	svr_v2_0001	svr	0.119520	-0.057394			0.00	discard	trial 25: rel_improvement=-0.0466 < threshold
+	svr_v2_0001	svr						crash	trainer raised ValueError: SVR predictions contain NaN/Inf — config likely too extreme (kernel=rbf, C=3.764792, gamma=scale)
+	svr_v2_0001	svr	0.134585	-0.302594			0.00	discard	trial 27: rel_improvement=-0.1786 < threshold
+	svr_v2_0001	svr	0.129503	-0.334562			0.00	discard	trial 28: rel_improvement=-0.1341 < threshold
+	svr_v2_0001	svr	0.129397	-0.348947			0.00	discard	trial 29: rel_improvement=-0.1331 < threshold
+	svr_v2_0001	svr	0.120650	-0.097294			0.00	discard	trial 30: rel_improvement=-0.0565 < threshold

@@ -1,0 +1,7 @@
+n_neighbors: 5
+weights: distance
+algorithm: auto
+leaf_size: 75
+p: 1
+random_state: 143
+strategy: separate

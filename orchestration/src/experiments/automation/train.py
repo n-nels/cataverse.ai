@@ -40,7 +40,7 @@ if __name__ == "__main__":
         "--strategy",
         default=None,
         choices=["shared", "separate"],
-        help="Training strategy (default: model-specific; separate for random_forest, shared for lightgbm/xgboost/knn)",
+        help="Training strategy (default: model-specific; separate for random_forest/svr, shared for lightgbm/xgboost/knn)",
     )
     args = parser.parse_args()
 

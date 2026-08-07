@@ -1,0 +1,6 @@
+rank,trial,validation_avg_rmse,validation_avg_r2,params
+1,trial_29,0.109058,0.199490,"{""algorithm"": ""auto"", ""leaf_size"": 75, ""n_neighbors"": 5, ""p"": 1, ""random_state"": 143, ""strategy"": ""separate"", ""weights"": ""distance""}"
+2,trial_08,0.109780,0.157287,"{""algorithm"": ""kd_tree"", ""leaf_size"": 83, ""n_neighbors"": 11, ""p"": 1, ""random_state"": 361, ""strategy"": ""shared"", ""weights"": ""distance""}"
+3,trial_07,0.118426,0.060813,"{""algorithm"": ""auto"", ""leaf_size"": 68, ""n_neighbors"": 45, ""p"": 1, ""random_state"": 499, ""strategy"": ""separate"", ""weights"": ""distance""}"
+4,trial_03,0.119442,0.075936,"{""algorithm"": ""ball_tree"", ""leaf_size"": 74, ""n_neighbors"": 12, ""p"": 1, ""random_state"": 288, ""strategy"": ""shared"", ""weights"": ""uniform""}"
+5,baseline,0.121294,0.146045,"{""algorithm"": ""auto"", ""boosting_type"": ""gbdt"", ""colsample_bytree"": 1.0, ""early_stopping_rounds"": 50, ""gamma"": 0.0, ""leaf_size"": 30, ""learning_rate"": 0.05, ""max_depth"": 6, ""min_child_samples"": 20, ""min_child_weight"": 1, ""min_samples_split"": 2, ""n_estimators"": 1000, ""n_neighbors"": 5, ""num_leaves"": 31, ""p"": 2, ""random_state"": 42, ""reg_alpha"": 0.0, ""reg_lambda"": 0.0, ""strategy"": ""shared"", ""subsample"": 1.0, ""weights"": ""uniform""}"

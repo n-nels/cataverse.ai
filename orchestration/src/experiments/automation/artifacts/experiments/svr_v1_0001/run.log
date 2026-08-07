@@ -1,0 +1,22 @@
+=== Campaign svr_v1_0001 (model=svr) ===
+smoke=True git=False max_trials=30 wall_clock=120m
+baseline params advisory: parameter 'n_estimators' not declared in manifest (advisory); parameter 'learning_rate' not declared in manifest (advisory); parameter 'max_depth' not declared in manifest (advisory); parameter 'num_leaves' not declared in manifest (advisory); parameter 'min_child_samples' not declared in manifest (advisory); parameter 'subsample' not declared in manifest (advisory); parameter 'colsample_bytree' not declared in manifest (advisory); parameter 'reg_alpha' not declared in manifest (advisory); parameter 'reg_lambda' not declared in manifest (advisory); parameter 'early_stopping_rounds' not declared in manifest (advisory); parameter 'min_samples_split' not declared in manifest (advisory); parameter 'random_state' not declared in manifest (advisory); parameter 'boosting_type' not declared in manifest (advisory); parameter 'min_child_weight' not declared in manifest (advisory); parameter 'n_neighbors' not declared in manifest (advisory); parameter 'weights' not declared in manifest (advisory); parameter 'algorithm' not declared in manifest (advisory); parameter 'leaf_size' not declared in manifest (advisory); parameter 'p' not declared in manifest (advisory); parameter 'strategy' not declared in manifest (advisory)
+running campaign baseline
+baseline val_avg_rmse=0.116519
+trial 1 DISCARD val=0.133514 rel=-0.1459
+trial 2 DISCARD val=0.123580 rel=-0.0606
+trial 3 DISCARD val=0.139573 rel=-0.1979
+trial 5 DISCARD val=0.140127 rel=-0.2026
+trial 6 DISCARD val=0.194469 rel=-0.6690
+trial 8 DISCARD val=0.143634 rel=-0.2327
+trial 10 DISCARD val=0.391108 rel=-2.3566
+trial 12 DISCARD val=0.123632 rel=-0.0610
+trial 13 DISCARD val=1.386816 rel=-10.9021
+trial 20 DISCARD val=0.150094 rel=-0.2882
+trial 21 DISCARD val=0.133382 rel=-0.1447
+trial 23 DISCARD val=0.150249 rel=-0.2895
+trial 24 DISCARD val=0.136022 rel=-0.1674
+trial 29 DISCARD val=0.124513 rel=-0.0686
+trial 30 DISCARD val=0.795506 rel=-5.8273
+evaluating finalist baseline on test set
+evaluating baseline on test set

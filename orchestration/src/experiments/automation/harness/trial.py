@@ -68,8 +68,17 @@ def build_model_config(params: dict, model_name: str) -> ModelConfig:
     return base._replace(**kwargs)
 
 
-def get_strategy(params: dict) -> str:
-    return str(params.get("strategy", "shared"))
+def get_strategy(params: dict, model_name: str) -> str:
+    if "strategy" in params:
+        return str(params["strategy"])
+    from model import MODEL_REGISTRY
+    import inspect
+    trainer = MODEL_REGISTRY[model_name]
+    sig = inspect.signature(trainer)
+    for _, param in sig.parameters.items():
+        if param.name == "strategy":
+            return param.default
+    return "shared"
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +99,7 @@ def train_trial_inprocess(
     X, y = pipeline.prepare_dataset(data_dir)
     splits = pipeline.prepare_splits(X, y)
     config = build_model_config(params, model_name)
-    strategy = get_strategy(params)
+    strategy = get_strategy(params, model_name)
     trained = pipeline.train_model(splits, model_name, config, strategy)
     val_rmse = pipeline.validation_avg_rmse(trained)
     val_r2 = pipeline.validation_avg_r2(trained)
@@ -116,9 +125,12 @@ def eval_finalist_inprocess(
     X, y = pipeline.prepare_dataset(data_dir)
     splits = pipeline.prepare_splits(X, y)
     config = build_model_config(params, model_name)
-    strategy = get_strategy(params)
+    strategy = get_strategy(params, model_name)
     trained = pipeline.train_model(splits, model_name, config, strategy)
-    tm = pipeline.test_metrics(trained, splits)
+    try:
+        tm = pipeline.test_metrics(trained, splits)
+    except Exception:
+        tm = {"aggregate": {"avg_rmse": float("inf"), "avg_r2": float("-inf")}}
     return tm
 
 

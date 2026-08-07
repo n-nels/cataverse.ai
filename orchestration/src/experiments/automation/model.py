@@ -79,6 +79,17 @@ class ModelConfig(NamedTuple):
     boosting_type: str = "gbdt"
     min_child_weight: float = 1
     gamma: float = 0.0
+    n_neighbors: int = 5
+    weights: str = "uniform"
+    algorithm: str = "auto"
+    leaf_size: int = 30
+    p: int = 2
+    kernel: str = "rbf"
+    C: float = 1.0
+    epsilon: float = 0.1
+    gamma: str = "scale"
+    degree: int = 3
+    coef0: float = 0.0
 
 
 # Per-model default configs. Each model module registers its preferred
@@ -199,6 +210,12 @@ def evaluate_on_test(
     y_pred_tfm = trained_model.model.predict(X_test)
     y_pred = inverse_target_transforms(y_pred_tfm, trained_model.target_names, trained_model.lambdas)
     y_test_orig = y_test.values
+
+    if not np.isfinite(y_pred).all():
+        raise ValueError(
+            "Test predictions contain NaN/Inf after inverse transform "
+            f"for model {type(trained_model.model).__name__}"
+        )
 
     test_metrics = {}
     for i, target_name in enumerate(y_test.columns):

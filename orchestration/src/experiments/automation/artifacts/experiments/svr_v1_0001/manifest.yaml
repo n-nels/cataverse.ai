@@ -1,0 +1,47 @@
+experiment_id: svr_v1_0001
+description: "Turn 1 \u2014 broad random search over 6 SVR hyperparameters. Goal:\
+  \ discover which kernel family and C/epsilon region shows promise."
+model_name: svr
+baseline_experiment: svr_baseline
+split_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+- name: kernel
+  type: categorical
+  choices:
+  - linear
+  - poly
+  - rbf
+  - sigmoid
+- name: C
+  type: numeric
+  range:
+  - 0.01
+  - 100.0
+- name: epsilon
+  type: numeric
+  range:
+  - 0.001
+  - 1.0
+- name: gamma
+  type: categorical
+  choices:
+  - scale
+  - auto
+- name: degree
+  type: numeric
+  range:
+  - 2
+  - 5
+- name: coef0
+  type: numeric
+  range:
+  - 0.0
+  - 2.0
+maximum_trial_count: 30
+maximum_wall_clock_minutes: 120
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 10
+artifact_output_location: artifacts/experiments

@@ -1,0 +1,5 @@
+n_neighbors: 4
+weights: distance
+p: 1
+strategy: separate
+random_state: 41

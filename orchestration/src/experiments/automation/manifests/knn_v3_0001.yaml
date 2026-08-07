@@ -1,0 +1,29 @@
+experiment_id: knn_v3_0001
+description: "Turn 3 — final narrow pass. Fix separate strategy, weights=distance, p=1. Fine-search n_neighbors [2, 7]."
+model_name: knn
+baseline_experiment: knn_baseline
+split_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+  - name: n_neighbors
+    type: numeric
+    range: [2, 7]
+  - name: weights
+    type: categorical
+    choices: [distance]
+  - name: p
+    type: numeric
+    range: [1, 1]
+  - name: strategy
+    type: categorical
+    choices: [separate]
+  - name: random_state
+    type: numeric
+    range: [1, 500]
+maximum_trial_count: 30
+maximum_wall_clock_minutes: 120
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 10
+artifact_output_location: artifacts/experiments

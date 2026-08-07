@@ -32,13 +32,25 @@ from harness.manifest import CANONICAL_SEED, Manifest, load_manifest
 
 logger = logging.getLogger(__name__)
 
-# Campaign baseline = the model's registered default config + strategy="shared"
-# (spec "Baseline Definition"). Per-model defaults live in model.DEFAULT_CONFIGS.
+# Campaign baseline = the model's registered default config + model's default
+# strategy (from the trainer function signature). Per-model defaults live in
+# model.DEFAULT_CONFIGS.
+def _default_strategy(model_name: str) -> str:
+    from model import MODEL_REGISTRY
+    import inspect
+    trainer = MODEL_REGISTRY[model_name]
+    sig = inspect.signature(trainer)
+    for name, param in sig.parameters.items():
+        if name == "strategy":
+            return param.default
+    return "shared"
+
+
 def baseline_params(model_name: str) -> dict:
     from model import get_default_config
     return {
         **get_default_config(model_name)._asdict(),
-        "strategy": "shared",
+        "strategy": _default_strategy(model_name),
     }
 
 
@@ -392,7 +404,14 @@ def _run_one_trial(
         commit = gitstate.commit_all(auto, f"autoresearch trial: {label}")
 
     if smoke:
-        result = trial.train_trial_inprocess(data_dir, manifest.model_name, params)
+        try:
+            result = trial.train_trial_inprocess(data_dir, manifest.model_name, params)
+        except Exception as exc:
+            result = trial.TrialResult(
+                status="crash",
+                params=params,
+                reason=f"trainer raised {type(exc).__name__}: {exc}",
+            )
     else:
         result = trial.run_trial_subprocess(
             data_dir, manifest.model_name, params,

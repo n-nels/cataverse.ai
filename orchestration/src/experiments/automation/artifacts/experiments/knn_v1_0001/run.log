@@ -1,0 +1,39 @@
+=== Campaign knn_v1_0001 (model=knn) ===
+smoke=True git=False max_trials=30 wall_clock=120m
+baseline params advisory: parameter 'n_estimators' not declared in manifest (advisory); parameter 'learning_rate' not declared in manifest (advisory); parameter 'max_depth' not declared in manifest (advisory); parameter 'num_leaves' not declared in manifest (advisory); parameter 'min_child_samples' not declared in manifest (advisory); parameter 'subsample' not declared in manifest (advisory); parameter 'colsample_bytree' not declared in manifest (advisory); parameter 'reg_alpha' not declared in manifest (advisory); parameter 'reg_lambda' not declared in manifest (advisory); parameter 'early_stopping_rounds' not declared in manifest (advisory); parameter 'min_samples_split' not declared in manifest (advisory); parameter 'boosting_type' not declared in manifest (advisory); parameter 'min_child_weight' not declared in manifest (advisory); parameter 'gamma' not declared in manifest (advisory)
+running campaign baseline
+baseline val_avg_rmse=0.121294
+trial 1 DISCARD val=0.132638 rel=-0.0935
+trial 2 DISCARD val=0.136855 rel=-0.1283
+trial 3 KEEP val=0.119442 rel=0.0153
+trial 4 DISCARD val=0.130496 rel=-0.0925
+trial 5 DISCARD val=0.137486 rel=-0.1511
+trial 6 DISCARD val=0.131471 rel=-0.1007
+trial 7 KEEP val=0.118426 rel=0.0085
+trial 8 KEEP val=0.109780 rel=0.0730
+trial 9 DISCARD val=0.119180 rel=-0.0856
+trial 10 DISCARD val=0.121802 rel=-0.1095
+trial 11 DISCARD val=0.125154 rel=-0.1400
+trial 12 DISCARD val=0.131463 rel=-0.1975
+trial 13 DISCARD val=0.126396 rel=-0.1514
+trial 14 DISCARD val=0.122892 rel=-0.1194
+trial 15 DISCARD val=0.119467 rel=-0.0882
+trial 16 DISCARD val=0.127671 rel=-0.1630
+trial 17 DISCARD val=0.119442 rel=-0.0880
+trial 18 DISCARD val=0.133635 rel=-0.2173
+trial 19 DISCARD val=0.131966 rel=-0.2021
+trial 20 DISCARD val=0.115150 rel=-0.0489
+trial 21 DISCARD val=0.131172 rel=-0.1949
+trial 22 DISCARD val=0.112825 rel=-0.0277
+trial 23 DISCARD val=0.130645 rel=-0.1901
+trial 24 DISCARD val=0.122182 rel=-0.1130
+trial 25 DISCARD val=0.115267 rel=-0.0500
+trial 26 DISCARD val=0.131691 rel=-0.1996
+trial 27 DISCARD val=0.125352 rel=-0.1418
+trial 28 DISCARD val=0.131813 rel=-0.2007
+trial 29 KEEP val=0.109058 rel=0.0066
+trial 30 DISCARD val=0.124208 rel=-0.1389
+evaluating finalist trial_29 on test set
+evaluating finalist trial_08 on test set
+evaluating finalist trial_07 on test set
+evaluating baseline on test set

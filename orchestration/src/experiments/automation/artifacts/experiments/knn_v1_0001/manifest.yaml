@@ -1,0 +1,52 @@
+experiment_id: knn_v1_0001
+description: "Turn 1 \u2014 broad random search over 7 KNN hyperparameters. Goal:\
+  \ discover which knobs matter and whether shared/separate strategies differ."
+model_name: knn
+baseline_experiment: knn_baseline
+split_seed: 42
+primary_metric: validation_avg_rmse
+search_method: random
+allowed_hyperparameters:
+- name: n_neighbors
+  type: numeric
+  range:
+  - 1
+  - 100
+- name: weights
+  type: categorical
+  choices:
+  - uniform
+  - distance
+- name: algorithm
+  type: categorical
+  choices:
+  - auto
+  - ball_tree
+  - kd_tree
+  - brute
+- name: leaf_size
+  type: numeric
+  range:
+  - 10
+  - 100
+- name: p
+  type: numeric
+  range:
+  - 1
+  - 2
+- name: random_state
+  type: numeric
+  range:
+  - 1
+  - 500
+- name: strategy
+  type: categorical
+  choices:
+  - shared
+  - separate
+maximum_trial_count: 30
+maximum_wall_clock_minutes: 120
+maximum_test_finalists: 3
+minimum_improvement_threshold: 0.005
+per_trial_timeout_minutes: 10
+artifact_output_location: artifacts/experiments

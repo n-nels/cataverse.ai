@@ -1,0 +1,7 @@
+{
+  "baseline_val_rmse": 0.12129371612034169,
+  "best_val_rmse": 0.10564602614316738,
+  "relative_improvement": 0.1290066004874435,
+  "threshold": 0.005,
+  "retained": true
+}
