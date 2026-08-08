@@ -108,14 +108,83 @@ The defaults must be visible in the sequential CLI help and in the saved run
 configuration. The implementation must report the effective root and excluded
 folder names at startup.
 
+## 3b. Discovery Findings (2026-08-07)
+
+- The included folders were readable under `X:\peakFit`, and the existing
+  JSON-to-CSV pairing produced 243 experiments. Every paired CSV stem matched
+  `ExperimentRecord.base_name`.
+- All 243 included files contain `monomer_sum` rows and at least one repeated
+  exact `Time (s)` value across `Delta_Group`. There are up to five rows at one
+  exact timestamp; 4,456 repeated-time groups contain distinct
+  `Cumulative_Peak_Area` values. This confirms that duplicate handling cannot be
+  chosen from row order without changing the data meaning.
+- Six complete secondary-PFO parameter columns are present in the files. Seven
+  files contain no complete stored fit and require reporting or regeneration:
+  `20250128_064524_pd_ceo2_000-023`,
+  `20250203_075315_pd_ceo2_000-026`,
+  `20250216_072220_pd_ceo2_000-033`,
+  `20250528_202944_pd_ceo2_001-036`,
+  `20260130_215303_pd_ceo2_003-107`,
+  `20260505_063850_pd_ceo2_004-018`, and
+  `20260526_091836_pd_ceo2_004-025`.
+- No included file has partially populated secondary-PFO parameter vectors.
+  However, 17 files have gaps in complete-fit availability after their first
+  valid rolling fit, concentrated in later `nn1120-3_pd_ceo2_004` data. Stored
+  fits must therefore be represented with explicit availability/status fields.
+- Of the 236 files with at least one complete fit, 233 first become valid at
+  the fourth unique observation time. Three files first become valid at unique
+  time ranks 2, 7, and 23. This supports `min_points=4` as a discovered
+  default, but does not establish it as a universal production rule.
+- No explicit final-time field was found in the paired JSON metadata. For all
+  243 files, the maximum `Time (s)` in `monomer_sum` equals the maximum time in
+  the complete CSV; for every file with a complete fit, it also equals the
+  maximum complete-fit time. This makes `max(Time (s))` a candidate derivation,
+  pending confirmation. CSV row order is not chronological in 145 files, so
+  timelines must be sorted explicitly.
+- No existing remaining-curve scorer was found. Existing RMSE calculations
+  score fit residuals over the supplied full observation set; they do not
+  define the strict post-cutoff remainder metric. The plan's initial candidate
+  remains RMSE over observed points strictly after each cutoff.
+- The sibling ODE implementation preserves the required parameter order,
+  bounds, `q_0` pass-through, `solve_ivp`/`RK45` behavior, and timeout/failure
+  signaling. `ir-spectro-node` is not a declared dependency of `orchestration`,
+  so direct reuse requires an explicit cross-repository import contract; a
+  narrow adapter remains an open implementation choice.
+
+## 3c. Owner Clarifications (2026-08-07)
+
+- Experiments with the JSON success flag set to true but no adsorption are
+  valid data points, not failed experiments. They should remain in the
+  sequential dataset and receive an explicit successful-no-adsorption status
+  with an all-zero reference target, rather than being silently excluded.
+- For exact duplicate `(Peak_Name, Time (s))` keys across `Delta_Group`, the
+  sequential flattening step will retain the last source row, matching the
+  existing ODE writer's `drop_duplicates(..., keep="last")` behavior. Every
+  collision must be logged with the experiment, time, retained source row,
+  discarded source rows, and collision count.
+- The final time is the maximum `Time (s)` that has all six parameters. For
+  successful-no-adsorption experiments with no complete parameter row, use the
+  maximum flattened `monomer_sum` time alongside the zero-target status.
+- Near-duplicate timestamps should be merged with a configurable default
+  tolerance of `1e-3` seconds. Each merge is part of the collision log.
+- At every cutoff, generate the full ODE trajectory from the first measured
+  time through final time, retain the known prefix, and score only observed
+  points strictly after the cutoff. Progress snapshots are reporting views;
+  they are not a restriction to three forecast points.
+- The sequential package must not import across repositories. It will use a
+  local implementation of the same ODE equations, parameter order, bounds,
+  solver settings, and failure behavior. Here, an "adapter" means only a
+  local wrapper translating sequential data into that behavior; it does not
+  mean importing `ir-spectro-node`.
+
 ## 4. Phase 0: Establish Provenance
 
 Goal: make the project reproducible before producing any training examples.
 
-- [ ] Validate that `X:\peakFit` is readable and enumerate `*_CarbonylPeakArea.csv` files under each included folder.
-- [ ] Use the existing ETL pairing (`*_expParams.json` -> `*_CarbonylPeakArea.csv`) and `ExperimentRecord.base_name` as the canonical experiment ID; verify this against the CSV path/file stem.
-- [ ] Audit all selected `CarbonylPeakArea.csv` files for complete-series and rolling/intermediate `pfo-sec_*` fit coverage; consume the stored fits initially and report files requiring regeneration rather than regenerating them silently.
-- [ ] Record repository commit/version information for both `orchestration` and `ir-spectro-node` when source code from both is used.
+- [x] Validate that `X:\peakFit` is readable and enumerate `*_CarbonylPeakArea.csv` files under each included folder.
+- [x] Use the existing ETL pairing (`*_expParams.json` -> `*_CarbonylPeakArea.csv`) and `ExperimentRecord.base_name` as the canonical experiment ID; verify this against the CSV path/file stem.
+- [x] Audit all selected `CarbonylPeakArea.csv` files for complete-series and rolling/intermediate `pfo-sec_*` fit coverage; consume the stored fits initially and report files requiring regeneration rather than regenerating them silently.
+- [ ] Record repository revision/version metadata for both `orchestration` and `ir-spectro-node` when source code from both is used. This is provenance only; it does not require creating a commit.
 - [ ] Record the current RF dataset fingerprint and RF split fingerprint without modifying the RF ETL.
 - [ ] Identify the existing RF train, validation, and test experiment assignments.
 - [ ] Run the existing RF workflow with `--model random_forest` using the same data root and exclusions.
@@ -143,7 +212,7 @@ cutoffs without changing upstream ETL behavior.
 - [ ] Quantify whether flattening creates duplicate `(experiment, time)` rows and define a deterministic resolution rule that does not aggregate artificial copies into extra experimental weight.
 - [ ] Verify that flattened rows do not duplicate the complete-series reference target.
 - [ ] Verify that flattening cannot place records from one underlying experiment into different partitions.
-- [ ] Define the known final time and how it is linked to each experiment.
+- [x] Define the known final time and how it is linked to each experiment.
 - [ ] Define valid cutoff points from observed measurements, including irregular schedules and repeated timestamps.
 - [ ] Define the minimum number of observations required for the first ODE fit as configuration, not a hidden constant.
 - [ ] Define the representation of failed, missing, non-finite, and unavailable intermediate fits.
@@ -393,6 +462,16 @@ untouched test set for selection.
 | 2026-08-07 | Consume stored rolling `pfo-sec_*` fits initially instead of regenerating them. | Representative included `CarbonylPeakArea.csv` files contain fit columns with blank early rows and populated later rows. | Audit fit coverage and use blank/invalid rows as explicit unavailable-fit states. |
 | 2026-08-07 | Preserve missing `pfo-sec_*` values as valid fit-availability information. | Owner clarification and representative CSVs with partial or absent fit columns. | Use masks and status fields; never impute missing fits as zero or silently exclude the experiment. |
 | 2026-08-07 | Reuse the RF ETL as the curated sequential dataset boundary. | Owner clarification. | Extend the existing experiment records/split flow additively with time-series fields instead of creating a parallel selection pipeline. |
+| 2026-08-07 | Audit 243 included experiments and identify seven files without any complete stored secondary-PFO fit plus 17 files with post-fit coverage gaps. | Read-only audit of paired `CarbonylPeakArea.csv` files under the included folders. | Report unavailable fits explicitly; do not regenerate or exclude silently. |
+| 2026-08-07 | Treat repeated `(Peak_Name, Time (s))` rows as unresolved data-contract cases. | All 243 files contain repeated timestamps across `Delta_Group`; repeated rows can have distinct areas and, in one observed case, distinct stored fit vectors. | Obtain an explicit duplicate-resolution decision before building examples or metrics. |
+| 2026-08-07 | Use `max(Time (s))` from sorted `monomer_sum` observations as the candidate final-time derivation. | No explicit final-time metadata was found; the candidate agrees with the complete CSV maximum for all 243 audited files. | Confirm this derivation before finalizing the data contract. |
+| 2026-08-07 | No canonical remaining-curve metric exists in the inspected repositories. | Existing RMSE helpers score full supplied fit residuals, not post-cutoff observed remainders. | Retain strict post-cutoff RMSE as the initial candidate pending confirmation. |
+| 2026-08-07 | Direct sibling ODE reuse requires an explicit import contract. | `ir-spectro-node` is not an `orchestration` dependency, although its implementation matches the required scientific behavior. | Decide between a supported cross-repository import and a narrow behavior-preserving adapter. |
+| 2026-08-07 | Keep successful no-adsorption experiments as valid zero-target data. | The seven fitless audited files have `exp_success: true`; the owner confirmed their correct converged value is zero. | Add an explicit successful-no-adsorption status and retain the records rather than treating them as failed ETL cases. |
+| 2026-08-07 | Resolve exact duplicate time keys by retaining the last source row and logging the collision. | The existing ODE writer uses `keep="last"`; the owner authorized selecting one row while recording duplicate instances. | Apply the same deterministic rule in the sequential flattening layer and preserve collision provenance. |
+| 2026-08-07 | Implement ODE behavior locally rather than importing from the sibling repository. | Owner instruction; cross-repository imports are not desired. | Add a local behavior-preserving ODE module with tests for equations, parameter mapping, solver behavior, and failures. |
+| 2026-08-07 | Generate a full trajectory at each cutoff and score only the strict future suffix. | Owner clarification: known observations must remain available and must not be discarded. | Keep the complete forecast trace, use all future observation points for the remaining-curve metric, and use progress percentages only for reporting. |
+| 2026-08-07 | Merge timestamps within `1e-3` seconds and log every collision. | Owner clarification and observed floating-point near-duplicates. | Use a configurable tolerance in the sequential flattening layer and retain the last source row in each collision cluster. |
 
 ## 16. Remaining Questions and Discovery Tasks
 
@@ -400,11 +479,11 @@ The owner clarifications resolve the initial data-root, exclusion, split,
 `q_0`, and primary ODE-source questions. The following items still require
 repository/data discovery or a later owner decision:
 
-1. Audit all selected files for complete-series and rolling secondary-PFO fit coverage. Representative files already contain the columns, so regeneration is not part of the initial path.
-2. Confirm the exact duplicate policy after inspecting real `Delta_Group` rows. The ODE writer explicitly drops duplicate `(Peak_Name, Time (s))` fit keys with `keep="last"`; the sequential data contract must verify whether that behavior is appropriate for flattened training examples.
-3. Confirm the authoritative known final time field or derivation from each selected CSV/experiment record.
-4. Verify the initial remaining-curve metric: RMSE on observed points strictly after each cutoff. No canonical curve metric was found in the current RF training CLI.
-5. Confirm whether direct reuse of the sibling ODE module is acceptable; otherwise use an exported fit/curve adapter while preserving the existing scientific behavior.
+1. The coverage audit is complete: seven files have no complete stored fit and 17 have gaps after the first valid fit. Successful fitless files will be retained as explicit zero-target cases; later rolling-fit gaps still need status representation.
+2. Exact and near-duplicate timestamp clusters will use `keep="last"` with collision logging and a default `1e-3` second tolerance.
+3. The owner confirmed that final time is the maximum `Time (s)` with all six parameters, with maximum flattened `monomer_sum` time as the successful-no-adsorption fallback.
+4. The owner confirmed the remaining-curve metric: generate the full trajectory at each cutoff and calculate RMSE only on observed points strictly after that cutoff.
+5. The ODE will be implemented locally with matching behavior; no cross-repository import is required.
 6. No additional owner-supplied physical constraints are currently expected; retain the existing fitter bounds and `k_p = k_a * k_p_ratio` relationship unless data or solver behavior reveals a contradiction.
 
 Until these items are resolved, an implementation agent may perform read-only
