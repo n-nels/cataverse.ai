@@ -167,11 +167,33 @@ def extract_reference_target(
     if flattened.empty:
         raise ValueError("No valid monomer observations found")
 
+    return reference_target_from_flattened(
+        flattened,
+        successful=successful,
+        collisions=collisions,
+    )
+
+
+def reference_target_from_flattened(
+    flattened: pd.DataFrame,
+    *,
+    successful: bool,
+    collisions: tuple[TimestampCollision, ...] = (),
+) -> ReferenceTarget:
+    """Extract a reference target from already-flattened observations."""
+    if not successful:
+        raise ValueError("Unsuccessful experiments must be excluded by the ETL")
+    if flattened.empty:
+        raise ValueError("No valid monomer observations found")
+
     complete = flattened[list(TARGET_COLUMNS)].notna().all(axis=1)
     complete &= np.isfinite(flattened[list(TARGET_COLUMNS)]).all(axis=1)
     if complete.any():
         row = flattened.loc[complete].sort_values(TIME_COLUMN).iloc[-1]
-        values = tuple(float(row[column]) for column in TARGET_COLUMNS)
+        first_area = float(flattened.sort_values(TIME_COLUMN).iloc[0][AREA_COLUMN])
+        values = tuple(float(row[column]) for column in TARGET_COLUMNS[:-1]) + (
+            first_area,
+        )
         return ReferenceTarget(
             values=values,
             final_time_s=float(row[TIME_COLUMN]),

@@ -138,18 +138,18 @@ folder names at startup.
 - No explicit final-time field was found in the paired JSON metadata. For all
   243 files, the maximum `Time (s)` in `monomer_sum` equals the maximum time in
   the complete CSV; for every file with a complete fit, it also equals the
-  maximum complete-fit time. This makes `max(Time (s))` a candidate derivation,
-  pending confirmation. CSV row order is not chronological in 145 files, so
-  timelines must be sorted explicitly.
+  maximum complete-fit time. The owner confirmed the complete-fit maximum as
+  the final time, with maximum flattened monomer time for zero-target cases.
+  CSV row order is not chronological in 145 files, so timelines must be sorted
+  explicitly.
 - No existing remaining-curve scorer was found. Existing RMSE calculations
   score fit residuals over the supplied full observation set; they do not
   define the strict post-cutoff remainder metric. The plan's initial candidate
   remains RMSE over observed points strictly after each cutoff.
 - The sibling ODE implementation preserves the required parameter order,
   bounds, `q_0` pass-through, `solve_ivp`/`RK45` behavior, and timeout/failure
-  signaling. `ir-spectro-node` is not a declared dependency of `orchestration`,
-  so direct reuse requires an explicit cross-repository import contract; a
-  narrow adapter remains an open implementation choice.
+  signaling. The sequential package implements this behavior locally and does
+  not import across repositories.
 
 ## 3c. Owner Clarifications (2026-08-07)
 
@@ -177,6 +177,28 @@ folder names at startup.
   local wrapper translating sequential data into that behavior; it does not
   mean importing `ir-spectro-node`.
 
+## 3d. Implementation Evidence (2026-08-08)
+
+- `sequential_forecasting/data.py` filters to `monomer_sum`, merges timestamps
+  within `1e-3` seconds, retains the last source row, and returns structured
+  collision records.
+- `sequential_forecasting/examples.py` creates one prefix-only example per
+  flattened cutoff, preserves reference-target provenance, passes through the
+  first-observation `q_0`, and records intermediate-fit masks/statuses.
+- `sequential_forecasting/ode.py` provides local secondary-PFO fitting,
+  full-trajectory cutoff forecasting, and strict post-cutoff RMSE.
+- Focused tests pass (`9 passed`). A real-data smoke check produced 73
+  leakage-safe examples from a fitted experiment and retained a successful
+  no-adsorption experiment as 44 zero-target examples.
+- Phase 0 artifacts under `sequential_forecasting/artifacts/phase0/` contain
+  the run configuration, provenance, dataset/split fingerprints, assignment
+  table, RF predictions, and prediction-provenance summary. The dataset and
+  split hashes match `rf_v2_0001` exactly: 243 records with a 155/39/49
+  train/validation/test split.
+- RF prediction coverage is complete: 194 out-of-fold predictions for
+  train/validation experiments and 49 held-out-test predictions. No
+  in-sample predictions are used for sequential training inputs.
+
 ## 4. Phase 0: Establish Provenance
 
 Goal: make the project reproducible before producing any training examples.
@@ -184,15 +206,15 @@ Goal: make the project reproducible before producing any training examples.
 - [x] Validate that `X:\peakFit` is readable and enumerate `*_CarbonylPeakArea.csv` files under each included folder.
 - [x] Use the existing ETL pairing (`*_expParams.json` -> `*_CarbonylPeakArea.csv`) and `ExperimentRecord.base_name` as the canonical experiment ID; verify this against the CSV path/file stem.
 - [x] Audit all selected `CarbonylPeakArea.csv` files for complete-series and rolling/intermediate `pfo-sec_*` fit coverage; consume the stored fits initially and report files requiring regeneration rather than regenerating them silently.
-- [ ] Record repository revision/version metadata for both `orchestration` and `ir-spectro-node` when source code from both is used. This is provenance only; it does not require creating a commit.
-- [ ] Record the current RF dataset fingerprint and RF split fingerprint without modifying the RF ETL.
-- [ ] Identify the existing RF train, validation, and test experiment assignments.
-- [ ] Run the existing RF workflow with `--model random_forest` using the same data root and exclusions.
-- [ ] Add or use non-ETL argument plumbing so the RF invocation receives `--data-root` and both `--exclude-folder` values while preserving existing defaults.
-- [ ] Persist the exact RF split assignments keyed by `base_name`; sequential cutoff rows must inherit these assignments unchanged.
-- [ ] Persist per-experiment RF predictions, including the test predictions used by sequential forecasting. The current `train.py` evaluates the test set but does not visibly export a per-record prediction table, so add a sequential-side export step rather than changing protected ETL behavior.
-- [ ] Define held-out RF predictions for sequential training and validation rows; do not use in-sample RF predictions merely because the RF model artifact exists.
-- [ ] Add a sequential run configuration containing data paths, the two exclusion defaults, minimum fit points, cutoff policy, target order, split seed, and artifact paths.
+- [x] Record repository revision/version metadata for both `orchestration` and `ir-spectro-node` when source code from both is used. This is provenance only; it does not require creating a commit.
+- [x] Record the current RF dataset fingerprint and RF split fingerprint without modifying the RF ETL.
+- [x] Identify the existing RF train, validation, and test experiment assignments.
+- [x] Run the existing RF workflow with `--model random_forest` using the same data root and exclusions.
+- [x] Add or use non-ETL argument plumbing so the RF invocation receives `--data-root` and both `--exclude-folder` values while preserving existing defaults.
+- [x] Persist the exact RF split assignments keyed by `base_name`; sequential cutoff rows must inherit these assignments unchanged.
+- [x] Persist per-experiment RF predictions, including the test predictions used by sequential forecasting. The current `train.py` evaluates the test set but does not visibly export a per-record prediction table, so add a sequential-side export step rather than changing protected ETL behavior.
+- [x] Define held-out RF predictions for sequential training and validation rows; do not use in-sample RF predictions merely because the RF model artifact exists.
+- [x] Add a sequential run configuration containing data paths, the two exclusion defaults, minimum fit points, cutoff policy, target order, split seed, and artifact paths.
 
 Exit criteria:
 
@@ -206,17 +228,17 @@ cutoffs without changing upstream ETL behavior.
 
 - [x] Define the canonical experiment ID initially as `ExperimentRecord.base_name`, linked to its paired `CarbonylPeakArea.csv` path; verify this mapping during Phase 0.
 - [ ] Define the observation table fields, units, ordering, duplicate policy, and missing-value policy.
-- [ ] Filter the sequential source to `Peak_Name == "monomer_sum"` and assert that no other peak enters an example or metric.
+- [x] Filter the sequential source to `Peak_Name == "monomer_sum"` and assert that no other peak enters an example or metric.
 - [ ] Inspect every representation of `Delta_Group` in CSVs, indexes, joins, caches, and generated fit tables.
-- [ ] Define and document the flattening operation across `Delta_Group`.
-- [ ] Quantify whether flattening creates duplicate `(experiment, time)` rows and define a deterministic resolution rule that does not aggregate artificial copies into extra experimental weight.
+- [x] Define and document the flattening operation across `Delta_Group`.
+- [x] Quantify whether flattening creates duplicate `(experiment, time)` rows and define a deterministic resolution rule that does not aggregate artificial copies into extra experimental weight.
 - [ ] Verify that flattened rows do not duplicate the complete-series reference target.
 - [ ] Verify that flattening cannot place records from one underlying experiment into different partitions.
 - [x] Define the known final time and how it is linked to each experiment.
-- [ ] Define valid cutoff points from observed measurements, including irregular schedules and repeated timestamps.
+- [x] Define valid cutoff points from observed measurements, including irregular schedules and repeated timestamps.
 - [ ] Define the minimum number of observations required for the first ODE fit as configuration, not a hidden constant.
-- [ ] Define the representation of failed, missing, non-finite, and unavailable intermediate fits.
-- [ ] Distinguish fit-not-yet-eligible, fit-missing-for-this-cutoff, fit-partially-populated, fit-missing-for-the-whole-experiment, fit-failed, and fit-valid states.
+- [x] Define the representation of failed, missing, non-finite, and unavailable intermediate fits.
+- [x] Distinguish fit-not-yet-eligible, fit-missing-for-this-cutoff, fit-partially-populated, fit-missing-for-the-whole-experiment, fit-failed, and fit-valid states.
 - [ ] Preserve a value and an availability mask for each `pfo-sec_*` parameter; missingness is not a numeric zero.
 - [ ] Define the six target names and ordering in one shared contract.
 - [x] Pass `q_0` through from the first observation, exclude it from learned targets, and retain it in the six-value output vector for ODE compatibility.

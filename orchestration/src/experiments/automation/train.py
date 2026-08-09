@@ -25,6 +25,8 @@ from visualize import generate_all_visualizations
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL_DIR = Path(__file__).parent / "models"
+DEFAULT_DATA_ROOT = r"X:\peakFit"
+DEFAULT_EXCLUDE_FOLDERS = ["test", "nn1120-4_pd_ceo2_000"]
 
 
 if __name__ == "__main__":
@@ -42,15 +44,59 @@ if __name__ == "__main__":
         choices=["shared", "separate"],
         help="Training strategy (default: model-specific; separate for random_forest, shared for lightgbm/partial_bnn)",
     )
+    parser.add_argument(
+        "--data-root",
+        default=DEFAULT_DATA_ROOT,
+        help=f"Raw data root (default: {DEFAULT_DATA_ROOT})",
+    )
+    parser.add_argument(
+        "--exclude-folder",
+        dest="exclude_folders",
+        action="append",
+        default=None,
+        help="Folder substring to exclude; may be repeated.",
+    )
+    parser.add_argument(
+        "--dataset-output-dir",
+        default=None,
+        help="Directory for saved X/y dataset artifacts.",
+    )
+    parser.add_argument(
+        "--model-dir",
+        default=None,
+        help="Directory for the saved model artifact.",
+    )
+    parser.add_argument(
+        "--visualization-dir",
+        default=None,
+        help="Directory for generated visualizations.",
+    )
+    parser.add_argument(
+        "--skip-visualizations",
+        action="store_true",
+        help="Skip diagnostic visualization generation.",
+    )
     args = parser.parse_args()
+
+    exclude_folders = (
+        args.exclude_folders
+        if args.exclude_folders is not None
+        else DEFAULT_EXCLUDE_FOLDERS
+    )
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     print("=== Building dataset ===")
-    dataset = build_dataset(force_refresh=False)
+    print(f"Data root: {args.data_root}")
+    print(f"Excluded folders: {exclude_folders}")
+    dataset = build_dataset(
+        data_root=args.data_root,
+        force_refresh=False,
+        exclude_folders=exclude_folders,
+    )
 
     print("\n=== Saving dataset ===")
-    save_dir = save_dataset(dataset)
+    save_dir = save_dataset(dataset, output_dir=args.dataset_output_dir)
 
     print("\n=== Splitting dataset ===")
     splits = prepare_splits(dataset.X, dataset.y)
@@ -74,14 +120,22 @@ if __name__ == "__main__":
         feature_names=list(dataset.X.columns),
         target_names=list(dataset.y.columns),
         model_name=args.model,
+        model_dir=args.model_dir,
     )
     print(f"Model saved to: {model_path}")
 
-    print("\n=== Generating visualizations ===")
-    viz_paths = generate_all_visualizations(
-        dataset.y, trained_model, list(dataset.X.columns), splits.X_test,
-    )
-    print(f"Generated {len(viz_paths)} visualizations")
+    if args.skip_visualizations:
+        print("\n=== Skipping visualizations ===")
+    else:
+        print("\n=== Generating visualizations ===")
+        viz_paths = generate_all_visualizations(
+            dataset.y,
+            trained_model,
+            list(dataset.X.columns),
+            splits.X_test,
+            output_dir=args.visualization_dir,
+        )
+        print(f"Generated {len(viz_paths)} visualizations")
 
     print("\n=== Summary ===")
     print(f"Model: {args.model}")

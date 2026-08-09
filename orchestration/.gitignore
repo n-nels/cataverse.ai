@@ -24,5 +24,6 @@ legacy/
 
 # files & folders
 src/experiments/automation/outputs/
+src/experiments/automation/sequential_forecasting/artifacts/
 # src/experiments/automation/notebooks/
 src/experiments/automation/models/*.joblib
