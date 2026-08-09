@@ -14,16 +14,16 @@ if str(AUTOMATION_DIR) not in sys.path:
 
 from extract import ExperimentRecord  # noqa: E402
 from load import Dataset, DatasetSplit  # noqa: E402
-from sequential_forecasting.data import TARGET_COLUMNS  # noqa: E402
-from sequential_forecasting.phase0 import (  # noqa: E402
+from sequential_forecasting.data.contract import TARGET_COLUMNS  # noqa: E402
+from sequential_forecasting.config import (  # noqa: E402
     DEFAULT_EXCLUDE_FOLDERS,
-    Phase0Config,
-    _assignment_table,
+    RunConfig,
 )
+from sequential_forecasting.rf.splits import assignment_table  # noqa: E402
 
 
-def test_phase0_config_contains_shared_selection_contract():
-    config = Phase0Config()
+def test_run_config_contains_shared_selection_contract():
+    config = RunConfig()
 
     assert config.data_root == r"X:\peakFit"
     assert config.exclude_folders == DEFAULT_EXCLUDE_FOLDERS
@@ -56,7 +56,7 @@ def test_assignment_table_persists_one_partition_per_experiment(tmp_path):
         y_test=targets.iloc[[2]],
     )
 
-    assignments = _assignment_table(splits, dataset)
+    assignments = assignment_table(splits, dataset)
 
     assert assignments["base_name"].tolist() == names
     assert assignments["assignment"].tolist() == ["train", "validation", "test"]

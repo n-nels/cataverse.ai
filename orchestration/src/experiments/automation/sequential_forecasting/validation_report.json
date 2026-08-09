@@ -1,0 +1,37 @@
+{
+  "valid": true,
+  "source": "artifacts/sequential_forecasting/contract_validation/validation_report.json",
+  "data_root": "X:\\peakFit",
+  "exclude_folders": [
+    "test",
+    "nn1120-4_pd_ceo2_000"
+  ],
+  "dataset_fingerprint": "ab2c62c60bc8947dbe127d5a79cc377b1e3a5de2bd7067b99ec9b7fbfe085ce09aaf3476196200b82e8a61c946b2e3ff6bc18fa74200c92b302d669d85c67afe",
+  "split_fingerprint": "df61c7f2af47257a4673ecd9f3c3ac34fd364c9994911444ab97e18c2dd619b2",
+  "experiment_count": 243,
+  "cutoff_count": 12013,
+  "raw_monomer_rows": 18995,
+  "flattened_observations": 12014,
+  "collision_count": 5281,
+  "complete_fit_rows": 10645,
+  "reference_status_counts": {
+    "fit_valid": 236,
+    "successful_no_adsorption": 7
+  },
+  "fit_status_counts": {
+    "fit_not_yet_eligible": 706,
+    "fit_missing_for_cutoff": 434,
+    "fit_partially_populated": 0,
+    "fit_missing_for_whole_experiment": 0,
+    "fit_failed": 0,
+    "fit_valid": 10645,
+    "successful_no_adsorption": 228
+  },
+  "assignment_counts": {
+    "train": 155,
+    "validation": 39,
+    "test": 49
+  },
+  "partitions_disjoint": true,
+  "failures": []
+}

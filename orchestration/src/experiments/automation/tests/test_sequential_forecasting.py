@@ -12,18 +12,18 @@ AUTOMATION_DIR = Path(__file__).resolve().parent.parent
 if str(AUTOMATION_DIR) not in sys.path:
     sys.path.insert(0, str(AUTOMATION_DIR))
 
-from sequential_forecasting.data import (  # noqa: E402
-    TARGET_COLUMNS,
+from sequential_forecasting.data.contract import TARGET_COLUMNS  # noqa: E402
+from sequential_forecasting.data.observations import (  # noqa: E402
     extract_reference_target,
     flatten_monomer_rows,
 )
-from sequential_forecasting.examples import (  # noqa: E402
+from sequential_forecasting.data.examples import (  # noqa: E402
     FIT_MISSING_FOR_CUTOFF,
     FIT_NOT_YET_ELIGIBLE,
     FIT_VALID,
     build_sequential_examples,
 )
-from sequential_forecasting.ode import (  # noqa: E402
+from sequential_forecasting.models.secondary_pfo import (  # noqa: E402
     SecondaryPfoParameters,
     build_cutoff_forecast,
     remaining_curve_rmse,

@@ -179,13 +179,13 @@ folder names at startup.
 
 ## 3d. Implementation Evidence (2026-08-08)
 
-- `sequential_forecasting/data.py` filters to `monomer_sum`, merges timestamps
+- `sequential_forecasting/data/observations.py` filters to `monomer_sum`, merges timestamps
   within `1e-3` seconds, retains the last source row, and returns structured
   collision records.
-- `sequential_forecasting/examples.py` creates one prefix-only example per
+- `sequential_forecasting/data/examples.py` creates one prefix-only example per
   flattened cutoff, preserves reference-target provenance, passes through the
   first-observation `q_0`, and records intermediate-fit masks/statuses.
-- `sequential_forecasting/ode.py` provides local secondary-PFO fitting,
+- `sequential_forecasting/models/secondary_pfo.py` provides local secondary-PFO fitting,
   full-trajectory cutoff forecasting, and strict post-cutoff RMSE.
 - Focused tests pass (`9 passed`). A real-data smoke check produced 73
   leakage-safe examples from a fitted experiment and retained a successful
@@ -198,6 +198,49 @@ folder names at startup.
 - RF prediction coverage is complete: 194 out-of-fold predictions for
   train/validation experiments and 49 held-out-test predictions. No
   in-sample predictions are used for sequential training inputs.
+- Phase 1 is validated by `data_contract.md`, `data/validation.py`, and
+  `validation_report.json` plus the reproducible
+  `artifacts/phase0/phase1/validation_report.json`. The real-data report is
+  valid with 243 experiments, 12,013 cutoff examples, 5,281 collision
+  clusters, 236 complete-fit references, 7 successful-no-adsorption
+  references, and no validation failures. It records 17 currently accepted
+  records under the configured excluded folder inventory.
+
+## 3e. Package Organization (2026-08-09)
+
+The package is organized by responsibility rather than project milestone:
+
+```text
+sequential_forecasting/
+├── config.py
+├── cli.py
+├── data/
+│   ├── contract.py
+│   ├── observations.py
+│   ├── examples.py
+│   └── validation.py
+├── models/
+│   └── secondary_pfo.py
+└── rf/
+    ├── provenance.py
+    ├── splits.py
+    ├── predictions.py
+    └── artifacts.py
+```
+
+Generated artifacts default to `automation/artifacts/sequential_forecasting/`
+and are excluded from source control. The command-line preparation commands
+are `rf-artifacts` and `validate-contract`. No source modules or tests use
+`phase0.py` or `phase1.py` names.
+
+This directory structure is a working organizational plan, not a permanent
+API or architectural constraint. At the end of every successful phase, review
+the package boundaries, module responsibilities, import relationships, and
+artifact locations before beginning the next phase. If the implementation has
+revealed a clearer separation of concerns, update this section and migrate the
+package while the change is still small. Do not preserve a structure merely
+because an earlier phase used it; staying organized is an explicit project
+requirement.
 
 ## 4. Phase 0: Establish Provenance
 
@@ -227,32 +270,32 @@ Goal: define one canonical representation of an experiment and its valid
 cutoffs without changing upstream ETL behavior.
 
 - [x] Define the canonical experiment ID initially as `ExperimentRecord.base_name`, linked to its paired `CarbonylPeakArea.csv` path; verify this mapping during Phase 0.
-- [ ] Define the observation table fields, units, ordering, duplicate policy, and missing-value policy.
+- [x] Define the observation table fields, units, ordering, duplicate policy, and missing-value policy.
 - [x] Filter the sequential source to `Peak_Name == "monomer_sum"` and assert that no other peak enters an example or metric.
-- [ ] Inspect every representation of `Delta_Group` in CSVs, indexes, joins, caches, and generated fit tables.
+- [x] Inspect every representation of `Delta_Group` in CSVs, indexes, joins, caches, and generated fit tables.
 - [x] Define and document the flattening operation across `Delta_Group`.
 - [x] Quantify whether flattening creates duplicate `(experiment, time)` rows and define a deterministic resolution rule that does not aggregate artificial copies into extra experimental weight.
-- [ ] Verify that flattened rows do not duplicate the complete-series reference target.
-- [ ] Verify that flattening cannot place records from one underlying experiment into different partitions.
+- [x] Verify that flattened rows do not duplicate the complete-series reference target.
+- [x] Verify that flattening cannot place records from one underlying experiment into different partitions.
 - [x] Define the known final time and how it is linked to each experiment.
 - [x] Define valid cutoff points from observed measurements, including irregular schedules and repeated timestamps.
-- [ ] Define the minimum number of observations required for the first ODE fit as configuration, not a hidden constant.
+- [x] Define the minimum number of observations required for the first ODE fit as configuration, not a hidden constant.
 - [x] Define the representation of failed, missing, non-finite, and unavailable intermediate fits.
 - [x] Distinguish fit-not-yet-eligible, fit-missing-for-this-cutoff, fit-partially-populated, fit-missing-for-the-whole-experiment, fit-failed, and fit-valid states.
-- [ ] Preserve a value and an availability mask for each `pfo-sec_*` parameter; missingness is not a numeric zero.
-- [ ] Define the six target names and ordering in one shared contract.
+- [x] Preserve a value and an availability mask for each `pfo-sec_*` parameter; missingness is not a numeric zero.
+- [x] Define the six target names and ordering in one shared contract.
 - [x] Pass `q_0` through from the first observation, exclude it from learned targets, and retain it in the six-value output vector for ODE compatibility.
-- [ ] Document parameter units, ranges, positivity requirements, relationships, invalid combinations, and solver stability limits.
+- [x] Document parameter units, ranges, positivity requirements, relationships, invalid combinations, and solver stability limits.
 
 Required validation checks:
 
-- [ ] Every example has exactly one underlying experiment ID and one cutoff ID.
-- [ ] Cutoff observations are sorted and contain no observation after the cutoff.
-- [ ] The reference target comes only from the complete series.
-- [ ] `q_0` in every example equals the first valid `Cumulative_Peak_Area` observation and is never learned from later observations.
-- [ ] Intermediate fit data at cutoff `t` uses only observations at or before `t`.
-- [ ] The final-time row is not used as a feature at earlier cutoffs.
-- [ ] The number of examples, experiments, cutoffs, duplicate rows, failed fits, and excluded records is reported.
+- [x] Every example has exactly one underlying experiment ID and one cutoff ID.
+- [x] Cutoff observations are sorted and contain no observation after the cutoff.
+- [x] The reference target comes only from the complete series.
+- [x] `q_0` in every example equals the first valid `Cumulative_Peak_Area` observation and is never learned from later observations.
+- [x] Intermediate fit data at cutoff `t` uses only observations at or before `t`.
+- [x] The final-time row is not used as a feature at earlier cutoffs.
+- [x] The number of examples, experiments, cutoffs, duplicate rows, failed fits, and excluded records is reported.
 
 Exit criteria:
 
@@ -512,3 +555,24 @@ Until these items are resolved, an implementation agent may perform read-only
 discovery and fixture-based work, but must not silently finalize duplicate
 handling, final-time derivation, official curve scoring, or additional physical
 constraints.
+
+## 17. Follow-up Note: Repeated Observation Times
+
+The repeated `Time (s)` values across `Delta_Group` appear to be an expected
+property of the source data rather than an accidental corruption. The Phase 1
+audit found repeated timestamps in all 243 included experiments, with 5,281
+timestamp clusters after applying the configured `1e-3` second tolerance.
+Several clusters contain different `Cumulative_Peak_Area` values, and at least
+one observed cluster contains different stored intermediate-fit values.
+
+The current sequential contract uses the existing writer-compatible
+`keep="last"` rule and logs every collision, but this should be considered a
+provisional modeling choice rather than proof that the other rows are invalid.
+Before adding model complexity, revisit whether these rows represent expected
+parallel/overlapping traces and whether a future version should preserve their
+variation, model it explicitly, or apply a scientifically justified aggregation
+instead of selecting one row. Any such change must be evaluated for experiment
+weighting, target duplication, cutoff definition, and leakage consequences.
+
+Work is paused after Phase 1 pending further direction on this repeated-time
+behavior.

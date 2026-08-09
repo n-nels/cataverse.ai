@@ -7,12 +7,14 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .data import (
+from .contract import (
     AREA_COLUMN,
     DEFAULT_TIME_TOLERANCE_S,
     TARGET_COLUMNS,
     TIME_COLUMN,
     TimestampCollision,
+)
+from .observations import (
     flatten_monomer_rows,
     reference_target_from_flattened,
 )
