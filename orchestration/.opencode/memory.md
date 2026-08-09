@@ -5,7 +5,7 @@ description: Capture meeting minutes
 
 ## Sequential Forecasting Handoff
 
-- Phase 2 is complete and verified. Phase 3 has not started; do not begin it
+- Phase 3 is complete and verified. Phase 4 has not started; do not begin it
   until the owner resumes or requests the next phase.
 - Phase 0 and Phase 1 are complete and validated against 243 experiments from
   `X:\peakFit`, excluding `test` and `nn1120-4_pd_ceo2_000`.
@@ -32,5 +32,8 @@ description: Capture meeting minutes
 - Phase 2 adds the RF-to-sequential adapter and `build-examples` command. A
   real-data smoke check produced 12,013 prefix examples from 243 experiments,
   preserving the 155/39/49 assignments and held-out RF provenance.
+- Phase 3 adds RF-boundary validation and prediction fingerprints. Real-artifact
+  validation passed with 243 assignments, 194 out-of-fold predictions, and 49
+  held-out-test predictions.
 - Focused Phase 2 tests pass: 13 tests. Review package boundaries and update
   the structure after every successful future phase.

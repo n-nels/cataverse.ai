@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import hashlib
 import json
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from load import build_dataset, save_dataset, split_dataset
 from model import load_model
 
 from ..config import RunConfig
+from ..data.contract import TARGET_COLUMNS
 from .predictions import export_predictions
 from .provenance import collect_provenance
 from .splits import assignment_table
@@ -19,6 +21,15 @@ from .splits import assignment_table
 def _write_json(path: Path, value: object) -> None:
     """Write one indented JSON artifact."""
     path.write_text(json.dumps(value, indent=2, default=str) + "\n", encoding="utf-8")
+
+
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest of one artifact file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def build_artifacts(config: RunConfig) -> Path:
@@ -63,7 +74,8 @@ def build_artifacts(config: RunConfig) -> Path:
         folds=config.oof_folds,
         seed=config.split_seed,
     )
-    predictions.to_csv(artifact_dir / "rf_predictions.csv", index=False)
+    prediction_path = artifact_dir / "rf_predictions.csv"
+    predictions.to_csv(prediction_path, index=False)
     _write_json(
         artifact_dir / "prediction_provenance.json",
         {
@@ -72,7 +84,9 @@ def build_artifacts(config: RunConfig) -> Path:
             .value_counts()
             .to_dict(),
             "target_order": model.target_names,
+            "sequential_target_order": list(TARGET_COLUMNS),
             "test_model_excludes_test_experiments": True,
+            "prediction_csv_sha256": _sha256_file(prediction_path),
         },
     )
     return artifact_dir

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -20,6 +22,7 @@ from sequential_forecasting.config import (  # noqa: E402
     RunConfig,
 )
 from sequential_forecasting.rf.splits import assignment_table  # noqa: E402
+from sequential_forecasting.rf.validation import validate_rf_boundary  # noqa: E402
 
 
 def test_run_config_contains_shared_selection_contract():
@@ -61,3 +64,53 @@ def test_assignment_table_persists_one_partition_per_experiment(tmp_path):
     assert assignments["base_name"].tolist() == names
     assert assignments["assignment"].tolist() == ["train", "validation", "test"]
     assert assignments["csv_path"].str.endswith("_CarbonylPeakArea.csv").all()
+
+
+def test_validate_rf_boundary_requires_held_out_prediction_provenance(tmp_path):
+    assignments = pd.DataFrame(
+        {
+            "base_name": ["experiment-a", "experiment-b", "experiment-c"],
+            "assignment": ["train", "validation", "test"],
+            "json_path": ["a.json", "b.json", "c.json"],
+            "csv_path": ["a.csv", "b.csv", "c.csv"],
+        }
+    )
+    assignments.to_csv(tmp_path / "split_assignments.csv", index=False)
+    predictions = pd.DataFrame(
+        {
+            "base_name": ["experiment-a", "experiment-b", "experiment-c"],
+            "prediction_provenance": ["out_of_fold", "out_of_fold", "held_out_test"],
+            "fold_id": [1, 2, None],
+            "training_experiment_count": [1, 1, 1],
+            **{column: [1.0, 2.0, 3.0] for column in TARGET_COLUMNS},
+        }
+    )
+    prediction_path = tmp_path / "rf_predictions.csv"
+    predictions.to_csv(prediction_path, index=False)
+    prediction_hash = hashlib.sha256(prediction_path.read_bytes()).hexdigest()
+    (tmp_path / "prediction_provenance.json").write_text(
+        json.dumps(
+            {
+                "target_order": list(TARGET_COLUMNS),
+                "sequential_target_order": list(TARGET_COLUMNS),
+                "test_model_excludes_test_experiments": True,
+                "prediction_csv_sha256": prediction_hash,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "split_fingerprint.json").write_text(
+        json.dumps({"hash": "split-hash"}), encoding="utf-8"
+    )
+    (tmp_path / "dataset_fingerprint.json").write_text(
+        json.dumps({"hash": "dataset-hash"}), encoding="utf-8"
+    )
+
+    report = validate_rf_boundary(tmp_path)
+
+    assert report["valid"] is True
+    assert report["assignment_counts"] == {"train": 1, "validation": 1, "test": 1}
+    assert report["prediction_provenance_counts"] == {
+        "out_of_fold": 2,
+        "held_out_test": 1,
+    }

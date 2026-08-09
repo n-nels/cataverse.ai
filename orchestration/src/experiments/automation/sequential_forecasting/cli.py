@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from .config import (
@@ -15,6 +16,7 @@ from .config import (
 from .data.adapter import build_examples_from_artifacts, write_examples_artifact
 from .data.validation import run_validation
 from .rf.artifacts import build_artifacts
+from .rf.validation import validate_rf_boundary
 
 
 def main() -> None:
@@ -36,6 +38,10 @@ def main() -> None:
     examples_parser = subparsers.add_parser("build-examples")
     examples_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
     examples_parser.add_argument("--output-dir", default=None)
+
+    boundary_parser = subparsers.add_parser("validate-rf-boundary")
+    boundary_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
+    boundary_parser.add_argument("--output", default=None)
 
     args = parser.parse_args()
     if args.command == "rf-artifacts":
@@ -62,6 +68,11 @@ def main() -> None:
         output_dir = args.output_dir or str(Path(args.artifact_dir) / "examples")
         output = write_examples_artifact(examples, output_dir)
         print(f"Sequential examples written to {output}")
+    elif args.command == "validate-rf-boundary":
+        report = validate_rf_boundary(args.artifact_dir)
+        output = Path(args.output or Path(args.artifact_dir) / "rf_boundary_validation.json")
+        output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(f"RF boundary validation written to {output}")
 
 
 if __name__ == "__main__":

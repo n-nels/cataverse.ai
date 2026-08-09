@@ -1,6 +1,6 @@
 # Sequential Forecasting Implementation Plan
 
-Status: Phase 2 complete; ready for Phase 3
+Status: Phase 3 complete; ready for Phase 4
 
 This is the working north star for implementing the sequential forecasting
 system described in `spec.md`. Future coding sessions should update the
@@ -260,6 +260,20 @@ requirement.
   produced 12,013 examples from 243 experiments with the 155/39/49 assignment
   counts and out-of-fold/held-out-test RF provenance.
 
+## 3g. Phase 3 Implementation Evidence (2026-08-09)
+
+- `rf/validation.py` validates the persisted assignment table, partition
+  disjointness, one-to-one RF prediction coverage, target order, held-out
+  provenance, fold metadata, and train-only test-model coverage.
+- RF artifacts now include a SHA-256 fingerprint for `rf_predictions.csv` and
+  explicitly record both the source RF target order and the sequential target
+  order. The source RF order is allowed to differ; predictions are joined by
+  target name rather than position.
+- The `validate-rf-boundary` command validates the persisted Phase 0 artifacts.
+- Real-artifact validation passed for 243 experiments: 155 train, 39
+  validation, 49 test; 194 out-of-fold predictions and 49 held-out-test
+  predictions, with no failures.
+
 ## 4. Phase 0: Establish Provenance
 
 Goal: make the project reproducible before producing any training examples.
@@ -365,16 +379,16 @@ Exit criteria:
 Goal: preserve leakage protection while making RF inputs realistic at
 deployment time.
 
-- [ ] Capture the RF split object produced by the existing workflow keyed by `base_name`, with train/validation/test assignments.
-- [ ] Reuse those exact RF assignments for every cutoff row; do not create a second split for sequential test evaluation.
-- [ ] Assert that every cutoff for an experiment has the same assignment.
-- [ ] Assert that train, validation, and test experiment IDs are disjoint.
-- [ ] Run `train.py --model random_forest` with the shared RF data root, exclusions, and split configuration.
-- [ ] Export RF predictions by `base_name` from the trained RF artifact and the exact RF split object; the sequential test files must match the RF test files one-to-one.
-- [ ] Use RF predictions from the RF model trained without the test experiments for sequential test inference.
-- [ ] For sequential model training and validation, generate held-out RF predictions with fold-specific RF models that exclude the predicted experiments; do not use in-sample train predictions.
-- [ ] Keep RF model artifacts, fold assignments, prediction provenance, and random seeds with the sequential run artifacts.
-- [ ] Add split and prediction-provenance fingerprints.
+- [x] Capture the RF split object produced by the existing workflow keyed by `base_name`, with train/validation/test assignments.
+- [x] Reuse those exact RF assignments for every cutoff row; do not create a second split for sequential test evaluation.
+- [x] Assert that every cutoff for an experiment has the same assignment.
+- [x] Assert that train, validation, and test experiment IDs are disjoint.
+- [x] Run `train.py --model random_forest` with the shared RF data root, exclusions, and split configuration.
+- [x] Export RF predictions by `base_name` from the trained RF artifact and the exact RF split object; the sequential test files must match the RF test files one-to-one.
+- [x] Use RF predictions from the RF model trained without the test experiments for sequential test inference.
+- [x] For sequential model training and validation, generate held-out RF predictions with fold-specific RF models that exclude the predicted experiments; do not use in-sample train predictions.
+- [x] Keep RF model artifacts, fold assignments, prediction provenance, and random seeds with the sequential run artifacts.
+- [x] Add split and prediction-provenance fingerprints.
 
 Exit criteria:
 
@@ -600,10 +614,10 @@ baseline and required model comparisons are complete.
 
 ## 18. Handoff Notes
 
-The work is intentionally paused after the successful Phase 2 validation and
+The work is intentionally paused after the successful Phase 3 validation and
 package-organization migration. The next agent should begin by reviewing the
-responsibility-based structure in Section 3e, the Phase 2 adapter evidence, and
-the repeated-time note above, not by starting model training.
+responsibility-based structure in Section 3e, the Phase 2/3 evidence, and the
+repeated-time note above, not by starting model training.
 
 The current structure and duplicate policy are working decisions, not fixed
 architecture. Review package boundaries, imports, artifact locations, and test
