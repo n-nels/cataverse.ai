@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from .config import (
     DEFAULT_ARTIFACT_DIR,
@@ -11,6 +12,7 @@ from .config import (
     DEFAULT_MODEL_PATH,
     RunConfig,
 )
+from .data.adapter import build_examples_from_artifacts, write_examples_artifact
 from .data.validation import run_validation
 from .rf.artifacts import build_artifacts
 
@@ -30,6 +32,10 @@ def main() -> None:
     validation_parser = subparsers.add_parser("validate-contract")
     validation_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
     validation_parser.add_argument("--output-dir", default=None)
+
+    examples_parser = subparsers.add_parser("build-examples")
+    examples_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
+    examples_parser.add_argument("--output-dir", default=None)
 
     args = parser.parse_args()
     if args.command == "rf-artifacts":
@@ -51,6 +57,11 @@ def main() -> None:
     elif args.command == "validate-contract":
         output = run_validation(args.artifact_dir, output_dir=args.output_dir)
         print(f"Contract validation written to {output}")
+    elif args.command == "build-examples":
+        examples = build_examples_from_artifacts(args.artifact_dir)
+        output_dir = args.output_dir or str(Path(args.artifact_dir) / "examples")
+        output = write_examples_artifact(examples, output_dir)
+        print(f"Sequential examples written to {output}")
 
 
 if __name__ == "__main__":

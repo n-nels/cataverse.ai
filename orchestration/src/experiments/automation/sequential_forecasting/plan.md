@@ -1,6 +1,6 @@
 # Sequential Forecasting Implementation Plan
 
-Status: discovery and design
+Status: Phase 2 complete; ready for Phase 3
 
 This is the working north star for implementing the sequential forecasting
 system described in `spec.md`. Future coding sessions should update the
@@ -95,6 +95,7 @@ evidence, not substitutes for validating the real dataset.
 - [x] Inspect representative included `CarbonylPeakArea.csv` files and confirm that they already contain rolling `pfo-sec_*` fit columns; early rows are blank until the fit becomes eligible.
 - [x] Confirm that missing `pfo-sec_*` values can persist for part or all of an experiment and must be represented as valid missing-fit data rather than automatic exclusions.
 - [x] Confirm that the sequential workflow should use the existing RF ETL as the curated experiment-selection boundary, with mostly additive time-series fields.
+- [x] Confirm that repeated timestamp rows with different areas are expected measurement variance; preserve the current flattening behavior for the initial baseline while retaining raw rows and collision provenance for later all-data evaluation.
 
 Required data-selection arguments/configuration:
 
@@ -242,6 +243,23 @@ package while the change is still small. Do not preserve a structure merely
 because an earlier phase used it; staying organized is an explicit project
 requirement.
 
+## 3f. Phase 2 Implementation Evidence (2026-08-09)
+
+- `data/adapter.py` builds examples only from the persisted RF split-assignment
+  table, paired source files, and held-out RF prediction table; it does not
+  create a second experiment-selection population.
+- Each serialized example carries its experiment assignment, RF prediction and
+  provenance, source paths, reference-target provenance, progress fields, and
+  per-parameter fit-coverage summary.
+- Prefix observations and current fit values remain cutoff-limited. Historical
+  fit sequences are deferred until a baseline feature representation is
+  selected; no learned preprocessing is applied in this phase.
+- `build-examples` writes `examples.jsonl` and `manifest.json` from the persisted
+  Phase 0 artifacts.
+- Focused Phase 2 tests pass (`13 passed`), and the real-data adapter smoke check
+  produced 12,013 examples from 243 experiments with the 155/39/49 assignment
+  counts and out-of-fold/held-out-test RF provenance.
+
 ## 4. Phase 0: Establish Provenance
 
 Goal: make the project reproducible before producing any training examples.
@@ -308,29 +326,29 @@ Exit criteria:
 Goal: create a reproducible table or serialized structure with one row per
 experiment/cutoff and variable-length histories represented explicitly.
 
-- [ ] Implement the sequential data adapter inside `sequential_forecasting/`, reusing the RF ETL's selected records and curated reference targets rather than creating a parallel experiment-selection path.
-- [ ] Join held-out RF predictions to the canonical experiment ID.
-- [ ] Join raw observations through the current cutoff only.
-- [ ] Join the current intermediate ODE fit and, if selected, prior intermediate fits through the current cutoff only.
-- [ ] Include fit-status and validity indicators instead of silently imputing failed fits as valid values.
-- [ ] Include per-parameter availability masks and an experiment-level coverage summary for `pfo-sec_*` columns.
-- [ ] Do not exclude an experiment merely because one or more intermediate `pfo-sec_*` columns are missing for part or all of its timeline.
-- [ ] Include progress fields only when computable without future information; distinguish observation fraction, elapsed-time fraction, and time remaining.
-- [ ] Attach the complete-series reference target separately from model inputs.
-- [ ] Store an auditable mapping from each example to source files, experiment ID, cutoff time, observation count, fit status, RF prediction provenance, and reference target provenance.
-- [ ] Fit any learned normalization, imputation, dimensionality reduction, or feature selection on training experiments only.
-- [ ] Add tests that deliberately inject future rows and verify they cannot enter earlier examples.
-- [ ] Add tests that verify all cutoffs from one experiment are inseparable during splitting.
-- [ ] Add tests that verify invalid and missing fits are represented and counted.
+- [x] Implement the sequential data adapter inside `sequential_forecasting/`, reusing the RF ETL's selected records and curated reference targets rather than creating a parallel experiment-selection path.
+- [x] Join held-out RF predictions to the canonical experiment ID.
+- [x] Join raw observations through the current cutoff only.
+- [x] Join the current intermediate ODE fit and, if selected, prior intermediate fits through the current cutoff only.
+- [x] Include fit-status and validity indicators instead of silently imputing failed fits as valid values.
+- [x] Include per-parameter availability masks and an experiment-level coverage summary for `pfo-sec_*` columns.
+- [x] Do not exclude an experiment merely because one or more intermediate `pfo-sec_*` columns are missing for part or all of its timeline.
+- [x] Include progress fields only when computable without future information; distinguish observation fraction, elapsed-time fraction, and time remaining.
+- [x] Attach the complete-series reference target separately from model inputs.
+- [x] Store an auditable mapping from each example to source files, experiment ID, cutoff time, observation count, fit status, RF prediction provenance, and reference target provenance.
+- [x] Fit any learned normalization, imputation, dimensionality reduction, or feature selection on training experiments only; no learned preprocessing is used in this phase.
+- [x] Add tests that deliberately inject future rows and verify they cannot enter earlier examples.
+- [x] Add tests that verify all cutoffs from one experiment are inseparable during splitting.
+- [x] Add tests that verify invalid and missing fits are represented and counted.
 
 Candidate initial feature representation:
 
-- [ ] RF prediction vector.
-- [ ] Current ODE parameter vector and fit diagnostics when valid.
+- [x] RF prediction vector.
+- [x] Current ODE parameter vector and fit diagnostics when valid.
 - [ ] Previous ODE parameter vector or compact trajectory summaries when available.
 - [ ] Raw observation summaries through the cutoff, with explicit counts and missingness.
-- [ ] Measurement-time summaries and progress indicators.
-- [ ] Fit-validity and fallback indicators.
+- [x] Measurement-time summaries and progress indicators.
+- [x] Fit-validity indicators (forecast fallback indicators are deferred to the inference phase).
 
 The first version should avoid feeding arbitrary padded histories or the
 original RF static features until the simpler representation has a validated
@@ -537,6 +555,7 @@ untouched test set for selection.
 | 2026-08-07 | Implement ODE behavior locally rather than importing from the sibling repository. | Owner instruction; cross-repository imports are not desired. | Add a local behavior-preserving ODE module with tests for equations, parameter mapping, solver behavior, and failures. |
 | 2026-08-07 | Generate a full trajectory at each cutoff and score only the strict future suffix. | Owner clarification: known observations must remain available and must not be discarded. | Keep the complete forecast trace, use all future observation points for the remaining-curve metric, and use progress percentages only for reporting. |
 | 2026-08-07 | Merge timestamps within `1e-3` seconds and log every collision. | Owner clarification and observed floating-point near-duplicates. | Use a configurable tolerance in the sequential flattening layer and retain the last source row in each collision cluster. |
+| 2026-08-09 | Treat repeated timestamp rows with different areas as valid measurement variance. | Owner clarification: the variation is expected and represents measurement uncertainty. | Keep the current `1e-3`/`keep="last"` behavior for the initial baseline, preserve raw rows and collision provenance, and defer an all-data representation until baseline results are available. |
 
 ## 16. Remaining Questions and Discovery Tasks
 
@@ -545,7 +564,7 @@ The owner clarifications resolve the initial data-root, exclusion, split,
 repository/data discovery or a later owner decision:
 
 1. The coverage audit is complete: seven files have no complete stored fit and 17 have gaps after the first valid fit. Successful fitless files will be retained as explicit zero-target cases; later rolling-fit gaps still need status representation.
-2. Exact and near-duplicate timestamp clusters will use `keep="last"` with collision logging and a default `1e-3` second tolerance.
+2. Exact and near-duplicate timestamp clusters are expected measurement variance. The initial baseline will use `keep="last"` with collision logging and a default `1e-3` second tolerance; raw rows and collision provenance remain available for a later all-data evaluation.
 3. The owner confirmed that final time is the maximum `Time (s)` with all six parameters, with maximum flattened `monomer_sum` time as the successful-no-adsorption fallback.
 4. The owner confirmed the remaining-curve metric: generate the full trajectory at each cutoff and calculate RMSE only on observed points strictly after that cutoff.
 5. The ODE will be implemented locally with matching behavior; no cross-repository import is required.
@@ -566,13 +585,28 @@ Several clusters contain different `Cumulative_Peak_Area` values, and at least
 one observed cluster contains different stored intermediate-fit values.
 
 The current sequential contract uses the existing writer-compatible
-`keep="last"` rule and logs every collision, but this should be considered a
-provisional modeling choice rather than proof that the other rows are invalid.
-Before adding model complexity, revisit whether these rows represent expected
-parallel/overlapping traces and whether a future version should preserve their
-variation, model it explicitly, or apply a scientifically justified aggregation
-instead of selecting one row. Any such change must be evaluated for experiment
+`keep="last"` rule and logs every collision. The owner confirmed that differing
+areas at repeated timestamps are expected measurement variance or uncertainty,
+not invalid rows. This rule is retained as the initial baseline so the first
+system remains comparable to current behavior; the raw rows and collision
+provenance are not discarded and can support a later representation that
+includes all measurements. Any such change must be evaluated for experiment
 weighting, target duplication, cutoff definition, and leakage consequences.
 
-Work is paused after Phase 1 pending further direction on this repeated-time
-behavior.
+Work remains paused after Phase 1 pending an explicit decision to resume. The
+repeated-time behavior no longer blocks the initial baseline: use the current
+flattening policy first, then evaluate all-measurement alternatives after the
+baseline and required model comparisons are complete.
+
+## 18. Handoff Notes
+
+The work is intentionally paused after the successful Phase 2 validation and
+package-organization migration. The next agent should begin by reviewing the
+responsibility-based structure in Section 3e, the Phase 2 adapter evidence, and
+the repeated-time note above, not by starting model training.
+
+The current structure and duplicate policy are working decisions, not fixed
+architecture. Review package boundaries, imports, artifact locations, and test
+organization after each future successful phase. Preserve the protected RF ETL
+and do not treat the current `keep="last"` repeated-time choice as a final
+scientific conclusion without further evidence.

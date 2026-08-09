@@ -39,6 +39,7 @@ class SequentialExample:
     final_time_s: float
     observation_times_s: tuple[float, ...]
     observation_area: tuple[float, ...]
+    observation_count: int
     q_0: float
     current_fit_values: tuple[float | None, ...]
     current_fit_available: tuple[bool, ...]
@@ -48,6 +49,16 @@ class SequentialExample:
     reference_target: tuple[float, ...]
     reference_status: str
     collisions: tuple[TimestampCollision, ...]
+    assignment: str | None = None
+    csv_path: str | None = None
+    json_path: str | None = None
+    rf_prediction: tuple[float, ...] | None = None
+    rf_prediction_provenance: str | None = None
+    reference_provenance: str = ""
+    observation_fraction: float = 0.0
+    elapsed_time_fraction: float = 0.0
+    time_remaining_s: float = 0.0
+    fit_coverage_by_parameter: tuple[float, ...] = ()
 
 
 def _finite_value(value: object) -> float | None:
@@ -96,6 +107,11 @@ def build_sequential_examples(
     successful: bool,
     min_points: int = 4,
     time_tolerance_s: float = DEFAULT_TIME_TOLERANCE_S,
+    assignment: str | None = None,
+    csv_path: str | None = None,
+    json_path: str | None = None,
+    rf_prediction: tuple[float, ...] | None = None,
+    rf_prediction_provenance: str | None = None,
 ) -> tuple[SequentialExample, ...]:
     """Build one prefix example for every valid cutoff.
 
@@ -121,6 +137,17 @@ def build_sequential_examples(
     if timeline.empty:
         raise ValueError("No observations remain through the final time")
 
+    first_time_s = float(timeline[TIME_COLUMN].iloc[0])
+    duration_s = reference.final_time_s - first_time_s
+    fit_coverage = tuple(
+        float(
+            (
+                timeline[column].notna()
+                & np.isfinite(pd.to_numeric(timeline[column], errors="coerce"))
+            ).mean()
+        )
+        for column in TARGET_COLUMNS
+    )
     complete = timeline[list(TARGET_COLUMNS)].notna().all(axis=1)
     complete &= np.isfinite(timeline[list(TARGET_COLUMNS)]).all(axis=1)
     has_complete_fit = bool(complete.any())
@@ -144,6 +171,7 @@ def build_sequential_examples(
                 final_time_s=reference.final_time_s,
                 observation_times_s=times,
                 observation_area=areas,
+                observation_count=len(prefix),
                 q_0=areas[0],
                 current_fit_values=fit_values,
                 current_fit_available=available,
@@ -152,7 +180,31 @@ def build_sequential_examples(
                 fit_rmse=rmse,
                 reference_target=reference.values,
                 reference_status=reference.status,
-                collisions=collisions,
+                collisions=tuple(
+                    collision
+                    for collision in collisions
+                    if collision.time_max_s <= float(row[TIME_COLUMN])
+                ),
+                assignment=assignment,
+                csv_path=csv_path,
+                json_path=json_path,
+                rf_prediction=rf_prediction,
+                rf_prediction_provenance=rf_prediction_provenance,
+                reference_provenance=(
+                    "complete_series_fit"
+                    if reference.status == FIT_VALID
+                    else "successful_no_adsorption_zero_target"
+                ),
+                observation_fraction=(index + 1) / len(timeline),
+                elapsed_time_fraction=(
+                    1.0
+                    if duration_s <= 0
+                    else (float(row[TIME_COLUMN]) - first_time_s) / duration_s
+                ),
+                time_remaining_s=max(
+                    0.0, reference.final_time_s - float(row[TIME_COLUMN])
+                ),
+                fit_coverage_by_parameter=fit_coverage,
             )
         )
     return tuple(examples)

@@ -20,6 +20,7 @@ from sequential_forecasting.data.observations import (  # noqa: E402
 from sequential_forecasting.data.examples import (  # noqa: E402
     FIT_MISSING_FOR_CUTOFF,
     FIT_NOT_YET_ELIGIBLE,
+    FIT_PARTIALLY_POPULATED,
     FIT_VALID,
     build_sequential_examples,
 )
@@ -117,6 +118,45 @@ def test_examples_report_missing_fit_after_eligibility():
     )
 
     assert examples[1].fit_status == FIT_MISSING_FOR_CUTOFF
+
+
+def test_examples_preserve_partial_fit_values_and_availability_mask():
+    frame = _observation_frame().iloc[[0, 2, 3]].reset_index(drop=True)
+    for column in TARGET_COLUMNS:
+        frame[column] = [np.nan, np.nan, 1.0]
+    frame.loc[1, TARGET_COLUMNS[0]] = 0.1
+
+    examples = build_sequential_examples(
+        frame,
+        experiment_id="experiment-3",
+        successful=True,
+        min_points=2,
+    )
+
+    assert examples[1].fit_status == FIT_PARTIALLY_POPULATED
+    assert examples[1].current_fit_values[0] == 0.1
+    assert examples[1].current_fit_available == (True, False, False, False, False, False)
+
+
+def test_collision_provenance_is_limited_to_the_current_prefix():
+    frame = pd.DataFrame(
+        {
+            "Peak_Name": ["monomer_sum"] * 4,
+            "Time (s)": [1.0, 2.0, 2.0005, 3.0],
+            "Cumulative_Peak_Area": [0.1, 0.2, 0.25, 0.3],
+        }
+    )
+    for column in TARGET_COLUMNS:
+        frame[column] = np.nan
+
+    examples = build_sequential_examples(
+        frame,
+        experiment_id="experiment-4",
+        successful=True,
+    )
+
+    assert examples[0].collisions == ()
+    assert len(examples[2].collisions) == 1
 
 
 def test_local_ode_preserves_initial_state_and_handles_duplicate_times():

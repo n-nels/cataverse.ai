@@ -24,6 +24,7 @@ The observation table contains one row per flattened experiment/time cutoff:
 | `Peak_Name` | Selected peak | Always `monomer_sum` |
 | `Time (s)` | Observation/cutoff time | Seconds; ascending |
 | `Cumulative_Peak_Area` | Observed adsorption area | Finite numeric value |
+| `observation_count` | Number of observations in the prefix | Positive integer |
 | `q_0` | Known initial adsorption amount | First flattened observation area |
 | `pfo-sec_*` | Stored intermediate fit values | Value plus availability mask |
 | `pfo-sec_r^2`, `pfo-sec_rmse` | Stored fit diagnostics | Optional finite diagnostics |
@@ -72,6 +73,13 @@ inputs. At inference, the full ODE trajectory is generated for the current
 parameter prediction; known prefix observations are retained, and remaining
 curve RMSE is scored only at observed points with time strictly greater than
 the cutoff.
+
+The Phase 2 serialized example also records the RF prediction and its
+held-out/out-of-fold provenance, the RF assignment, paired source paths,
+reference-target provenance, observation and elapsed-time progress, time
+remaining, and per-parameter fit-availability coverage. The current fit row is
+included as a prefix-only input. Historical fit sequences are deferred until a
+baseline feature representation is selected.
 
 ## Intermediate-fit availability
 
