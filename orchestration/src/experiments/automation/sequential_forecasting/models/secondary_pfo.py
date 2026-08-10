@@ -367,6 +367,10 @@ def build_cutoff_forecast_with_fallback(
     rf_prediction: SecondaryPfoParameters | None,
     final_time_s: float | None = None,
     timeout_seconds: float = 0.1,
+    forecast_cache: dict[
+        tuple[float, tuple[float, ...], tuple[float, ...]],
+        tuple[NDArray[np.float64], NDArray[np.float64]],
+    ] | None = None,
 ) -> ForecastResult:
     """Forecast with sequential, previous-valid, then RF fallback behavior."""
     failures: list[str] = []
@@ -378,14 +382,47 @@ def build_cutoff_forecast_with_fallback(
             continue
         try:
             validate_secondary_pfo_parameters(parameters)
-            forecast = build_cutoff_forecast(
-                time_s,
-                observed_area,
-                cutoff_s,
-                parameters,
-                final_time_s=final_time_s,
-                timeout_seconds=timeout_seconds,
-            )
+            if forecast_cache is None:
+                forecast = build_cutoff_forecast(
+                    time_s,
+                    observed_area,
+                    cutoff_s,
+                    parameters,
+                    final_time_s=final_time_s,
+                    timeout_seconds=timeout_seconds,
+                )
+            else:
+                times = np.asarray(time_s, dtype=float)
+                final_time = float(np.max(times) if final_time_s is None else final_time_s)
+                forecast_times = times[times <= final_time]
+                cache_key = (
+                    final_time,
+                    tuple(float(value) for value in forecast_times),
+                    tuple(float(value) for value in parameters.as_array()),
+                )
+                cached = forecast_cache.get(cache_key)
+                if cached is None:
+                    fresh = build_cutoff_forecast(
+                        time_s,
+                        observed_area,
+                        cutoff_s,
+                        parameters,
+                        final_time_s=final_time_s,
+                        timeout_seconds=timeout_seconds,
+                    )
+                    forecast_cache[cache_key] = (fresh.times_s, fresh.predicted_area)
+                    forecast = fresh
+                else:
+                    cached_times, cached_prediction = cached
+                    if cutoff_s < float(cached_times[0]) or cutoff_s > final_time:
+                        raise ValueError("cutoff_s is outside the forecast timeline")
+                    forecast = CutoffForecast(
+                        cutoff_s=float(cutoff_s),
+                        times_s=cached_times,
+                        predicted_area=cached_prediction,
+                        available_mask=cached_times <= cutoff_s,
+                        remaining_mask=cached_times > cutoff_s,
+                    )
         except (OdeForecastError, ValueError) as error:
             failures.append(f"{source}:{error}")
             continue

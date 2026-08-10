@@ -1,6 +1,6 @@
 # Sequential Forecasting Implementation Plan
 
-Status: Phase 6 complete; ready for Phase 7
+Status: Phase 7 complete; ready for Phase 8
 
 This is the working north star for implementing the sequential forecasting
 system described in `spec.md`. Future coding sessions should update the
@@ -330,6 +330,29 @@ requirement.
   remain intentionally deferred rather than adding complexity without a
   validated gap.
 
+## 3k. Phase 7 Implementation Evidence (2026-08-10)
+
+- `inference.py` loads the persisted model-selection manifest and active learned
+  model when one is selected; the current RF-only selection correctly runs
+  without an active learned model artifact.
+- `run_sequential_inference` processes examples in chronological order, passes
+  only the current prefix areas into forecast validation, and keeps future area
+  values masked while retaining the known time grid through final time.
+- Learned updates are attempted only for `fit_valid` cutoffs. The existing
+  sequential, previous-valid, then RF fallback order is retained, with explicit
+  parameter-validation status, curve status, fallback reason, and provenance in
+  every `InferenceRecord`.
+- The `run-inference` CLI command writes per-cutoff `predictions.jsonl` and an
+  aggregated `manifest.json`.
+- The real-data Phase 7 run produced 12,013 records for 243 experiments. All
+  records used the selected RF-only candidate, had valid full trajectories, and
+  preserved the 155/39/49 experiment assignments.
+- A fixture with irregular times and an induced failed fit verified RF fallback
+  before the first valid learned update and q_0 pass-through. Focused sequential
+  tests pass (`25 passed`).
+- The full automation suite passes 49 tests and skips 1; the existing unrelated
+  `test_get_strategy_default` failure remains unchanged.
+
 ## 4. Phase 0: Establish Provenance
 
 Goal: make the project reproducible before producing any training examples.
@@ -533,22 +556,22 @@ Exit criteria:
 Goal: provide a reproducible cutoff-by-cutoff forecast path for one complete
 experiment.
 
-- [ ] Load the saved model and preprocessing artifacts.
-- [ ] Process measurements in chronological order without looking ahead.
-- [ ] Keep the RF prediction active before the first valid ODE fit.
-- [ ] Update only at eligible cutoffs after a valid intermediate ODE fit.
-- [ ] Return a complete six-parameter vector in the existing ODE-compatible format.
-- [ ] Apply and record physical constraints before curve generation.
-- [ ] Forecast from the current cutoff through the known final time.
-- [ ] Preserve the last valid prediction or RF prediction when an update or integration fails.
-- [ ] Emit one structured record per cutoff containing inputs/provenance, prediction, curve status, fallback status, and errors.
-- [ ] Add an end-to-end test using a small fixture with irregular observations and an induced failed fit.
+- [x] Load the saved model and preprocessing artifacts.
+- [x] Process measurements in chronological order without looking ahead.
+- [x] Keep the RF prediction active before the first valid ODE fit.
+- [x] Update only at eligible cutoffs after a valid intermediate ODE fit.
+- [x] Return a complete six-parameter vector in the existing ODE-compatible format.
+- [x] Apply and record physical constraints before curve generation.
+- [x] Forecast from the current cutoff through the known final time.
+- [x] Preserve the last valid prediction or RF prediction when an update or integration fails.
+- [x] Emit one structured record per cutoff containing inputs/provenance, prediction, curve status, fallback status, and errors.
+- [x] Add an end-to-end test using a small fixture with irregular observations and an induced failed fit.
 
 Exit criteria:
 
-- A single inference run produces a complete, ordered trace from first measurement through final time.
-- No inference record contains future measurements or future fit values.
-- Every eligible cutoff either has a valid update or an explicit fallback reason.
+- [x] A single inference run produces a complete, ordered trace from first measurement through final time.
+- [x] No inference record contains future measurements or future fit values.
+- [x] Every eligible cutoff either has a valid update or an explicit fallback reason.
 
 ## 12. Phase 8: Evaluate and Report
 
@@ -627,6 +650,7 @@ untouched test set for selection.
 | 2026-08-07 | Merge timestamps within `1e-3` seconds and log every collision. | Owner clarification and observed floating-point near-duplicates. | Use a configurable tolerance in the sequential flattening layer and retain the last source row in each collision cluster. |
 | 2026-08-09 | Treat repeated timestamp rows with different areas as valid measurement variance. | Owner clarification: the variation is expected and represents measurement uncertainty. | Keep the current `1e-3`/`keep="last"` behavior for the initial baseline, preserve raw rows and collision provenance, and defer an all-data representation until baseline results are available. |
 | 2026-08-09 | Select RF-only as the active initial sequential candidate. | Ridge correction candidates and RF/ODE baselines were evaluated on 155 training and 39 validation experiments; RF-only scored `0.4996` versus `0.8296` for the best Ridge candidate, with no test use. | Begin Phase 7 inference with RF-only; retain the Ridge implementation and manifest as selection evidence, not as an active learned model. |
+| 2026-08-10 | Complete cutoff-by-cutoff sequential inference with the selected RF-only candidate. | The real-data `run-inference` command produced 12,013 valid records for 243 experiments; the focused suite passed 25 tests, including irregular-time and induced-fit-failure coverage. | Proceed to Phase 8 evaluation and reporting without reopening model selection. |
 
 ## 16. Resolved Decisions and Deferred Discovery
 
@@ -663,17 +687,16 @@ includes all measurements. Any such change must be evaluated for experiment
 weighting, target duplication, cutoff definition, and leakage consequences.
 
 The repeated-time decision no longer blocks the initial baseline and was used
-through Phase 6. The current flattening policy remains the validated initial
+through Phase 7. The current flattening policy remains the validated initial
 choice; evaluate all-measurement alternatives only after the required held-out
 model comparisons are complete.
 
 ## 18. Handoff Notes
 
-Phase 6 is complete after validation of the initial sequential-model candidate.
-The next agent should begin Phase 7 sequential inference by reviewing the
-responsibility-based structure in Section 3e, the Phase 2–6 evidence, and the
-repeated-time note above. Do not reopen model selection before implementing
-inference.
+Phase 7 is complete after the real-data inference run and fallback validation.
+The next agent should begin Phase 8 evaluation and reporting by reviewing the
+responsibility-based structure in Section 3e, the Phase 2–7 evidence, and the
+repeated-time note above. Do not reopen model selection before evaluation.
 
 The current structure and duplicate policy are working decisions, not fixed
 architecture. Review package boundaries, imports, artifact locations, and test

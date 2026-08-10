@@ -19,6 +19,7 @@ from .config import (
 )
 from .data.adapter import build_examples_from_artifacts, write_examples_artifact
 from .data.validation import run_validation
+from .inference import run_inference
 from .sequential_model import DEFAULT_RIDGE_ALPHAS, train_initial_model
 from .rf.artifacts import build_artifacts
 from .rf.validation import validate_rf_boundary
@@ -71,6 +72,12 @@ def main() -> None:
     model_parser.add_argument("--output-dir", default=None)
     model_parser.add_argument("--ridge-alpha", dest="ridge_alphas", action="append", type=float)
     model_parser.add_argument("--ode-timeout-seconds", type=float, default=None)
+
+    inference_parser = subparsers.add_parser("run-inference")
+    inference_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
+    inference_parser.add_argument("--model-dir", default=None)
+    inference_parser.add_argument("--output-dir", default=None)
+    inference_parser.add_argument("--ode-timeout-seconds", type=float, default=None)
 
     args = parser.parse_args()
     if args.command == "rf-artifacts":
@@ -130,6 +137,14 @@ def main() -> None:
             timeout_seconds=args.ode_timeout_seconds,
         )
         print(f"Sequential model artifacts written to {output}")
+    elif args.command == "run-inference":
+        output = run_inference(
+            args.artifact_dir,
+            model_dir=args.model_dir,
+            output_dir=args.output_dir,
+            timeout_seconds=args.ode_timeout_seconds,
+        )
+        print(f"Inference artifacts written to {output}")
 
 
 if __name__ == "__main__":
