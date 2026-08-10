@@ -77,6 +77,17 @@ class CutoffForecast:
     remaining_mask: NDArray[np.bool_]
 
 
+@dataclass(frozen=True)
+class ForecastResult:
+    """Structured forecast result, including fallback provenance."""
+
+    parameters: SecondaryPfoParameters | None
+    forecast: CutoffForecast | None
+    source: str
+    valid: bool
+    fallback_reason: str | None = None
+
+
 def coupled_pfo_odes(
     _time_s: float,
     state: NDArray[np.float64],
@@ -112,6 +123,15 @@ def _validate_parameters(
         upper = max(float(q_guess), 0.0) * 2.0
         if parameters.q_e > upper or parameters.q_inf > upper:
             raise ValueError("q_e and q_inf exceed the fit-dependent upper bound")
+
+
+def validate_secondary_pfo_parameters(
+    parameters: SecondaryPfoParameters,
+    *,
+    q_guess: float | None = None,
+) -> None:
+    """Validate one complete finite parameter vector before ODE use."""
+    _validate_parameters(parameters, q_guess=q_guess)
 
 
 def _sorted_unique_times(
@@ -281,6 +301,104 @@ def fit_secondary_pfo(
     r_squared = 1.0 - ss_residual / ss_total if ss_total > 0.0 else np.nan
     rmse = float(np.sqrt(np.mean(residuals**2)))
     return SecondaryPfoFit(parameters, r_squared, rmse, True)
+
+
+def fit_expanding_prefixes(
+    time_s: Sequence[float],
+    intensity: Sequence[float],
+    *,
+    min_points: int = 4,
+    initial_guess: Sequence[float] | None = None,
+    prior_fit_carry_forward: bool = False,
+    timeout_seconds: float = 0.1,
+) -> tuple[SecondaryPfoFit, ...]:
+    """Fit the secondary-PFO model independently on every expanding prefix."""
+    times = np.asarray(time_s, dtype=float)
+    values = np.asarray(intensity, dtype=float)
+    if times.size != values.size or times.size == 0:
+        raise ValueError("time_s and intensity must have the same non-zero length")
+    if not np.isfinite(times).all() or not np.isfinite(values).all():
+        raise ValueError("time_s and intensity must be finite")
+
+    fits: list[SecondaryPfoFit] = []
+    prior_guess = list(initial_guess) if initial_guess is not None else None
+    for end in range(1, len(times) + 1):
+        fit = fit_secondary_pfo(
+            times[:end],
+            values[:end],
+            min_points=min_points,
+            p0=prior_guess,
+            timeout_seconds=timeout_seconds,
+        )
+        fits.append(fit)
+        if prior_fit_carry_forward and fit.success and fit.parameters is not None:
+            k_a = fit.parameters.k_a
+            k_p_ratio = fit.parameters.k_p / k_a if k_a > 0.0 else 0.0
+            prior_guess = [
+                fit.parameters.k_a,
+                fit.parameters.q_e,
+                fit.parameters.k_s,
+                k_p_ratio,
+                fit.parameters.q_inf,
+            ]
+    return tuple(fits)
+
+
+def _prediction_candidates(
+    candidate: SecondaryPfoParameters | None,
+    previous_valid: SecondaryPfoParameters | None,
+    rf_prediction: SecondaryPfoParameters | None,
+) -> tuple[tuple[str, SecondaryPfoParameters | None], ...]:
+    """Return prediction candidates in the required fallback order."""
+    return (
+        ("sequential", candidate),
+        ("previous_valid", previous_valid),
+        ("rf", rf_prediction),
+    )
+
+
+def build_cutoff_forecast_with_fallback(
+    time_s: Sequence[float],
+    observed_area: Sequence[float],
+    cutoff_s: float,
+    *,
+    candidate: SecondaryPfoParameters | None,
+    previous_valid: SecondaryPfoParameters | None,
+    rf_prediction: SecondaryPfoParameters | None,
+    final_time_s: float | None = None,
+    timeout_seconds: float = 0.1,
+) -> ForecastResult:
+    """Forecast with sequential, previous-valid, then RF fallback behavior."""
+    failures: list[str] = []
+    for source, parameters in _prediction_candidates(
+        candidate, previous_valid, rf_prediction
+    ):
+        if parameters is None:
+            failures.append(f"{source}:unavailable")
+            continue
+        try:
+            validate_secondary_pfo_parameters(parameters)
+            forecast = build_cutoff_forecast(
+                time_s,
+                observed_area,
+                cutoff_s,
+                parameters,
+                final_time_s=final_time_s,
+                timeout_seconds=timeout_seconds,
+            )
+        except (OdeForecastError, ValueError) as error:
+            failures.append(f"{source}:{error}")
+            continue
+        fallback_reason = "; ".join(failures) if failures else None
+        return ForecastResult(parameters, forecast, source, True, fallback_reason)
+
+    return ForecastResult(
+        parameters=None,
+        forecast=None,
+        source="none",
+        valid=False,
+        fallback_reason="; ".join(failures),
+    )
 
 
 def build_cutoff_forecast(

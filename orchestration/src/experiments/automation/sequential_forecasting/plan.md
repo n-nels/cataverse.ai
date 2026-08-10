@@ -1,6 +1,6 @@
 # Sequential Forecasting Implementation Plan
 
-Status: Phase 3 complete; ready for Phase 4
+Status: Phase 4 complete; ready for Phase 5
 
 This is the working north star for implementing the sequential forecasting
 system described in `spec.md`. Future coding sessions should update the
@@ -274,6 +274,20 @@ requirement.
   validation, 49 test; 194 out-of-fold predictions and 49 held-out-test
   predictions, with no failures.
 
+## 3h. Phase 4 Implementation Evidence (2026-08-09)
+
+- The sequential package uses a local secondary-PFO implementation rather than
+  importing the sibling repository. The equation, parameter order, `solve_ivp`
+  `RK45` solver, `rtol=1e-8`, timeout signaling, and initial state are retained.
+- `RunConfig` and the RF-artifact CLI expose minimum fit points, fit mode,
+  timeout, initial guess, and prior-fit carry-forward behavior.
+- `fit_expanding_prefixes` makes prefix-only fitting explicit. Complete finite
+  parameter validation and structured `ForecastResult` fallback provenance are
+  available before curve generation.
+- Focused Phase 4 tests pass (`19 passed`). Numerical smoke fitting on a known
+  six-point curve produced three ineligible prefix statuses followed by three
+  valid fit attempts.
+
 ## 4. Phase 0: Establish Provenance
 
 Goal: make the project reproducible before producing any training examples.
@@ -400,24 +414,24 @@ Exit criteria:
 Goal: use the existing secondary PFO model for intermediate fits and forecast
 curves without changing the scientific implementation silently.
 
-- [ ] Decide whether the sequential package can import the existing ODE API directly or needs a narrow adapter.
-- [ ] If an adapter is needed, preserve the existing equation, parameter mapping, solver method, tolerances, and timeout behavior unless explicitly approved otherwise.
-- [ ] Make minimum fit points, fit mode, initial guesses, and prior-fit carry-forward behavior explicit configuration.
-- [ ] Use `min_points=4` as the initial discovered default because the existing rolling-fit helpers use four points, while keeping it configurable.
-- [ ] Validate that each intermediate fit uses the expanding prefix of observations for its cutoff.
-- [ ] Validate the complete-series fit used as the reference target independently from intermediate fits.
-- [ ] Use the secondary-PFO target order `pfo-sec_k_a_s-1`, `pfo-sec_q_e_au`, `pfo-sec_k_s_s-1`, `pfo-sec_k_p_s-1`, `pfo-sec_q_inf_au`, `pfo-sec_q0_au` when reading and writing fit rows.
-- [ ] Require a complete finite parameter vector before using an intermediate fit as the current-ODE baseline or passing it directly to the ODE; partial fits remain valid source data but are never silently completed.
-- [ ] Allow partial-fit values and their masks as sequential-model inputs only when the selected model explicitly supports them; otherwise use the documented RF/previous-valid fallback.
-- [ ] Enforce the current fitter's candidate bounds: `k_a` and `k_s` in `[0, 0.01]`, `q_e` and `q_inf` in `[0, 2 * q_guess]`, and `k_p_ratio` in `[0, 1]` with `k_p = k_a * k_p_ratio`; no additional owner constraints are currently expected.
-- [ ] Preserve `q_0 = intensity[0]` and the ODE initial state `[q_0, 0.0]` for every fit and forecast.
-- [ ] Treat an update as valid only when the optimizer succeeds, the returned parameters are finite, and ODE integration succeeds with finite states.
-- [ ] Preserve the existing solver behavior for the initial adapter: `solve_ivp`, `RK45`, `rtol=1e-8`, and the current timeout/failure signaling.
-- [ ] Implement parameter validation before ODE integration.
-- [ ] Reject or mark non-finite, physically invalid, and numerically unstable predictions.
-- [ ] Implement fallback behavior: previous valid sequential prediction, then RF prediction, with an explicit fallback reason.
-- [ ] Return structured fit and solver status rather than hiding failures behind zeros or NaNs.
-- [ ] Add numerical tests for valid parameters, invalid parameters, solver failure, duplicate times, and a one-observation `q_0` pass-through.
+- [x] Decide whether the sequential package can import the existing ODE API directly or needs a narrow adapter.
+- [x] If an adapter is needed, preserve the existing equation, parameter mapping, solver method, tolerances, and timeout behavior unless explicitly approved otherwise.
+- [x] Make minimum fit points, fit mode, initial guesses, and prior-fit carry-forward behavior explicit configuration.
+- [x] Use `min_points=4` as the initial discovered default because the existing rolling-fit helpers use four points, while keeping it configurable.
+- [x] Validate that each intermediate fit uses the expanding prefix of observations for its cutoff.
+- [x] Validate the complete-series fit used as the reference target independently from intermediate fits.
+- [x] Use the secondary-PFO target order `pfo-sec_k_a_s-1`, `pfo-sec_q_e_au`, `pfo-sec_k_s_s-1`, `pfo-sec_k_p_s-1`, `pfo-sec_q_inf_au`, `pfo-sec_q0_au` when reading and writing fit rows.
+- [x] Require a complete finite parameter vector before using an intermediate fit as the current-ODE baseline or passing it directly to the ODE; partial fits remain valid source data but are never silently completed.
+- [x] Allow partial-fit values and their masks as sequential-model inputs only when the selected model explicitly supports them; otherwise use the documented RF/previous-valid fallback.
+- [x] Enforce the current fitter's candidate bounds: `k_a` and `k_s` in `[0, 0.01]`, `q_e` and `q_inf` in `[0, 2 * q_guess]`, and `k_p_ratio` in `[0, 1]` with `k_p = k_a * k_p_ratio`; no additional owner constraints are currently expected.
+- [x] Preserve `q_0 = intensity[0]` and the ODE initial state `[q_0, 0.0]` for every fit and forecast.
+- [x] Treat an update as valid only when the optimizer succeeds, the returned parameters are finite, and ODE integration succeeds with finite states.
+- [x] Preserve the existing solver behavior for the initial adapter: `solve_ivp`, `RK45`, `rtol=1e-8`, and the current timeout/failure signaling.
+- [x] Implement parameter validation before ODE integration.
+- [x] Reject or mark non-finite, physically invalid, and numerically unstable predictions.
+- [x] Implement fallback behavior: previous valid sequential prediction, then RF prediction, with an explicit fallback reason.
+- [x] Return structured fit and solver status rather than hiding failures behind zeros or NaNs.
+- [x] Add numerical tests for valid parameters, invalid parameters, solver failure, duplicate times, and a one-observation `q_0` pass-through.
 
 Exit criteria:
 
@@ -614,9 +628,9 @@ baseline and required model comparisons are complete.
 
 ## 18. Handoff Notes
 
-The work is intentionally paused after the successful Phase 3 validation and
+The work is intentionally paused after the successful Phase 4 validation and
 package-organization migration. The next agent should begin by reviewing the
-responsibility-based structure in Section 3e, the Phase 2/3 evidence, and the
+responsibility-based structure in Section 3e, the Phase 2/3/4 evidence, and the
 repeated-time note above, not by starting model training.
 
 The current structure and duplicate policy are working decisions, not fixed

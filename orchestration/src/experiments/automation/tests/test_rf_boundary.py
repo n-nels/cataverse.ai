@@ -19,6 +19,8 @@ from load import Dataset, DatasetSplit  # noqa: E402
 from sequential_forecasting.data.contract import TARGET_COLUMNS  # noqa: E402
 from sequential_forecasting.config import (  # noqa: E402
     DEFAULT_EXCLUDE_FOLDERS,
+    DEFAULT_ODE_FIT_MODE,
+    DEFAULT_ODE_TIMEOUT_SECONDS,
     RunConfig,
 )
 from sequential_forecasting.rf.splits import assignment_table  # noqa: E402
@@ -33,6 +35,9 @@ def test_run_config_contains_shared_selection_contract():
     assert config.minimum_fit_points == 4
     assert config.split_seed == 42
     assert config.target_order == TARGET_COLUMNS
+    assert config.ode_fit_mode == DEFAULT_ODE_FIT_MODE
+    assert config.ode_timeout_seconds == DEFAULT_ODE_TIMEOUT_SECONDS
+    assert config.ode_prior_fit_carry_forward is False
 
 
 def test_assignment_table_persists_one_partition_per_experiment(tmp_path):

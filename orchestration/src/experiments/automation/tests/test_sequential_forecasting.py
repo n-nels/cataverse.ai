@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 AUTOMATION_DIR = Path(__file__).resolve().parent.parent
 if str(AUTOMATION_DIR) not in sys.path:
@@ -25,11 +26,17 @@ from sequential_forecasting.data.examples import (  # noqa: E402
     build_sequential_examples,
 )
 from sequential_forecasting.models.secondary_pfo import (  # noqa: E402
+    OdeForecastError,
+    PARAMETER_NAMES,
     SecondaryPfoParameters,
     build_cutoff_forecast,
+    build_cutoff_forecast_with_fallback,
+    fit_expanding_prefixes,
     remaining_curve_rmse,
     solve_secondary_pfo,
+    validate_secondary_pfo_parameters,
 )
+import sequential_forecasting.models.secondary_pfo as secondary_pfo_module  # noqa: E402
 
 
 def _observation_frame() -> pd.DataFrame:
@@ -170,6 +177,68 @@ def test_local_ode_preserves_initial_state_and_handles_duplicate_times():
     assert p[0] == 0.0
     assert np.isfinite(q).all()
     assert np.isfinite(p).all()
+
+
+def test_ode_contract_order_and_one_observation_q0_passthrough():
+    assert PARAMETER_NAMES == TARGET_COLUMNS
+    parameters = SecondaryPfoParameters(0.001, 1.0, 0.0001, 0.00005, 0.1, 0.7)
+
+    q, p = solve_secondary_pfo([4.0], parameters)
+
+    assert q.tolist() == [0.7]
+    assert p.tolist() == [0.0]
+
+
+def test_ode_rejects_invalid_parameters():
+    with pytest.raises(ValueError, match="k_a"):
+        validate_secondary_pfo_parameters(
+            SecondaryPfoParameters(0.02, 1.0, 0.0001, 0.00005, 0.1, 0.2)
+        )
+
+
+def test_ode_solver_failure_is_structured(monkeypatch):
+    def fail_solver(*_args, **_kwargs):
+        raise RuntimeError("induced failure")
+
+    monkeypatch.setattr(secondary_pfo_module, "solve_ivp", fail_solver)
+
+    with pytest.raises(OdeForecastError, match="solver failed"):
+        solve_secondary_pfo([1.0, 2.0], SecondaryPfoParameters(0.001, 1.0, 0.0001, 0.00005, 0.1, 0.2))
+
+
+def test_expanding_prefix_fits_use_only_current_prefix(monkeypatch):
+    seen_lengths: list[int] = []
+
+    def fake_fit(time_s, intensity, **kwargs):
+        seen_lengths.append(len(time_s))
+        return secondary_pfo_module.SecondaryPfoFit(None, None, None, False, "fit_not_eligible")
+
+    monkeypatch.setattr(secondary_pfo_module, "fit_secondary_pfo", fake_fit)
+
+    fits = fit_expanding_prefixes([1.0, 2.0, 3.0], [0.1, 0.2, 0.3], min_points=2)
+
+    assert len(fits) == 3
+    assert seen_lengths == [1, 2, 3]
+
+
+def test_cutoff_forecast_falls_back_to_previous_valid_prediction():
+    valid = SecondaryPfoParameters(0.001, 1.0, 0.0001, 0.00005, 0.1, 0.2)
+    invalid = SecondaryPfoParameters(0.02, 1.0, 0.0001, 0.00005, 0.1, 0.2)
+
+    result = build_cutoff_forecast_with_fallback(
+        [1.0, 2.0, 3.0],
+        [0.2, 0.3, 0.4],
+        2.0,
+        candidate=invalid,
+        previous_valid=valid,
+        rf_prediction=None,
+    )
+
+    assert result.valid is True
+    assert result.source == "previous_valid"
+    assert result.parameters == valid
+    assert result.forecast is not None
+    assert result.fallback_reason is not None
 
 
 def test_cutoff_forecast_keeps_full_trajectory_but_scores_future_only():

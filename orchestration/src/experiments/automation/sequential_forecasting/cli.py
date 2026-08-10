@@ -10,7 +10,10 @@ from .config import (
     DEFAULT_ARTIFACT_DIR,
     DEFAULT_DATA_ROOT,
     DEFAULT_EXCLUDE_FOLDERS,
+    DEFAULT_MINIMUM_FIT_POINTS,
     DEFAULT_MODEL_PATH,
+    DEFAULT_ODE_FIT_MODE,
+    DEFAULT_ODE_TIMEOUT_SECONDS,
     RunConfig,
 )
 from .data.adapter import build_examples_from_artifacts, write_examples_artifact
@@ -30,6 +33,19 @@ def main() -> None:
     artifact_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
     artifact_parser.add_argument("--model-path", default=str(DEFAULT_MODEL_PATH))
     artifact_parser.add_argument("--oof-folds", type=int, default=5)
+    artifact_parser.add_argument(
+        "--minimum-fit-points", type=int, default=DEFAULT_MINIMUM_FIT_POINTS
+    )
+    artifact_parser.add_argument("--ode-fit-mode", default=DEFAULT_ODE_FIT_MODE)
+    artifact_parser.add_argument(
+        "--ode-timeout-seconds", type=float, default=DEFAULT_ODE_TIMEOUT_SECONDS
+    )
+    artifact_parser.add_argument(
+        "--ode-initial-guess", nargs=5, type=float, default=None
+    )
+    artifact_parser.add_argument(
+        "--ode-prior-fit-carry-forward", action="store_true"
+    )
 
     validation_parser = subparsers.add_parser("validate-contract")
     validation_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
@@ -57,6 +73,15 @@ def main() -> None:
                 artifact_dir=args.artifact_dir,
                 model_path=args.model_path,
                 oof_folds=args.oof_folds,
+                minimum_fit_points=args.minimum_fit_points,
+                ode_fit_mode=args.ode_fit_mode,
+                ode_timeout_seconds=args.ode_timeout_seconds,
+                ode_initial_guess=(
+                    tuple(args.ode_initial_guess)
+                    if args.ode_initial_guess is not None
+                    else None
+                ),
+                ode_prior_fit_carry_forward=args.ode_prior_fit_carry_forward,
             )
         )
         print(f"RF artifacts written to {output}")
