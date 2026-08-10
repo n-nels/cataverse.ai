@@ -1,6 +1,6 @@
 # Sequential Forecasting Implementation Plan
 
-Status: Phase 8 complete; ready for Phase 9
+Status: Phase 9 complete; ready for handoff
 
 This is the working north star for implementing the sequential forecasting
 system described in `spec.md`. Future coding sessions should update the
@@ -377,6 +377,25 @@ requirement.
   50 tests and skips 1; the existing unrelated `test_get_strategy_default`
   failure remains unchanged.
 
+## 3m. Phase 9 Implementation Evidence (2026-08-10)
+
+- `sequential_forecasting/README.md` documents the reproducible RF-artifact,
+  validation, example-building, baseline, model, inference, and final
+  evaluation commands with explicit paths and selection safeguards.
+- The Phase 0 artifact bundle contains the run configuration, dataset/split
+  fingerprints, assignments, RF predictions and provenance, model-selection
+  manifest, inference trace, evaluation report, and generated plots.
+- `provenance.json` records Python and dependency versions plus the exact
+  orchestration and sibling ODE repository revisions. The validated run records
+  commit `b9c1ef07c81b9ef3547adab02ec14b41e2c8a71d` and a dirty working-tree
+  state for both repository entries.
+- The repository ignore rules were verified to exclude raw/generated
+  sequential artifacts, cached predictions, and model artifacts from source
+  control.
+- The focused package verification command documented in the README passes
+  (`26 passed`). The full automation suite passes 50 tests and skips 1; the
+  existing unrelated `test_get_strategy_default` failure remains unchanged.
+
 ## 4. Phase 0: Establish Provenance
 
 Goal: make the project reproducible before producing any training examples.
@@ -623,14 +642,14 @@ Exit criteria:
 
 ## 13. Phase 9: Reproducibility and Handoff
 
-- [ ] Add package-level tests for schema validation, flattening, leakage prevention, split integrity, ODE mapping, fallback behavior, and metric aggregation.
-- [ ] Add a documented training command and inference command with explicit configuration paths.
-- [ ] Save model artifacts, preprocessing artifacts, split assignments, fingerprints, configuration, and dependency/version metadata.
-- [ ] Keep raw data, generated caches, and large model artifacts out of source control unless explicitly requested.
-- [ ] Document the exact source revision used for the sibling ODE implementation.
-- [ ] Document all discovered answers and remaining decisions in this plan.
-- [ ] Mark completed checklist items only after their verification command or artifact is recorded.
-- [ ] Update this plan when implementation decisions materially change the proposed architecture.
+- [x] Add package-level tests for schema validation, flattening, leakage prevention, split integrity, ODE mapping, fallback behavior, and metric aggregation.
+- [x] Add a documented training command and inference command with explicit configuration paths.
+- [x] Save model artifacts, preprocessing artifacts, split assignments, fingerprints, configuration, and dependency/version metadata.
+- [x] Keep raw data, generated caches, and large model artifacts out of source control unless explicitly requested.
+- [x] Document the exact source revision used for the sibling ODE implementation.
+- [x] Document all discovered answers and remaining decisions in this plan.
+- [x] Mark completed checklist items only after their verification command or artifact is recorded.
+- [x] Update this plan when implementation decisions materially change the proposed architecture.
 
 ## 14. Deferred Work
 
@@ -676,6 +695,7 @@ untouched test set for selection.
 | 2026-08-09 | Select RF-only as the active initial sequential candidate. | Ridge correction candidates and RF/ODE baselines were evaluated on 155 training and 39 validation experiments; RF-only scored `0.4996` versus `0.8296` for the best Ridge candidate, with no test use. | Begin Phase 7 inference with RF-only; retain the Ridge implementation and manifest as selection evidence, not as an active learned model. |
 | 2026-08-10 | Complete cutoff-by-cutoff sequential inference with the selected RF-only candidate. | The real-data `run-inference` command produced 12,013 valid records for 243 experiments; the focused suite passed 25 tests, including irregular-time and induced-fit-failure coverage. | Proceed to Phase 8 evaluation and reporting without reopening model selection. |
 | 2026-08-10 | Complete held-out Phase 8 evaluation and reporting. | `evaluate-sequential` scored 2,312 test cutoffs from 49 experiments across all baselines and the selected model, with 2,263 valid remaining curves and test-free selection provenance. | Proceed to Phase 9 reproducibility and handoff; retain RF-only as the frozen candidate. |
+| 2026-08-10 | Complete Phase 9 reproducibility and handoff preparation. | README commands, artifact provenance, package verification coverage, and source-control exclusion checks were verified. | Treat the sequential forecasting implementation as handoff-ready; future changes require new held-out evidence. |
 
 ## 16. Resolved Decisions and Deferred Discovery
 
@@ -718,10 +738,11 @@ model comparisons are complete.
 
 ## 18. Handoff Notes
 
-Phase 8 is complete after the held-out evaluation, report, and plot generation.
-The next agent should begin Phase 9 reproducibility and handoff by reviewing
-the responsibility-based structure in Section 3e, the Phase 2–8 evidence, and
-the repeated-time note above. Do not reopen model selection before handoff.
+Phase 9 is complete and the project is handoff-ready after the reproducibility
+documentation and verification pass. The next agent should review the
+responsibility-based structure in Section 3e, the Phase 2–9 evidence, the
+README commands, and the repeated-time note above. The frozen candidate is
+RF-only; future changes require new held-out evidence.
 
 The current structure and duplicate policy are working decisions, not fixed
 architecture. Review package boundaries, imports, artifact locations, and test
