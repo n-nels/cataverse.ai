@@ -1,6 +1,6 @@
 # Sequential Forecasting Implementation Plan
 
-Status: Phase 5 complete; ready for Phase 6
+Status: Phase 6 complete; ready for Phase 7
 
 This is the working north star for implementing the sequential forecasting
 system described in `spec.md`. Future coding sessions should update the
@@ -324,6 +324,11 @@ requirement.
   not use the 49 test experiments. The candidate manifest records both split
   fingerprints and `test_used_for_selection: false`.
 - Focused Phase 6 tests pass (`23 passed`).
+- Phase 6 completion was re-verified on 2026-08-10 with
+  `python -m pytest tests/test_data_validation.py tests/test_sequential_adapter.py tests/test_rf_boundary.py tests/test_baselines.py tests/test_sequential_forecasting.py tests/test_sequential_model.py -q` (`23 passed`). The persisted model manifest confirms `selected_candidate: rf_only`, `learned_model_selected: false`, 155 training experiments, 39 validation experiments, and `test_used_for_selection: false`.
+- Because RF-only was selected, compact trajectory and sequence-aware candidates
+  remain intentionally deferred rather than adding complexity without a
+  validated gap.
 
 ## 4. Phase 0: Establish Provenance
 
@@ -499,29 +504,29 @@ Exit criteria:
 Goal: select the simplest model that reliably improves held-out validation
 performance over the required baselines.
 
-- [ ] Start with a correction target relative to RF, or an equally simple supervised formulation justified by the data contract.
-- [ ] Use only features available at the current cutoff.
-- [ ] Fit preprocessing on training experiments only.
-- [ ] Begin with data-efficient models appropriate for approximately 240 experiments.
-- [ ] Keep all cutoffs from one experiment together during fitting diagnostics and model selection; do not treat them as independent evidence for partitioning.
-- [ ] Tune only against validation metrics, especially early cutoffs and curve forecasts.
-- [ ] Record each model alternative, configuration, training data fingerprint, and validation result.
-- [ ] Prefer the least complex model that is stable across parameters and progress groups.
-- [ ] Do not add deep sequence models unless simpler models fail for a documented reason.
+- [x] Start with a correction target relative to RF, or an equally simple supervised formulation justified by the data contract.
+- [x] Use only features available at the current cutoff.
+- [x] Fit preprocessing on training experiments only.
+- [x] Begin with data-efficient models appropriate for approximately 240 experiments.
+- [x] Keep all cutoffs from one experiment together during fitting diagnostics and model selection; do not treat them as independent evidence for partitioning.
+- [x] Tune only against validation metrics, especially early cutoffs and curve forecasts.
+- [x] Record each model alternative, configuration, training data fingerprint, and validation result.
+- [x] Prefer the least complex model that is stable across parameters and progress groups.
+- [x] Do not add deep sequence models unless simpler models fail for a documented reason.
 
 Initial candidate order:
 
-- [ ] RF-only and ODE-only sanity checks.
-- [ ] Fixed or learned RF/ODE blend.
-- [ ] Regularized correction model using current-state summaries.
+- [x] RF-only and ODE-only sanity checks.
+- [x] Fixed or learned RF/ODE blend.
+- [x] Regularized correction model using current-state summaries.
 - [ ] Correction model using compact intermediate-fit trajectories.
 - [ ] Sequence-aware model only if the preceding candidates leave a validated gap.
 
 Exit criteria:
 
-- One candidate is selected using training/validation evidence only.
-- Selection evidence includes early, middle, late, parameter-level, and curve-level behavior.
-- The untouched test set remains unopened for model selection.
+- [x] One candidate is selected using training/validation evidence only.
+- [x] Selection evidence includes early, middle, late, parameter-level, and curve-level behavior.
+- [x] The untouched test set remains unopened for model selection.
 
 ## 11. Phase 7: Build Sequential Inference
 
@@ -621,24 +626,23 @@ untouched test set for selection.
 | 2026-08-07 | Generate a full trajectory at each cutoff and score only the strict future suffix. | Owner clarification: known observations must remain available and must not be discarded. | Keep the complete forecast trace, use all future observation points for the remaining-curve metric, and use progress percentages only for reporting. |
 | 2026-08-07 | Merge timestamps within `1e-3` seconds and log every collision. | Owner clarification and observed floating-point near-duplicates. | Use a configurable tolerance in the sequential flattening layer and retain the last source row in each collision cluster. |
 | 2026-08-09 | Treat repeated timestamp rows with different areas as valid measurement variance. | Owner clarification: the variation is expected and represents measurement uncertainty. | Keep the current `1e-3`/`keep="last"` behavior for the initial baseline, preserve raw rows and collision provenance, and defer an all-data representation until baseline results are available. |
+| 2026-08-09 | Select RF-only as the active initial sequential candidate. | Ridge correction candidates and RF/ODE baselines were evaluated on 155 training and 39 validation experiments; RF-only scored `0.4996` versus `0.8296` for the best Ridge candidate, with no test use. | Begin Phase 7 inference with RF-only; retain the Ridge implementation and manifest as selection evidence, not as an active learned model. |
 
-## 16. Remaining Questions and Discovery Tasks
+## 16. Resolved Decisions and Deferred Discovery
 
-The owner clarifications resolve the initial data-root, exclusion, split,
-`q_0`, and primary ODE-source questions. The following items still require
-repository/data discovery or a later owner decision:
+The owner clarifications and Phases 1–6 evidence resolve the initial data-root,
+exclusion, split, `q_0`, duplicate, final-time, curve-scoring, and primary
+ODE-source questions. The following decisions govern Phase 7 and later work:
 
-1. The coverage audit is complete: seven files have no complete stored fit and 17 have gaps after the first valid fit. Successful fitless files will be retained as explicit zero-target cases; later rolling-fit gaps still need status representation.
-2. Exact and near-duplicate timestamp clusters are expected measurement variance. The initial baseline will use `keep="last"` with collision logging and a default `1e-3` second tolerance; raw rows and collision provenance remain available for a later all-data evaluation.
-3. The owner confirmed that final time is the maximum `Time (s)` with all six parameters, with maximum flattened `monomer_sum` time as the successful-no-adsorption fallback.
-4. The owner confirmed the remaining-curve metric: generate the full trajectory at each cutoff and calculate RMSE only on observed points strictly after that cutoff.
-5. The ODE will be implemented locally with matching behavior; no cross-repository import is required.
-6. No additional owner-supplied physical constraints are currently expected; retain the existing fitter bounds and `k_p = k_a * k_p_ratio` relationship unless data or solver behavior reveals a contradiction.
+1. The coverage audit found seven files with no complete stored fit and 17 with gaps after the first valid fit. Successful fitless files remain explicit zero-target cases, and rolling-fit gaps are represented with status and availability fields.
+2. Exact and near-duplicate timestamp clusters are expected measurement variance. The initial implementation uses `keep="last"` with collision logging and a default `1e-3` second tolerance; raw rows and collision provenance remain available for a later all-data evaluation.
+3. Final time is the maximum `Time (s)` with all six finite parameters, with maximum flattened `monomer_sum` time as the successful-no-adsorption fallback.
+4. Remaining-curve RMSE uses the full generated trajectory but scores only observed points strictly after each cutoff.
+5. The ODE is implemented locally with matching behavior; no cross-repository import is used.
+6. No additional owner-supplied physical constraints are currently expected; retain the existing fitter bounds and `k_p = k_a * k_p_ratio` relationship unless later evidence requires reevaluation.
 
-Until these items are resolved, an implementation agent may perform read-only
-discovery and fixture-based work, but must not silently finalize duplicate
-handling, final-time derivation, official curve scoring, or additional physical
-constraints.
+Any change to these decisions requires new validation evidence and must not
+silently alter the protected RF workflow or expose future information.
 
 ## 17. Follow-up Note: Repeated Observation Times
 
@@ -658,17 +662,18 @@ provenance are not discarded and can support a later representation that
 includes all measurements. Any such change must be evaluated for experiment
 weighting, target duplication, cutoff definition, and leakage consequences.
 
-Work remains paused after Phase 1 pending an explicit decision to resume. The
-repeated-time behavior no longer blocks the initial baseline: use the current
-flattening policy first, then evaluate all-measurement alternatives after the
-baseline and required model comparisons are complete.
+The repeated-time decision no longer blocks the initial baseline and was used
+through Phase 6. The current flattening policy remains the validated initial
+choice; evaluate all-measurement alternatives only after the required held-out
+model comparisons are complete.
 
 ## 18. Handoff Notes
 
-The work is intentionally paused after the successful Phase 5 validation and
-package-organization migration. The next agent should begin by reviewing the
-responsibility-based structure in Section 3e, the Phase 2/3/4/5 evidence, and
-the repeated-time note above, not by starting model training.
+Phase 6 is complete after validation of the initial sequential-model candidate.
+The next agent should begin Phase 7 sequential inference by reviewing the
+responsibility-based structure in Section 3e, the Phase 2–6 evidence, and the
+repeated-time note above. Do not reopen model selection before implementing
+inference.
 
 The current structure and duplicate policy are working decisions, not fixed
 architecture. Review package boundaries, imports, artifact locations, and test
