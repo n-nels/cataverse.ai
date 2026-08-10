@@ -19,6 +19,7 @@ from .config import (
 )
 from .data.adapter import build_examples_from_artifacts, write_examples_artifact
 from .data.validation import run_validation
+from .evaluation import run_evaluation
 from .inference import run_inference
 from .sequential_model import DEFAULT_RIDGE_ALPHAS, train_initial_model
 from .rf.artifacts import build_artifacts
@@ -78,6 +79,15 @@ def main() -> None:
     inference_parser.add_argument("--model-dir", default=None)
     inference_parser.add_argument("--output-dir", default=None)
     inference_parser.add_argument("--ode-timeout-seconds", type=float, default=None)
+
+    evaluation_parser = subparsers.add_parser("evaluate-sequential")
+    evaluation_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
+    evaluation_parser.add_argument("--baseline-dir", default=None)
+    evaluation_parser.add_argument("--inference-dir", default=None)
+    evaluation_parser.add_argument("--output-dir", default=None)
+    evaluation_parser.add_argument(
+        "--assignment", choices=("train", "validation", "test"), default="test"
+    )
 
     args = parser.parse_args()
     if args.command == "rf-artifacts":
@@ -145,6 +155,15 @@ def main() -> None:
             timeout_seconds=args.ode_timeout_seconds,
         )
         print(f"Inference artifacts written to {output}")
+    elif args.command == "evaluate-sequential":
+        output = run_evaluation(
+            args.artifact_dir,
+            baseline_dir=args.baseline_dir,
+            inference_dir=args.inference_dir,
+            output_dir=args.output_dir,
+            assignment=args.assignment,
+        )
+        print(f"Evaluation artifacts written to {output}")
 
 
 if __name__ == "__main__":

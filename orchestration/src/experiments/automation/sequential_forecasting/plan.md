@@ -1,6 +1,6 @@
 # Sequential Forecasting Implementation Plan
 
-Status: Phase 7 complete; ready for Phase 8
+Status: Phase 8 complete; ready for Phase 9
 
 This is the working north star for implementing the sequential forecasting
 system described in `spec.md`. Future coding sessions should update the
@@ -353,6 +353,30 @@ requirement.
 - The full automation suite passes 49 tests and skips 1; the existing unrelated
   `test_get_strategy_default` failure remains unchanged.
 
+## 3l. Phase 8 Implementation Evidence (2026-08-10)
+
+- `evaluation.py` evaluates RF-only, current-ODE, RF/ODE-blend, and the frozen
+  selected-model trace on identical experiment/cutoff keys.
+- The evaluator reports official per-target RMSE and R2, aggregate RMSE/R2,
+  normalized RMSE, strict post-cutoff remaining-curve RMSE, progress groups,
+  observation-count groups, observation-fraction groups, elapsed-time groups,
+  and remaining-time groups.
+- Evaluation artifacts include status and fallback counts, constraints,
+  exclusions, model-selection provenance, candidate comparisons, observation
+  trends, a JSON report, Markdown report, and dependency-free SVG plots.
+- The final test evaluation was run only after selection was frozen. It scored
+  2,312 cutoff records from 49 test experiments with 2,263 valid remaining
+  curves. The selected RF-only model matched the RF-only baseline exactly;
+  aggregate parameter RMSE was `0.053561` and remaining-curve RMSE was
+  `0.211242`.
+- The test report found no invalid predictions or selected-model fallbacks. The
+  current-ODE baseline had aggregate parameter RMSE `0.070509` and curve RMSE
+  `0.198760`; the RF/ODE blend had parameter RMSE `0.049513` and curve RMSE
+  `0.215572`.
+- Focused evaluation tests pass (`26 passed`). The full automation suite passes
+  50 tests and skips 1; the existing unrelated `test_get_strategy_default`
+  failure remains unchanged.
+
 ## 4. Phase 0: Establish Provenance
 
 Goal: make the project reproducible before producing any training examples.
@@ -578,24 +602,24 @@ Exit criteria:
 Goal: establish whether sequential information improves parameter and physical
 curve forecasts as the experiment progresses.
 
-- [ ] Evaluate reference-parameter accuracy per target and in an appropriate scale-aware aggregate.
-- [ ] Preserve the project's official RMSE and R2 definitions where applicable; report any additional scale-aware metric separately.
-- [ ] Evaluate remaining-curve accuracy from current cutoff through known final time against the observed remainder.
-- [ ] Report results by observation count, observation fraction, elapsed-time fraction, and time remaining where each is meaningful.
-- [ ] Show early, middle, and late progress groups without assuming identical schedules.
-- [ ] Measure when the candidate first beats RF-only and current-ODE baselines.
-- [ ] Measure whether aggregate accuracy generally improves with more observations without requiring every individual step to improve.
-- [ ] Identify unstable parameters, invalid forecasts, failed fits, fallbacks, and excluded experiments.
-- [ ] Compare parameter accuracy with curve accuracy rather than assuming they are equivalent.
-- [ ] Generate required plots for reference parameters, RF predictions, intermediate fits, sequential predictions, and predicted versus observed remaining curves.
-- [ ] Run the final test evaluation only after the candidate and settings are frozen from validation work.
-- [ ] Write a report containing data exclusions, constraints, fallback behavior, model alternatives, and the validation-based selection reason.
+- [x] Evaluate reference-parameter accuracy per target and in an appropriate scale-aware aggregate.
+- [x] Preserve the project's official RMSE and R2 definitions where applicable; report any additional scale-aware metric separately.
+- [x] Evaluate remaining-curve accuracy from current cutoff through known final time against the observed remainder.
+- [x] Report results by observation count, observation fraction, elapsed-time fraction, and time remaining where each is meaningful.
+- [x] Show early, middle, and late progress groups without assuming identical schedules.
+- [x] Measure when the candidate first beats RF-only and current-ODE baselines.
+- [x] Measure whether aggregate accuracy generally improves with more observations without requiring every individual step to improve.
+- [x] Identify unstable parameters, invalid forecasts, failed fits, fallbacks, and excluded experiments.
+- [x] Compare parameter accuracy with curve accuracy rather than assuming they are equivalent.
+- [x] Generate required plots for reference parameters, RF predictions, intermediate fits, sequential predictions, and predicted versus observed remaining curves.
+- [x] Run the final test evaluation only after the candidate and settings are frozen from validation work.
+- [x] Write a report containing data exclusions, constraints, fallback behavior, model alternatives, and the validation-based selection reason.
 
 Exit criteria:
 
-- All required baselines and the selected model are scored on the same held-out experiment assignments and cutoff definitions.
-- Results can be traced from a metric to an experiment, cutoff, source data, model artifact, and split fingerprint.
-- The final test result is clearly separated from validation-based selection evidence.
+- [x] All required baselines and the selected model are scored on the same held-out experiment assignments and cutoff definitions.
+- [x] Results can be traced from a metric to an experiment, cutoff, source data, model artifact, and split fingerprint.
+- [x] The final test result is clearly separated from validation-based selection evidence.
 
 ## 13. Phase 9: Reproducibility and Handoff
 
@@ -651,6 +675,7 @@ untouched test set for selection.
 | 2026-08-09 | Treat repeated timestamp rows with different areas as valid measurement variance. | Owner clarification: the variation is expected and represents measurement uncertainty. | Keep the current `1e-3`/`keep="last"` behavior for the initial baseline, preserve raw rows and collision provenance, and defer an all-data representation until baseline results are available. |
 | 2026-08-09 | Select RF-only as the active initial sequential candidate. | Ridge correction candidates and RF/ODE baselines were evaluated on 155 training and 39 validation experiments; RF-only scored `0.4996` versus `0.8296` for the best Ridge candidate, with no test use. | Begin Phase 7 inference with RF-only; retain the Ridge implementation and manifest as selection evidence, not as an active learned model. |
 | 2026-08-10 | Complete cutoff-by-cutoff sequential inference with the selected RF-only candidate. | The real-data `run-inference` command produced 12,013 valid records for 243 experiments; the focused suite passed 25 tests, including irregular-time and induced-fit-failure coverage. | Proceed to Phase 8 evaluation and reporting without reopening model selection. |
+| 2026-08-10 | Complete held-out Phase 8 evaluation and reporting. | `evaluate-sequential` scored 2,312 test cutoffs from 49 experiments across all baselines and the selected model, with 2,263 valid remaining curves and test-free selection provenance. | Proceed to Phase 9 reproducibility and handoff; retain RF-only as the frozen candidate. |
 
 ## 16. Resolved Decisions and Deferred Discovery
 
@@ -687,16 +712,16 @@ includes all measurements. Any such change must be evaluated for experiment
 weighting, target duplication, cutoff definition, and leakage consequences.
 
 The repeated-time decision no longer blocks the initial baseline and was used
-through Phase 7. The current flattening policy remains the validated initial
+through Phase 8. The current flattening policy remains the validated initial
 choice; evaluate all-measurement alternatives only after the required held-out
 model comparisons are complete.
 
 ## 18. Handoff Notes
 
-Phase 7 is complete after the real-data inference run and fallback validation.
-The next agent should begin Phase 8 evaluation and reporting by reviewing the
-responsibility-based structure in Section 3e, the Phase 2–7 evidence, and the
-repeated-time note above. Do not reopen model selection before evaluation.
+Phase 8 is complete after the held-out evaluation, report, and plot generation.
+The next agent should begin Phase 9 reproducibility and handoff by reviewing
+the responsibility-based structure in Section 3e, the Phase 2–8 evidence, and
+the repeated-time note above. Do not reopen model selection before handoff.
 
 The current structure and duplicate policy are working decisions, not fixed
 architecture. Review package boundaries, imports, artifact locations, and test
