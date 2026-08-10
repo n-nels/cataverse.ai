@@ -216,6 +216,7 @@ sequential_forecasting/
 ├── config.py
 ├── cli.py
 ├── baselines.py
+├── sequential_model.py
 ├── data/
 │   ├── contract.py
 │   ├── observations.py
@@ -304,6 +305,25 @@ requirement.
   records. Validation selected blend weight `0.5`; all three baselines have
   parameter and remaining-curve results across the test progress groups.
 - Focused baseline/contract tests pass (`21 passed`).
+
+## 3j. Phase 6 Implementation Evidence (2026-08-09)
+
+- `sequential_model.py` implements a regularized Ridge correction to the first
+  five RF parameters. It uses RF predictions, current-fit values and masks,
+  fit diagnostics, prefix observation summaries, progress fields, and fit
+  status flags; `q_0` is passed through and is not learned.
+- Features are standardized using training experiments only, and cutoff rows
+  are weighted so experiments with longer timelines do not dominate fitting.
+- Candidate Ridge alphas `0.01`, `0.1`, `1.0`, `10.0`, and `100.0` were evaluated
+  on validation parameter and curve metrics by progress group. The validation
+  selection score combines overall parameter RMSE with early curve RMSE.
+- The learned Ridge correction was not selected: its best score was `0.8296`,
+  while RF-only scored `0.4996`. RF-only is therefore the selected simplest
+  candidate, and no learned model artifact is treated as active for inference.
+- Selection used 155 training and 39 validation experiments and explicitly did
+  not use the 49 test experiments. The candidate manifest records both split
+  fingerprints and `test_used_for_selection: false`.
+- Focused Phase 6 tests pass (`23 passed`).
 
 ## 4. Phase 0: Establish Provenance
 

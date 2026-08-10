@@ -19,6 +19,7 @@ from .config import (
 )
 from .data.adapter import build_examples_from_artifacts, write_examples_artifact
 from .data.validation import run_validation
+from .sequential_model import DEFAULT_RIDGE_ALPHAS, train_initial_model
 from .rf.artifacts import build_artifacts
 from .rf.validation import validate_rf_boundary
 
@@ -64,6 +65,12 @@ def main() -> None:
     baseline_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
     baseline_parser.add_argument("--output-dir", default=None)
     baseline_parser.add_argument("--ode-timeout-seconds", type=float, default=None)
+
+    model_parser = subparsers.add_parser("train-sequential-model")
+    model_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
+    model_parser.add_argument("--output-dir", default=None)
+    model_parser.add_argument("--ridge-alpha", dest="ridge_alphas", action="append", type=float)
+    model_parser.add_argument("--ode-timeout-seconds", type=float, default=None)
 
     args = parser.parse_args()
     if args.command == "rf-artifacts":
@@ -111,6 +118,18 @@ def main() -> None:
             timeout_seconds=args.ode_timeout_seconds,
         )
         print(f"Baseline artifacts written to {output}")
+    elif args.command == "train-sequential-model":
+        output = train_initial_model(
+            args.artifact_dir,
+            output_dir=args.output_dir,
+            ridge_alphas=(
+                tuple(args.ridge_alphas)
+                if args.ridge_alphas is not None
+                else DEFAULT_RIDGE_ALPHAS
+            ),
+            timeout_seconds=args.ode_timeout_seconds,
+        )
+        print(f"Sequential model artifacts written to {output}")
 
 
 if __name__ == "__main__":

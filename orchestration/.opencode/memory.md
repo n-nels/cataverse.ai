@@ -5,8 +5,8 @@ description: Capture meeting minutes
 
 ## Sequential Forecasting Handoff
 
-- Phase 5 is complete and verified. Phase 6 has not started; do not begin it
-  until the owner resumes or requests the next phase.
+- Phase 6 is complete and verified. Phase 7 has not started. The next agent
+  should begin with sequential inference, not more model selection.
 - Phase 0 and Phase 1 are complete and validated against 243 experiments from
   `X:\peakFit`, excluding `test` and `nn1120-4_pd_ceo2_000`.
 - RF split is 155 train, 39 validation, 49 test. RF predictions include 194
@@ -42,5 +42,18 @@ description: Capture meeting minutes
   artifacts contain 12,013 examples and 36,039 scored baseline records; the
   validation-selected blend weight is 0.5. Focused baseline/contract tests pass:
   21 tests.
+- Phase 6 adds `sequential_model.py`, a training-only-standardized Ridge
+  correction candidate over the first five parameters, with q_0 passed through.
+  Candidate alphas were evaluated on 2,043 validation cutoffs across 39
+  validation experiments, with 155 training experiments and no test usage.
+- The learned Ridge correction was not selected: its best combined score was
+  0.8296 versus 0.4996 for RF-only. RF-only is the selected active candidate for
+  inference. The real selection artifact is under
+  `sequential_forecasting/artifacts/phase0/sequential_model/manifest.json` and
+  records `selected_candidate: rf_only`, `learned_model_selected: false`, and
+  `test_used_for_selection: false`; no learned `model.joblib` is active.
+- The Phase 6 CLI command is `train-sequential-model`. Focused Phase 6 tests pass:
+  23 tests. The full automation suite had 45 passing, 1 skipped, and one
+  pre-existing unrelated failure in `test_get_strategy_default`.
 - Focused Phase 2 tests pass: 13 tests. Review package boundaries and update
   the structure after every successful future phase.
