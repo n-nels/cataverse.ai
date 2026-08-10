@@ -5,7 +5,7 @@ description: Capture meeting minutes
 
 ## Sequential Forecasting Handoff
 
-- Phase 4 is complete and verified. Phase 5 has not started; do not begin it
+- Phase 5 is complete and verified. Phase 6 has not started; do not begin it
   until the owner resumes or requests the next phase.
 - Phase 0 and Phase 1 are complete and validated against 243 experiments from
   `X:\peakFit`, excluding `test` and `nn1120-4_pd_ceo2_000`.
@@ -38,5 +38,9 @@ description: Capture meeting minutes
 - Phase 4 adds explicit local secondary-PFO prefix fitting, parameter
   validation, solver-status handling, and sequential/previous-valid/RF fallback
   provenance. Focused Phase 4 tests pass: 19 tests.
+- Phase 5 adds RF-only, current-ODE, and RF/ODE-blend baselines. Real-data
+  artifacts contain 12,013 examples and 36,039 scored baseline records; the
+  validation-selected blend weight is 0.5. Focused baseline/contract tests pass:
+  21 tests.
 - Focused Phase 2 tests pass: 13 tests. Review package boundaries and update
   the structure after every successful future phase.

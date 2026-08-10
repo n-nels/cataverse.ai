@@ -1,6 +1,6 @@
 # Sequential Forecasting Implementation Plan
 
-Status: Phase 4 complete; ready for Phase 5
+Status: Phase 5 complete; ready for Phase 6
 
 This is the working north star for implementing the sequential forecasting
 system described in `spec.md`. Future coding sessions should update the
@@ -215,6 +215,7 @@ The package is organized by responsibility rather than project milestone:
 sequential_forecasting/
 ├── config.py
 ├── cli.py
+├── baselines.py
 ├── data/
 │   ├── contract.py
 │   ├── observations.py
@@ -287,6 +288,22 @@ requirement.
 - Focused Phase 4 tests pass (`19 passed`). Numerical smoke fitting on a known
   six-point curve produced three ineligible prefix statuses followed by three
   valid fit attempts.
+
+## 3i. Phase 5 Implementation Evidence (2026-08-09)
+
+- `baselines.py` implements RF-only, current-valid-ODE, and RF/ODE-blend
+  baselines with shared cutoffs, target ordering, q_0 pass-through, parameter
+  validation, and strict post-cutoff curve scoring.
+- Current-ODE fallback is the held-out RF prediction when the current stored fit
+  is unavailable or invalid. The blend weight is selected on validation
+  examples only; the tested candidate weights were `0.0`, `0.25`, `0.5`, `0.75`,
+  and `1.0`.
+- `evaluate-baselines` writes per-example `predictions.jsonl` and aggregated
+  `manifest.json` results by assignment and early/middle/late progress group.
+- Real-data Phase 5 artifacts contain 12,013 examples and 36,039 baseline
+  records. Validation selected blend weight `0.5`; all three baselines have
+  parameter and remaining-curve results across the test progress groups.
+- Focused baseline/contract tests pass (`21 passed`).
 
 ## 4. Phase 0: Establish Provenance
 
@@ -444,13 +461,13 @@ Exit criteria:
 Goal: establish the value of incoming time-series information before selecting
 a sequential model.
 
-- [ ] Baseline A: use the held-out RF prediction unchanged at every cutoff.
-- [ ] Baseline B: use the current valid ODE fit as the final-parameter prediction.
-- [ ] Define the fallback for Baseline B when no valid fit exists.
-- [ ] Baseline C: implement a simple RF/ODE blend or correction with parameters selected on training/validation experiments only.
-- [ ] Ensure all three baselines use identical experiment splits, cutoffs, target ordering, parameter validation, and curve scoring.
-- [ ] Save per-example predictions and status for every baseline.
-- [ ] Report parameter metrics and remaining-curve metrics by progress group.
+- [x] Baseline A: use the held-out RF prediction unchanged at every cutoff, with the known first-observation `q_0` pass-through.
+- [x] Baseline B: use the current valid ODE fit as the final-parameter prediction.
+- [x] Define the fallback for Baseline B when no valid fit exists.
+- [x] Baseline C: implement a simple RF/ODE blend or correction with parameters selected on training/validation experiments only.
+- [x] Ensure all three baselines use identical experiment splits, cutoffs, target ordering, parameter validation, and curve scoring.
+- [x] Save per-example predictions and status for every baseline.
+- [x] Report parameter metrics and remaining-curve metrics by progress group.
 
 Exit criteria:
 
@@ -628,10 +645,10 @@ baseline and required model comparisons are complete.
 
 ## 18. Handoff Notes
 
-The work is intentionally paused after the successful Phase 4 validation and
+The work is intentionally paused after the successful Phase 5 validation and
 package-organization migration. The next agent should begin by reviewing the
-responsibility-based structure in Section 3e, the Phase 2/3/4 evidence, and the
-repeated-time note above, not by starting model training.
+responsibility-based structure in Section 3e, the Phase 2/3/4/5 evidence, and
+the repeated-time note above, not by starting model training.
 
 The current structure and duplicate policy are working decisions, not fixed
 architecture. Review package boundaries, imports, artifact locations, and test

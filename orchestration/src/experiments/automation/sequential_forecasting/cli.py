@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .baselines import run_baselines
 from .config import (
     DEFAULT_ARTIFACT_DIR,
     DEFAULT_DATA_ROOT,
@@ -59,6 +60,11 @@ def main() -> None:
     boundary_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
     boundary_parser.add_argument("--output", default=None)
 
+    baseline_parser = subparsers.add_parser("evaluate-baselines")
+    baseline_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
+    baseline_parser.add_argument("--output-dir", default=None)
+    baseline_parser.add_argument("--ode-timeout-seconds", type=float, default=None)
+
     args = parser.parse_args()
     if args.command == "rf-artifacts":
         excludes = (
@@ -98,6 +104,13 @@ def main() -> None:
         output = Path(args.output or Path(args.artifact_dir) / "rf_boundary_validation.json")
         output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         print(f"RF boundary validation written to {output}")
+    elif args.command == "evaluate-baselines":
+        output = run_baselines(
+            args.artifact_dir,
+            output_dir=args.output_dir,
+            timeout_seconds=args.ode_timeout_seconds,
+        )
+        print(f"Baseline artifacts written to {output}")
 
 
 if __name__ == "__main__":
