@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ForceGraphMethods } from "react-force-graph-2d";
+import { colorForLabels } from "@/lib/labelColors";
 
 // react-force-graph-2d draws to a <canvas>, which doesn't exist during
 // server-side rendering — load it only in the browser.
@@ -10,13 +11,13 @@ const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
   ssr: false,
 });
 
-type GraphNode = {
+export type GraphNode = {
   id: string;
   labels: string[];
   properties: Record<string, unknown>;
 };
 
-type GraphLink = {
+export type GraphLink = {
   id: string;
   source: string;
   target: string;
@@ -24,28 +25,16 @@ type GraphLink = {
   properties: Record<string, unknown>;
 };
 
-type GraphData = {
+export type GraphData = {
   nodes: GraphNode[];
   links: GraphLink[];
 };
 
-const LABEL_COLORS: Record<string, string> = {
-  KineticChain: "#f97316",
-  Material: "#22c55e",
-  Filename: "#a1a1aa",
-  Pretreatment: "#eab308",
-  ChemConcept: "#8b5cf6",
-  ExpConditions: "#0ea5e9",
-  AdsParams: "#ec4899",
-  KineticModel: "#ef4444",
-};
-const FALLBACK_COLOR = "#71717a";
-
-function colorForNode(node: GraphNode): string {
-  return LABEL_COLORS[node.labels[0]] ?? FALLBACK_COLOR;
-}
-
-export default function GraphView() {
+export default function GraphView({
+  onData,
+}: {
+  onData?: (data: GraphData) => void;
+}) {
   const [data, setData] = useState<GraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
@@ -57,8 +46,12 @@ export default function GraphView() {
         if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         return res.json();
       })
-      .then(setData)
+      .then((d: GraphData) => {
+        setData(d);
+        onData?.(d);
+      })
       .catch((err: Error) => setError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleNodeClick = useCallback((node: object) => {
@@ -95,7 +88,7 @@ export default function GraphView() {
         graphData={data}
         nodeId="id"
         nodeLabel={(node) => (node as GraphNode).labels.join(", ")}
-        nodeColor={(node) => colorForNode(node as GraphNode)}
+        nodeColor={(node) => colorForLabels((node as GraphNode).labels)}
         nodeRelSize={5}
         linkLabel={(link) => (link as GraphLink).type}
         linkDirectionalArrowLength={4}
