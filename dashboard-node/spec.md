@@ -83,6 +83,11 @@ pre-publication at that point.
 - Should page access and data-API access ever be decoupled (public page, separately-gated
   `/api/graph`)? See Section 6 for the mechanism if/when this matters. Not needed while
   the whole site is gated behind Vercel Authentication.
+- Should Vercel's Root Directory be switched from `dashboard-node` to the repo root (with
+  custom build/install commands pointed at `dashboard-node`)? Would eliminate the cosmetic
+  failed-check noise on every unrelated `ir-spectro-node`/`orchestration` PR — see Decision
+  Log 2026-08-21. Deferred: current noise doesn't block merges, not worth the risk of a
+  build-config change without time to test it properly.
 
 ## 9. Decision Log
 <!-- Append-only record of decisions + why (e.g., "AuraDB free tier over self-hosted
@@ -101,3 +106,14 @@ pre-publication at that point.
   a custom domain to a specific git branch (via the Preview environment), so the domain
   tracks that branch directly without touching Production. `main` still has no working
   deploy at all — that's expected, not a bug, until the PR merges.
+- **2026-08-21 — Connecting Vercel to the whole monorepo means every branch/PR gets a
+  build attempt, including unrelated `ir-spectro-node`/`orchestration` work.** Since
+  Project Settings → Root Directory = `dashboard-node`, any branch without that folder
+  (i.e. everything except `feature/dashboard-node`, and `main` until it merges) fails
+  with "The specified Root Directory does not exist." This check happens as a hard gate
+  right after clone — *before* Ignored Build Step logic runs, so a branch-allowlist script
+  there (tried first) does not prevent it. Confirmed harmless: this repo has no required
+  status checks configured, so the failing/red Vercel check does not block merging any PR
+  (verified on PR #23 and #24 — "Able to merge" / "No conflicts with base branch" shown
+  regardless). Left as cosmetic noise for now; see Open Questions for the real fix if it's
+  ever worth doing.
