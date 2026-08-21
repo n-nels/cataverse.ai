@@ -25,3 +25,5 @@ legacy/
 # folders
 src/experiments/automation/outputs/
 # src/experiments/automation/notebooks/
+
+graphify-out/
