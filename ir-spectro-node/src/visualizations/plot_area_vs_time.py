@@ -20,10 +20,6 @@ from src.core import config
 
 LOGGER = logging.getLogger(__name__)
 
-MONOMER_SUM_NAME = "monomer_sum"
-CLUSTER_SUM_NAME = "cluster_sum"
-UNKNOWN_SUM_NAME = "unknown_sum"
-
 
 def _get_peak_names(base_list_key: str, isotope: str | None) -> list[str]:
     config_settings = config.get_analysis_setting("voigt_fit")
@@ -65,6 +61,7 @@ def plot_area_vs_time(
     isotope: str | None = None,
     include_unknown: bool = False,
     time_unit: Literal["s", "h"] = "s",
+    constituents: dict | None = None,
 ) -> None:
     if not csv_path.exists():
         LOGGER.warning("Missing CSV: %s", csv_path)
@@ -97,14 +94,21 @@ def plot_area_vs_time(
         _group_peak_sum(df, unknown_peaks) if include_unknown else pd.DataFrame()
     )
 
-    if monomer_sum.empty:
-        LOGGER.warning("No monomer peak rows found in %s", csv_path)
-    if cluster_sum.empty:
-        LOGGER.warning("No cluster peak rows found in %s", csv_path)
-    if include_unknown and unknown_sum.empty:
-        LOGGER.warning("No unknown peak rows found in %s", csv_path)
-    if monomer_sum.empty and cluster_sum.empty and unknown_sum.empty:
-        return
+    if constituents is None:
+        constituents = {
+            "monomer": {"peaks": "all", "sum": True},
+            "cluster": {"peaks": "all", "sum": True},
+        }
+        if include_unknown:
+            constituents["unknown"] = {"peaks": "all", "sum": True}
+
+    for category in constituents:
+        if category == "monomer" and monomer_sum.empty:
+            LOGGER.warning("No monomer peak rows found in %s", csv_path)
+        elif category == "cluster" and cluster_sum.empty:
+            LOGGER.warning("No cluster peak rows found in %s", csv_path)
+        elif category == "unknown" and unknown_sum.empty:
+            LOGGER.warning("No unknown peak rows found in %s", csv_path)
 
     figure_path.parent.mkdir(parents=True, exist_ok=True)
     time_col = "Time (h)" if time_unit == "h" else "Time (s)"
@@ -112,27 +116,57 @@ def plot_area_vs_time(
 
     fig, ax = plt.subplots(figsize=(5, 4))
 
-    if not monomer_sum.empty:
-        ax.scatter(
-            monomer_sum[time_col],
-            monomer_sum["Cumulative_Peak_Area"],
-            label=MONOMER_SUM_NAME,
-            s=12,
-        )
-    if not cluster_sum.empty:
-        ax.scatter(
-            cluster_sum[time_col],
-            cluster_sum["Cumulative_Peak_Area"],
-            label=CLUSTER_SUM_NAME,
-            s=12,
-        )
-    if not unknown_sum.empty:
-        ax.scatter(
-            unknown_sum[time_col],
-            unknown_sum["Cumulative_Peak_Area"],
-            label=UNKNOWN_SUM_NAME,
-            s=12,
-        )
+    sum_map = {
+        "monomer": monomer_sum,
+        "cluster": cluster_sum,
+        "unknown": unknown_sum,
+    }
+    peak_map = {
+        "monomer": monomer_peaks,
+        "cluster": cluster_peaks,
+        "unknown": unknown_peaks,
+    }
+    for category, opts in constituents.items():
+        if opts.get("sum", False):
+            sum_data = sum_map.get(category)
+            if sum_data is not None and not sum_data.empty:
+                label = f"{category}_sum"
+                ax.scatter(
+                    sum_data[time_col],
+                    sum_data["Cumulative_Peak_Area"],
+                    label=label,
+                    s=12,
+                )
+
+        peak_config = opts.get("peaks")
+        if not peak_config:
+            continue
+        if peak_config == "all":
+            peaks = peak_map.get(category, [])
+        else:
+            peaks = [f"Peak_{p}" for p in peak_config]
+        if not peaks:
+            continue
+        individual = df[df["Peak_Name"].isin(peaks)]
+        if individual.empty:
+            LOGGER.warning(
+                "No individual peak rows found for %s in %s", category, csv_path
+            )
+            continue
+        markers = ["o", "s", "^", "D", "v", "<", ">", "p", "*", "h"]
+        for i, peak in enumerate(peaks):
+            peak_data: pd.DataFrame = individual[individual["Peak_Name"] == peak]  # type: ignore[assignment]
+            if peak_data.empty:
+                continue
+            marker = markers[i % len(markers)]
+            ax.scatter(
+                peak_data[time_col],
+                peak_data["Cumulative_Peak_Area"],
+                label=peak,
+                marker=marker,
+                s=12,
+                alpha=0.7,
+            )
 
     ax.set_xlabel(time_label)
     ax.set_ylabel("Cumulative Peak Area")
@@ -148,6 +182,7 @@ def process_all_area_vs_time(
     isotope: str | None = None,
     include_unknown: bool = False,
     time_unit: Literal["s", "h"] = "s",
+    constituents: dict | None = None,
 ) -> None:
     search_root = Path(config.get_path("data.peak_fit", folder))
     if not search_root.exists():
@@ -171,11 +206,19 @@ def process_all_area_vs_time(
             isotope=isotope,
             include_unknown=include_unknown,
             time_unit=time_unit,
+            constituents=constituents,
         )
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     process_all_area_vs_time(
-        "nn1120-4_pd_ceo2_000", include_unknown=False, time_unit="s"
+        folder="nn1120-4_pd_ceo2_000",
+        isotope=None,
+        include_unknown=False,
+        time_unit="s",
+        constituents={
+            "monomer": {"peaks": "all", "sum": True},
+            "cluster": {"peaks": None, "sum": True},
+                      },
     )
