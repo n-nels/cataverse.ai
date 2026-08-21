@@ -40,7 +40,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     print("=== Building dataset ===")
-    dataset = build_dataset()
+    dataset = build_dataset(force_refresh=False)
 
     print("\n=== Saving dataset ===")
     save_dir = save_dataset(dataset)
