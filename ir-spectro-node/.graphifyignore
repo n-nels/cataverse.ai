@@ -1,0 +1,12 @@
+.git/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+node_modules/
+graphify-out/
+*.log
+.env
+.env.*
