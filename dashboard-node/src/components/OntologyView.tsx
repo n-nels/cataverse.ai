@@ -20,12 +20,24 @@ type Triple = { from: string; rel: string; to: string; count: number };
 
 type SchemaData = { labels: LabelInfo[]; triples: Triple[] };
 
-type MetaNode = { id: string; count: number; x?: number; y?: number };
+type MetaNode = { id: string; count: number; val: number; x?: number; y?: number };
 
-// Node counts span three orders of magnitude (1 -> 1107), so scale the radius by
-// sqrt to keep the smallest labels visible without the largest swamping the canvas.
+// force-graph derives each node's radius as sqrt(val) * nodeRelSize, and uses that
+// to pull directional arrowheads back to the edge of the target node. Because we
+// draw nodes ourselves via nodeCanvasObject, our radius MUST follow that same
+// formula — otherwise force-graph assumes the default 4px, tucks the arrowhead
+// inside anything larger, and our own circle paints over it.
+const NODE_REL_SIZE = 0.9;
+// Counts span three orders of magnitude (1 -> 1107). sqrt keeps the largest from
+// swamping the canvas; the floor keeps single-node labels from vanishing.
+const MIN_NODE_VAL = 25;
+
+function nodeValFor(count: number): number {
+  return Math.max(count, MIN_NODE_VAL);
+}
+
 function radiusFor(count: number): number {
-  return 4 + Math.sqrt(count) * 0.7;
+  return Math.sqrt(nodeValFor(count)) * NODE_REL_SIZE;
 }
 
 function shortType(types: string[]): string {
@@ -56,7 +68,12 @@ export default function OntologyView() {
     if (!data) return { nodes: [], links: [] };
     const known = new Set(data.labels.map((l) => l.label));
     return {
-      nodes: data.labels.map((l) => ({ id: l.label, count: l.count })),
+      nodes: data.labels.map((l) => ({
+        id: l.label,
+        count: l.count,
+        // Read by force-graph's default `val` accessor for arrow offsetting.
+        val: nodeValFor(l.count),
+      })),
       links: data.triples
         .filter((t) => known.has(t.from) && known.has(t.to))
         .map((t) => ({
@@ -159,13 +176,15 @@ export default function OntologyView() {
             height={height}
             graphData={graph}
             nodeId="id"
+            nodeRelSize={NODE_REL_SIZE}
             nodeCanvasObject={drawNode}
             nodePointerAreaPaint={paintPointerArea}
             linkLabel={(link) =>
               `${(link as { rel: string }).rel} (${(link as { count: number }).count})`
             }
-            linkDirectionalArrowLength={5}
+            linkDirectionalArrowLength={9}
             linkDirectionalArrowRelPos={1}
+            linkDirectionalArrowColor={() => "rgba(255,255,255,0.85)"}
             linkCurvature={0.15}
             linkColor={() => "rgba(255,255,255,0.3)"}
             onNodeClick={(node) => setSelected((node as MetaNode).id)}

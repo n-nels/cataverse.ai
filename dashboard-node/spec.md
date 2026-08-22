@@ -34,7 +34,9 @@ questions directly. Publications become a byproduct, not the interface.
 
 - **Phase A — Real agent, v1.** Raw Claude API tool-use loop (no framework yet). Two
   tools to start: run a read-only Cypher query, fetch the graph schema. Replaces the
-  current `AgentPreview.tsx` mockup. *Blocked on API key.*
+  current `AgentPreview.tsx` mockup. *Blocked on API key.* Must also carry the
+  dual-typed-property handling described in Section 5.1 — the schema tool needs to
+  report the sentinel-string quirk, or the agent will silently answer over partial data.
 - **Phase A0 — Keep-alive + cached snapshot.** *(Infrastructure; must land before Phase D
   makes the site public.)* Scheduled daily Vercel cron job that (a) runs a trivial query
   against Neo4j to reset the free tier's inactivity clock so the instance never
@@ -141,6 +143,34 @@ commentary, peer review, or publications into the graph.
      schema (node labels, relationship types), how it gets loaded and updated. -->
 
      This should be accessible in the graph hosted on neo4j and exposed at https://cataverse.ai. I think a postgreSQL backend or liteSQL backend should be good. But I do want to keep costs down.
+
+### 5.1 Mixed property types — known, intentional, and a hazard for the agent
+
+Surfaced 2026-08-23 by the Ontology view (`db.schema.nodeTypeProperties()`). Several
+properties hold more than one type. Nick confirmed both causes are deliberate upstream
+behaviour in the instrument codebase, not ingestion bugs. They are **not** equally risky:
+
+| Property | Types | Cause | Risk |
+|---|---|---|---|
+| `Pretreatment.temp`, `.duration`, `.pressure_calc` | `FLOAT \| INTEGER` | Codebase accepts `temp=400` or `temp=400.0` without breaking | **Benign.** Cypher compares INTEGER and FLOAT numerically, so `WHERE p.temp > 350` behaves correctly across both. |
+| `Pretreatment.pressure_meas_g1` | `FLOAT \| STRING` | Two gauges with different max pressures. When one is out of range it records a sentinel string (e.g. `'off'`) instead of a number | **Real hazard.** In Cypher, comparing a STRING to a NUMBER yields `null` rather than raising — so `WHERE p.pressure_meas_g1 > 5` *silently drops* every out-of-range row instead of failing loudly. An agent would confidently return an answer computed over a filtered-down subset. |
+
+**Plan (Nick's instinct, agreed): handle it in the agent harness rather than by
+rewriting the data.** The sentinel carries real experimental meaning ("this gauge was
+out of range"), so normalizing it away at ingestion would destroy information. Layered
+approach, cheapest first:
+
+1. **Schema-aware system prompt.** The agent's schema tool reports not just types but
+   these quirks — that `pressure_meas_g1` may be a sentinel string, and what it means.
+2. **Cypher patterns in the prompt.** Teach the safe idiom for numeric filters on
+   dual-typed properties, so a range filter explicitly decides whether to include,
+   exclude, or separately report the sentinel rows.
+3. **Post-query sanity check.** Where a query filters on a dual-typed property, surface
+   how many rows were excluded by type so a silent subset never masquerades as the
+   whole population.
+
+❓ Open: exact sentinel values used (`'off'`, others?) and the per-gauge max pressures —
+needed before step 1 can be written accurately.
 
 ## 6. Security & Abuse Prevention
 <!-- A public endpoint that executes database queries is an attack surface.
