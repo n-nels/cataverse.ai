@@ -182,7 +182,7 @@ export default function OntologyView() {
             linkLabel={(link) =>
               `${(link as { rel: string }).rel} (${(link as { count: number }).count})`
             }
-            linkDirectionalArrowLength={9}
+            linkDirectionalArrowLength={4}
             linkDirectionalArrowRelPos={1}
             linkDirectionalArrowColor={() => "rgba(255,255,255,0.85)"}
             linkCurvature={0.15}

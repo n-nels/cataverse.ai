@@ -153,7 +153,7 @@ behaviour in the instrument codebase, not ingestion bugs. They are **not** equal
 | Property | Types | Cause | Risk |
 |---|---|---|---|
 | `Pretreatment.temp`, `.duration`, `.pressure_calc` | `FLOAT \| INTEGER` | Codebase accepts `temp=400` or `temp=400.0` without breaking | **Benign.** Cypher compares INTEGER and FLOAT numerically, so `WHERE p.temp > 350` behaves correctly across both. |
-| `Pretreatment.pressure_meas_g1` | `FLOAT \| STRING` | Two gauges with different max pressures. When one is out of range it records a sentinel string (e.g. `'off'`) instead of a number | **Real hazard.** In Cypher, comparing a STRING to a NUMBER yields `null` rather than raising — so `WHERE p.pressure_meas_g1 > 5` *silently drops* every out-of-range row instead of failing loudly. An agent would confidently return an answer computed over a filtered-down subset. |
+| `Pretreatment.pressure_meas_g1` | `FLOAT \| STRING` | Two gauges with different max pressures; when one is out of range the pipeline is meant to record an "off" marker. **See 5.1.1 — what is actually stored is not what was expected.** | **Real hazard in kind, tiny in current extent.** In Cypher, comparing a STRING to a NUMBER yields `null` rather than raising — so `WHERE p.pressure_meas_g1 > 5` *silently drops* the offending row instead of failing loudly. |
 
 **Plan (Nick's instinct, agreed): handle it in the agent harness rather than by
 rewriting the data.** The sentinel carries real experimental meaning ("this gauge was
@@ -169,8 +169,38 @@ approach, cheapest first:
    how many rows were excluded by type so a silent subset never masquerades as the
    whole population.
 
-❓ Open: exact sentinel values used (`'off'`, others?) and the per-gauge max pressures —
-needed before step 1 can be written accurately.
+#### 5.1.1 What the data actually contains (measured 2026-08-23)
+
+Nick expected the sentinel to be the string `'Off'`. Querying every value of these
+properties shows something different, and it matters:
+
+```
+pressure_meas_g1 :  FLOAT   x1341
+                    STRING  x1     value = "(4.2, off)"
+pressure_meas_g2 :  FLOAT   x1047   (no strings at all)
+```
+
+There is exactly **one** non-numeric value in the whole database, and it is not `'Off'`
+— it is the string `"(4.2, off)"`. That looks like a Python tuple of
+`(reading, status)` that reached Neo4j via `str()` instead of being unpacked, so the
+gauge reading and its status were flattened into one string field.
+
+Consequences for the plan:
+
+- **Treat this as an upstream pipeline bug, not a designed sentinel.** A real sentinel
+  would appear consistently across many rows; a single malformed value among 1,341 is a
+  serialization escape. Fixing it at the source in the instrument code is cheaper and
+  more honest than teaching the agent to parse `"(4.2, off)"`.
+- **The harness work in 5.1 is still worth doing**, but as a *guard* rather than the
+  primary fix — the class of problem (silent `null` comparison) will recur whenever a
+  new malformed value slips in, and the agent should notice rather than quietly answer
+  over a subset.
+- **`pressure_meas_g2` is currently clean** (all FLOAT), so the schema's FLOAT-only
+  typing there is accurate today.
+
+❓ Still open: the per-gauge max pressures; and whether the intended behaviour is to
+store a marker string at all, or to write `null` plus a separate status property (the
+latter avoids the type-mixing problem entirely).
 
 ## 6. Security & Abuse Prevention
 <!-- A public endpoint that executes database queries is an attack surface.
