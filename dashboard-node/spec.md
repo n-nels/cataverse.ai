@@ -23,6 +23,7 @@ questions directly. Publications become a byproduct, not the interface.
 | 2 | Neo4j-backed API | Done |
 | 3 | Vercel deploy + custom domain | Done |
 | 4 | Real agent (NL → Cypher → answer) | **Blocked** — needs an Anthropic API key (console.anthropic.com; separate from Claude Pro, which doesn't include API access) |
+| 4b | DB keep-alive + snapshot fallback | Not started — **must precede going public**, see Phase A0 |
 | 5 | Ontology/schema overview view | Not started |
 | 6 | Cost tracking + BYOK fallback | Not started |
 | 7 | Raw-data access gate (decoupled from page) | Not started |
@@ -34,9 +35,19 @@ questions directly. Publications become a byproduct, not the interface.
 - **Phase A — Real agent, v1.** Raw Claude API tool-use loop (no framework yet). Two
   tools to start: run a read-only Cypher query, fetch the graph schema. Replaces the
   current `AgentPreview.tsx` mockup. *Blocked on API key.*
+- **Phase A0 — Keep-alive + cached snapshot.** *(Infrastructure; must land before Phase D
+  makes the site public.)* Scheduled daily Vercel cron job that (a) runs a trivial query
+  against Neo4j to reset the free tier's inactivity clock so the instance never
+  auto-pauses, and (b) refreshes a stored snapshot of the graph that `/api/graph` can fall
+  back to if Neo4j is unavailable anyway. See Decision Log 2026-08-23 for why. Note the
+  snapshot needs a persistent store, which is the *same* need Phase C has for usage
+  counters and the Phase D allowlist — pick one store that serves all three.
 - **Phase B — Ontology/schema view.** New tab (alongside Graph / Ask the Agent) showing
   node labels, relationship types, and the external ontology info Nick has outside this
-  repo — needs that content handed over before this can be built.
+  repo — needs that content handed over before this can be built. Much of it can be
+  derived straight from Neo4j (label/relationship-type inventory, and the real
+  `(:A)-[:REL]->(:B)` triples the data actually contains), so Nick's external docs
+  enrich this rather than block it.
 - **Phase C — Cost tracking + BYOK.** Per-visitor $ cap on agent usage (estimated from
   Claude token usage × pricing), then prompt for the visitor's own API key beyond that.
   Needs a small persistent store beyond Neo4j — not a full Postgres, since Neo4j already
@@ -189,6 +200,18 @@ pre-publication at that point.
   a custom domain to a specific git branch (via the Preview environment), so the domain
   tracks that branch directly without touching Production. `main` still has no working
   deploy at all — that's expected, not a bug, until the PR merges.
+- **2026-08-23 — AuraDB free tier auto-pauses, and that threatens the core premise.**
+  The instance went unreachable (`getaddrinfo ENOTFOUND` on the Aura hostname) for the
+  second time in ~2 weeks — free-tier instances pause after a few days of inactivity, and
+  are eventually *deleted* if left paused. Today this is invisible because the site is
+  gated to Nick alone, but `cataverse.ai` is meant to be an always-queryable view of the
+  research program: once public (Phase D), visitors arriving between Nick's working
+  sessions would hit "Failed to load graph." Decision: **keep-alive cron + cached
+  snapshot** (Phase A0) rather than paying for a higher Aura tier — a daily scheduled
+  query resets the inactivity clock, and a stored snapshot keeps the site readable even
+  during a genuine Aura outage. Chosen over cron-only (no outage protection) and over
+  upgrading (recurring cost, and Nick wants costs near zero). Nice side effect: the
+  snapshot needs a persistent store, which Phases C and D independently need too.
 - **2026-08-21 — Connecting Vercel to the whole monorepo means every branch/PR gets a
   build attempt, including unrelated `ir-spectro-node`/`orchestration` work.** Since
   Project Settings → Root Directory = `dashboard-node`, any branch without that folder

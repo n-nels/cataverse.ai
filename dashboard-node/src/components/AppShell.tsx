@@ -3,9 +3,16 @@
 import { useState } from "react";
 import GraphView, { type GraphData } from "./GraphView";
 import StatsBar from "./StatsBar";
+import OntologyView from "./OntologyView";
 import AgentPreview from "./AgentPreview";
 
-type Tab = "graph" | "agent";
+const TABS = [
+  { id: "graph", label: "Graph" },
+  { id: "ontology", label: "Ontology" },
+  { id: "agent", label: "Ask the Agent" },
+] as const;
+
+type Tab = (typeof TABS)[number]["id"];
 
 export default function AppShell() {
   const [tab, setTab] = useState<Tab>("graph");
@@ -23,26 +30,19 @@ export default function AppShell() {
           </span>
         </div>
         <nav className="flex gap-1 rounded-lg border border-zinc-800 bg-zinc-950 p-1">
-          <button
-            onClick={() => setTab("graph")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              tab === "graph"
-                ? "bg-zinc-800 text-white"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            Graph
-          </button>
-          <button
-            onClick={() => setTab("agent")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              tab === "agent"
-                ? "bg-zinc-800 text-white"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            Ask the Agent
-          </button>
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                tab === t.id
+                  ? "bg-zinc-800 text-white"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </nav>
       </header>
 
@@ -54,6 +54,7 @@ export default function AppShell() {
         <div className={tab === "graph" ? "flex flex-1" : "hidden"}>
           <GraphView onData={setData} />
         </div>
+        {tab === "ontology" && <OntologyView />}
         {tab === "agent" && <AgentPreview />}
       </div>
     </div>
