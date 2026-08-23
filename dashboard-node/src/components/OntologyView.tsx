@@ -32,6 +32,11 @@ const NODE_REL_SIZE = 0.9;
 // swamping the canvas; the floor keeps single-node labels from vanishing.
 const MIN_NODE_VAL = 25;
 
+// Curvature applied to ordinary links between two different nodes.
+const LINK_CURVATURE = 0.15;
+// force-graph's internal constant: a self-loop's extent is `curvature * 70`.
+const SELF_LOOP_UNIT = 70;
+
 function nodeValFor(count: number): number {
   return Math.max(count, MIN_NODE_VAL);
 }
@@ -67,6 +72,11 @@ export default function OntologyView() {
   const graph = useMemo(() => {
     if (!data) return { nodes: [], links: [] };
     const known = new Set(data.labels.map((l) => l.label));
+    const countByLabel = new Map(data.labels.map((l) => [l.label, l.count]));
+    // How many self-loops we've already laid out on each node, so repeats can be
+    // staggered instead of stacking on identical control points.
+    const loopsSoFar = new Map<string, number>();
+
     return {
       nodes: data.labels.map((l) => ({
         id: l.label,
@@ -76,12 +86,30 @@ export default function OntologyView() {
       })),
       links: data.triples
         .filter((t) => known.has(t.from) && known.has(t.to))
-        .map((t) => ({
-          source: t.from,
-          target: t.to,
-          rel: t.rel,
-          count: t.count,
-        })),
+        .map((t) => {
+          let curvature = LINK_CURVATURE;
+
+          if (t.from === t.to) {
+            // force-graph draws a self-loop of size `curvature * SELF_LOOP_UNIT`.
+            // At the default curvature that loop is smaller than the node itself,
+            // so it hides inside the circle, leaves no hoverable line, and throws
+            // the arrowhead off. Size it from the node's radius instead, and grow
+            // each subsequent loop on the same node so they stay distinguishable
+            // (Filename has two: NEXT_EXP and RELATIVE_TO).
+            const index = loopsSoFar.get(t.from) ?? 0;
+            loopsSoFar.set(t.from, index + 1);
+            const r = radiusFor(countByLabel.get(t.from) ?? 1);
+            curvature = (r * 2 + 14 + index * 16) / SELF_LOOP_UNIT;
+          }
+
+          return {
+            source: t.from,
+            target: t.to,
+            rel: t.rel,
+            count: t.count,
+            curvature,
+          };
+        }),
     };
   }, [data]);
 
@@ -123,14 +151,48 @@ export default function OntologyView() {
         ctx.stroke();
       }
 
+      // Push the label radially outward from the graph's centre. A fixed "below
+      // the node" position lands on top of the links converging on that node;
+      // outward almost always points into open space.
+      let cx = 0;
+      let cy = 0;
+      let counted = 0;
+      for (const other of graph.nodes as MetaNode[]) {
+        if (other.x == null || other.y == null) continue;
+        cx += other.x;
+        cy += other.y;
+        counted++;
+      }
+      let dx = 0;
+      let dy = 1; // fall back to below the node
+      if (counted > 0) {
+        const vx = n.x - cx / counted;
+        const vy = n.y - cy / counted;
+        const len = Math.hypot(vx, vy);
+        if (len > 1) {
+          dx = vx / len;
+          dy = vy / len;
+        }
+      }
+
       const fontSize = 11 / globalScale;
+      const gap = r + 3 / globalScale;
+      const lx = n.x + dx * gap;
+      const ly = n.y + dy * gap;
+
       ctx.font = `${isSelected ? "bold " : ""}${fontSize}px ui-sans-serif, system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
+      ctx.textAlign = dx > 0.35 ? "left" : dx < -0.35 ? "right" : "center";
+      ctx.textBaseline = dy > 0.35 ? "top" : dy < -0.35 ? "bottom" : "middle";
+
+      // Outline first so the text stays legible wherever it does cross a link.
+      ctx.strokeStyle = "rgba(0,0,0,0.9)";
+      ctx.lineWidth = 3 / globalScale;
+      ctx.lineJoin = "round";
+      ctx.strokeText(n.id, lx, ly);
       ctx.fillStyle = isSelected ? "#ffffff" : "#d4d4d8";
-      ctx.fillText(n.id, n.x, n.y + r + 2 / globalScale);
+      ctx.fillText(n.id, lx, ly);
     },
-    [selected]
+    [selected, graph]
   );
 
   const paintPointerArea = useCallback(
@@ -185,7 +247,9 @@ export default function OntologyView() {
             linkDirectionalArrowLength={4}
             linkDirectionalArrowRelPos={1}
             linkDirectionalArrowColor={() => "rgba(255,255,255,0.85)"}
-            linkCurvature={0.15}
+            linkCurvature={(link) => (link as { curvature: number }).curvature}
+            // Thin curved lines are fiddly to hit; widen the hover target.
+            linkHoverPrecision={8}
             linkColor={() => "rgba(255,255,255,0.3)"}
             onNodeClick={(node) => setSelected((node as MetaNode).id)}
             onBackgroundClick={() => setSelected(null)}

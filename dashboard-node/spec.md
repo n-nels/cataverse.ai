@@ -70,6 +70,8 @@ questions directly. Publications become a byproduct, not the interface.
 **Explicit non-goal for v1** (Nick's call, may become a goal later): users submitting
 commentary, peer review, or publications into the graph.
 
+**→ Running to-do list lives in [Section 10, Open Action Items](#10-open-action-items).**
+
 ---
 
 ## 1. Vision & Purpose
@@ -185,12 +187,39 @@ There is exactly **one** non-numeric value in the whole database, and it is not 
 `(reading, status)` that reached Neo4j via `str()` instead of being unpacked, so the
 gauge reading and its status were flattened into one string field.
 
+**The offending record** (located 2026-08-23):
+
+| | |
+|---|---|
+| Filename | `20241126_112801_pd_ceo2_000-003` |
+| Datetime | 2024-11-26T11:28:01, `exp_type` adsorption |
+| Material | `mat_pd_0p0339_ceo2_54` (pd / ceo2) |
+| Node | `pre_20241126_112801_pd_ceo2_000-003_3` — `:Pretreatment`, `step_index` 3 |
+
+That node has **no `pressure_meas_g2` property at all** (nor `chiller` / `pressure_calc`,
+which its siblings carry) — consistent with both gauge readings being written into `g1`
+before the split existed. Correct repair: `pressure_meas_g1 = 4.2`, `g2` null/absent
+(the cell gauge was off).
+
+**The current code cannot produce this**, confirmed by reading
+`orchestration/src/hardware/pressure.py`:
+
+- `p1` (manifold → `g1`): a non-numeric reading **raises** `HardwareReadError` — never stored.
+- `p2` (cell → `g2`): a non-numeric reading becomes `None`, with the comment
+  *"Cell gauge returns 'Off' when inactive (below range / valve closed)"* — never stored
+  as a string either.
+
+So the `FLOAT | STRING` typing on `pressure_meas_g1` is **stale**: it is an artifact of
+this one legacy row, not of current behaviour. Once the row is repaired and reloaded, the
+property should type as FLOAT only. (Worth re-checking after reload rather than assuming
+— see Action Items.)
+
 Consequences for the plan:
 
-- **Treat this as an upstream pipeline bug, not a designed sentinel.** A real sentinel
-  would appear consistently across many rows; a single malformed value among 1,341 is a
-  serialization escape. Fixing it at the source in the instrument code is cheaper and
-  more honest than teaching the agent to parse `"(4.2, off)"`.
+- **Treat this as legacy data, not a designed sentinel.** A real sentinel would appear
+  consistently across many rows; a single malformed value among 1,341, which today's code
+  provably cannot emit, is a leftover. Fixing the row at the source is cheaper and more
+  honest than teaching the agent to parse `"(4.2, off)"`.
 - **The harness work in 5.1 is still worth doing**, but as a *guard* rather than the
   primary fix — the class of problem (silent `null` comparison) will recur whenever a
   new malformed value slips in, and the agent should notice rather than quietly answer
@@ -198,9 +227,7 @@ Consequences for the plan:
 - **`pressure_meas_g2` is currently clean** (all FLOAT), so the schema's FLOAT-only
   typing there is accurate today.
 
-❓ Still open: the per-gauge max pressures; and whether the intended behaviour is to
-store a marker string at all, or to write `null` plus a separate status property (the
-latter avoids the type-mixing problem entirely).
+❓ Still open: the per-gauge max pressures.
 
 ## 6. Security & Abuse Prevention
 <!-- A public endpoint that executes database queries is an attack surface.
@@ -283,3 +310,44 @@ pre-publication at that point.
   (verified on PR #23 and #24 — "Able to merge" / "No conflicts with base branch" shown
   regardless). Left as cosmetic noise for now; see Open Questions for the real fix if it's
   ever worth doing.
+
+## 10. Open Action Items
+<!-- Running to-do list. Unlike Section 8 (Open Questions, which are decisions to make),
+     these are concrete pieces of work with an owner. Check off / delete as done. -->
+
+### Data integrity
+
+- [ ] **Repair the malformed pressure record.** `20241126_112801_pd_ceo2_000-003`, node
+  `pre_20241126_112801_pd_ceo2_000-003_3`: `pressure_meas_g1` holds `"(4.2, off)"`; should
+  be `pressure_meas_g1 = 4.2` with `g2` null/absent. Fix at source, then reload into Neo4j.
+  *Owner: Nick.* Details in §5.1.1.
+- [ ] **Re-verify property typing after that reload.** Expectation: `pressure_meas_g1`
+  types as FLOAT only, confirming the `FLOAT | STRING` was stale. Confirm rather than
+  assume — if a STRING survives, current code is emitting one somewhere and §5.1's
+  assumptions need revisiting. (The Ontology tab shows this directly.)
+- [ ] **Record the per-gauge max pressures** in §5.1 once known — needed for the agent to
+  reason about out-of-range readings.
+
+### Pipeline
+
+- [ ] **Build a repo → Neo4j ingestion pipeline so the graph updates continuously.**
+  Today the graph is loaded by hand, so `cataverse.ai` shows a snapshot that silently goes
+  stale as new experiments land. Target: new/changed experimental data in
+  `n-nels/cataverse.ai` flows into AuraDB without manual reload. *Not yet designed* —
+  open questions before building: what triggers it (push webhook / scheduled poll / the
+  instrument writing directly), whether it's incremental or a full rebuild, how it handles
+  reruns idempotently, and where it runs (Vercel cron, GitHub Actions, or the instrument
+  host). Interacts with Phase A0 — the keep-alive cron may be the natural place to hang it.
+
+### Infrastructure
+
+- [ ] **Phase A0 — DB keep-alive + cached snapshot.** Approved 2026-08-23; must land
+  before the site goes public. Snapshot half needs a Vercel storage product enabled
+  (Nick, in the Vercel dashboard).
+- [ ] **Get an Anthropic API key** (console.anthropic.com — separate from Claude Pro).
+  Sole hard blocker on Phase A. *Owner: Nick.*
+
+### Deferred / low priority
+
+- [ ] Switch Vercel's Root Directory off `dashboard-node` to silence the cosmetic failed
+  build check on unrelated PRs (see Decision Log 2026-08-21). Non-blocking.
