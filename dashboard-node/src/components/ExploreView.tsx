@@ -30,9 +30,6 @@ export default function ExploreView() {
   // Expansions deliberately keep the same key: remounting there would reset the
   // layout and the viewport the user has zoomed to.
   const [seedKey, setSeedKey] = useState(0);
-  // How many relationship hops an Expand pulls in. 1 keeps things readable; 2-3
-  // is for "show me everything around this", and hits the server-side cap fast.
-  const [depth, setDepth] = useState(1);
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -154,7 +151,7 @@ export default function ExploreView() {
       pushHistory();
       try {
         const res = await fetch(
-          `/api/neighbors?id=${encodeURIComponent(node.id)}&depth=${depth}`
+          `/api/neighbors?id=${encodeURIComponent(node.id)}`
         );
         const body = await res.json();
         if (!res.ok) {
@@ -169,7 +166,7 @@ export default function ExploreView() {
           );
         } else if (body.truncated) {
           setNote(
-            `Capped at ${body.limit} nodes. Expand individual nodes to go further, or lower the hops.`
+            `That node has more neighbours than shown — capped at ${body.limit}.`
           );
         }
       } catch (err) {
@@ -178,7 +175,7 @@ export default function ExploreView() {
         setBusyId(null);
       }
     },
-    [busyId, merge, pushHistory, depth]
+    [busyId, merge, pushHistory]
   );
 
   const reset = () => {
@@ -211,24 +208,6 @@ export default function ExploreView() {
 
           {graph.nodes.length > 0 && (
             <span className="ml-auto flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1 text-zinc-500">
-                Expand
-                {[1, 2, 3].map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => setDepth(d)}
-                    title={`Pull in nodes up to ${d} relationship${d === 1 ? "" : "s"} away`}
-                    className={`rounded px-1.5 py-0.5 transition-colors ${
-                      depth === d
-                        ? "bg-zinc-800 text-white"
-                        : "text-zinc-500 hover:text-zinc-300"
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
-                hop{depth === 1 ? "" : "s"}
-              </span>
               <span className="text-zinc-400">
                 {graph.nodes.length} nodes · {graph.links.length} relationships ·{" "}
                 {expandedIds.size} expanded
