@@ -219,6 +219,23 @@ The same silent-null semantics bit us a second way — see §5.2 — which is th
 argument that this belongs in the harness rather than the prompt. But build the guard when
 a real instance appears, not speculatively.
 
+### 5.3 Eleven experiments have no ExpConditions (measured 2026-08-23)
+
+Surfaced by exploring the graph: a `Pretreatment` chain sometimes ends without
+reaching `(:ExpConditions)`. That looked like a UI bug — it is the data.
+
+```
+Filenames WITH an ExpConditions:  238
+Filenames WITH NONE:               11
+Pretreatment nodes that are dead ends (no outgoing NEXT_STEP):  9
+```
+
+So ~4% of experiments carry pretreatment steps but no experimental conditions, and the
+chain simply stops. Whether that is a real experimental situation (aborted run, conditions
+not recorded) or an ingestion gap is ❓ **open — only Nick can say.** Worth resolving
+before the agent starts answering questions like "what conditions were used for X", since
+it will silently answer over the 238 and never mention the 11.
+
 ### 5.2 Unknown property names fail silently too (open)
 
 Observed 2026-08-23 while beta-testing the agent. Asked about gauge pressure, the model

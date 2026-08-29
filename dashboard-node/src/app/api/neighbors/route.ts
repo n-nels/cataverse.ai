@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import neo4j, { Node, Relationship } from "neo4j-driver";
+import neo4j, { Node, Path, Relationship } from "neo4j-driver";
 import { driver } from "@/lib/neo4j";
 import {
   type GraphLink,
@@ -8,16 +8,29 @@ import {
   relToGraphLink,
 } from "@/lib/neo4jSerialize";
 
-// A single expansion should feel instant and stay readable. Some nodes here are
-// very high-degree — one Filename has 1,107 Pretreatment steps hanging off it —
-// so an uncapped expansion would both hang the layout and bury the user.
-const MAX_NEIGHBORS = 75;
+// A single expansion should stay readable. Some nodes are very high-degree —
+// one Filename has 1,107 Pretreatment steps hanging off it — so an uncapped
+// expansion would bury the user and stall the layout.
+const MAX_NODES = 120;
+// Paths, not nodes: at depth > 1 the number of paths grows much faster than the
+// number of distinct nodes they touch.
+const MAX_PATHS = 400;
+const MAX_DEPTH = 3;
 
 export async function GET(request: Request) {
-  const id = new URL(request.url).searchParams.get("id");
+  const params = new URL(request.url).searchParams;
+  const id = params.get("id");
   if (!id) {
     return NextResponse.json({ error: "Missing ?id" }, { status: 400 });
   }
+
+  // Cypher requires literal bounds on a variable-length pattern, so depth is
+  // interpolated rather than parameterised. Clamped to a small integer first —
+  // it must never be able to carry anything but a number into the query.
+  const requested = Number.parseInt(params.get("depth") ?? "1", 10);
+  const depth = Number.isFinite(requested)
+    ? Math.min(Math.max(requested, 1), MAX_DEPTH)
+    : 1;
 
   const session = driver.session({ database: process.env.NEO4J_DATABASE });
 
@@ -25,14 +38,14 @@ export async function GET(request: Request) {
     const result = await session.executeRead((tx) =>
       tx.run(
         // Undirected: exploration should walk relationships either way. The
-        // direction is preserved in the link itself for drawing arrows.
+        // direction is preserved on each link so arrows still read correctly.
         `MATCH (n) WHERE elementId(n) = $id
-         OPTIONAL MATCH (n)-[r]-(m)
-         RETURN n, r, m
+         OPTIONAL MATCH path = (n)-[*1..${depth}]-(m)
+         RETURN n, path
          LIMIT $limit`,
-        // neo4j.int(): a plain JS number arrives as a float, and Cypher's LIMIT
-        // rejects "76.0" — it requires an integer.
-        { id, limit: neo4j.int(MAX_NEIGHBORS + 1) }
+        // neo4j.int(): a plain JS number arrives as a float, and LIMIT rejects
+        // "401.0" — it requires an integer.
+        { id, limit: neo4j.int(MAX_PATHS) }
       )
     );
 
@@ -43,29 +56,40 @@ export async function GET(request: Request) {
     const nodes = new Map<string, GraphNode>();
     const links = new Map<string, GraphLink>();
 
-    // The centre node comes back on every row (and on its own if it has no
-    // relationships at all, where r and m are null).
+    // The centre node is on every row, and is the only thing on the row when it
+    // has no relationships at all.
     nodes.set(id, nodeToGraphNode(result.records[0].get("n") as Node));
 
-    const rows = result.records.slice(0, MAX_NEIGHBORS);
-    for (const record of rows) {
-      const m = record.get("m") as Node | null;
-      const r = record.get("r") as Relationship | null;
-      if (m) {
-        const gn = nodeToGraphNode(m);
-        if (!nodes.has(gn.id)) nodes.set(gn.id, gn);
+    let hitCap = false;
+    for (const record of result.records) {
+      const path = record.get("path") as Path | null;
+      if (!path) continue;
+
+      // Stop adding once full, but keep scanning so links between nodes we
+      // already have are not missed.
+      for (const segment of path.segments) {
+        for (const end of [segment.start, segment.end]) {
+          const gn = nodeToGraphNode(end as Node);
+          if (nodes.has(gn.id)) continue;
+          if (nodes.size >= MAX_NODES) {
+            hitCap = true;
+            continue;
+          }
+          nodes.set(gn.id, gn);
+        }
       }
-      if (r) {
-        const gl = relToGraphLink(r);
-        links.set(gl.id, gl);
+      for (const segment of path.segments) {
+        const gl = relToGraphLink(segment.relationship as Relationship);
+        if (nodes.has(gl.source) && nodes.has(gl.target)) links.set(gl.id, gl);
       }
     }
 
     return NextResponse.json({
       nodes: Array.from(nodes.values()),
       links: Array.from(links.values()),
-      truncated: result.records.length > MAX_NEIGHBORS,
-      limit: MAX_NEIGHBORS,
+      truncated: hitCap || result.records.length >= MAX_PATHS,
+      limit: MAX_NODES,
+      depth,
     });
   } catch (error) {
     console.error("Neighbor expansion failed", error);
