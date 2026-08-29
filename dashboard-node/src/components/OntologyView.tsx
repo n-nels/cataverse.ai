@@ -127,19 +127,29 @@ export default function OntologyView() {
   // The default forces are tuned for many small nodes. Here there are only ~11,
   // sized up to ~27px radius, so without stronger repulsion the big circles (and
   // their text labels) pile on top of each other.
-  useEffect(() => {
+  //
+  // Applied from the simulation's own tick rather than once from an effect.
+  // force-graph rebuilds its forces when it processes graphData, and whether
+  // that happens before or after a one-shot effect is a race — which is why the
+  // first mount used to come out overlapped while a remount looked right.
+  // Re-applying each tick is idempotent and costs nothing at this size.
+  const applyForces = useCallback(() => {
     const fg = fgRef.current;
-    if (!fg || width === 0) return;
+    if (!fg) return;
     (fg.d3Force("charge") as { strength?: (s: number) => void } | undefined)
       ?.strength?.(-350);
     (fg.d3Force("link") as { distance?: (d: number) => void } | undefined)
       ?.distance?.(80);
-    fg.d3ReheatSimulation();
-    // Reheating restarts the simulation, which can outrun the zoomToFit that
-    // onEngineStop already fired. Refit once the new layout has settled.
-    const timer = setTimeout(() => fgRef.current?.zoomToFit(400, 50), 1500);
-    return () => clearTimeout(timer);
-  }, [data, width, height]);
+  }, []);
+
+  // Belt and braces for the case where the engine has already settled by the
+  // time the graph mounts, so no tick would otherwise fire. Deliberately no
+  // reheat: with the forces applied from the first tick, the initial run
+  // already produces the right layout, and reheating only made it settle twice.
+  useEffect(() => {
+    if (width === 0) return;
+    applyForces();
+  }, [data, width, applyForces]);
 
   const drawNode = useCallback(
     (node: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -283,6 +293,7 @@ export default function OntologyView() {
               setSelected(null);
               setSelectedRel(null);
             }}
+            onEngineTick={applyForces}
             onEngineStop={handleEngineStop}
             backgroundColor="#000000"
           />
