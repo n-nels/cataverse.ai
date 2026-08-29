@@ -17,39 +17,45 @@ questions directly. Publications become a byproduct, not the interface.
 
 **Status of each piece:**
 
+*(Status reviewed 2026-08-23.)*
+
 | # | Piece | Status |
 |---|-------|--------|
 | 1 | Web app + graph viewer | Done |
 | 2 | Neo4j-backed API | Done |
 | 3 | Vercel deploy + custom domain | Done |
-| 4 | Real agent (NL → Cypher → answer) | **Blocked** — needs an Anthropic API key (console.anthropic.com; separate from Claude Pro, which doesn't include API access) |
-| 4b | DB keep-alive + snapshot fallback | Not started — **must precede going public**, see Phase A0 |
-| 5 | Ontology/schema overview view | Not started |
-| 6 | Cost tracking + BYOK fallback | Not started |
-| 7 | Raw-data access gate (decoupled from page) | Not started |
-| 8 | Plotting (pre-built + agent-generated) | Not started |
-| 9 | Video transcript ingestion | Not started, later |
+| 4 | Ontology/schema view | **Done** — third tab, schema meta-graph + detail panel |
+| 5 | Terminal agent (NL → Cypher → answer) | **Done, v1** — `agent-node/`, local Ollama, hand-written loop |
+| 6 | Agent in the web UI | Not started — `AgentPreview.tsx` is still a scripted mockup |
+| 7 | Cost tracking + BYOK | Not started — and the local-LLM decision may remove the need entirely |
+| 8 | Raw-data access gate (decoupled from page) | Not started |
+| 9 | Plotting (pre-built + agent-generated) | Not started |
+| 10 | Video transcript ingestion | Not started, later |
+| — | DB keep-alive + snapshot fallback | **Shelved** 2026-08-23 |
+| — | repo → Neo4j ingestion pipeline | **Shelved** 2026-08-23 |
 
 **Phased plan (matches Nick's "start simple, iterate on real deficiencies" learning goal):**
 
-- **Phase A — Real agent, v1.** Raw Claude API tool-use loop (no framework yet). Two
-  tools to start: run a read-only Cypher query, fetch the graph schema. Replaces the
-  current `AgentPreview.tsx` mockup. *Blocked on API key.* Must also carry the
-  dual-typed-property handling described in Section 5.1 — the schema tool needs to
-  report the sentinel-string quirk, or the agent will silently answer over partial data.
-- **Phase A0 — Keep-alive + cached snapshot.** *(Infrastructure; must land before Phase D
-  makes the site public.)* Scheduled daily Vercel cron job that (a) runs a trivial query
-  against Neo4j to reset the free tier's inactivity clock so the instance never
-  auto-pauses, and (b) refreshes a stored snapshot of the graph that `/api/graph` can fall
-  back to if Neo4j is unavailable anyway. See Decision Log 2026-08-23 for why. Note the
-  snapshot needs a persistent store, which is the *same* need Phase C has for usage
-  counters and the Phase D allowlist — pick one store that serves all three.
-- **Phase B — Ontology/schema view.** New tab (alongside Graph / Ask the Agent) showing
-  node labels, relationship types, and the external ontology info Nick has outside this
-  repo — needs that content handed over before this can be built. Much of it can be
-  derived straight from Neo4j (label/relationship-type inventory, and the real
-  `(:A)-[:REL]->(:B)` triples the data actually contains), so Nick's external docs
-  enrich this rather than block it.
+- **Phase A — Terminal agent, v1. ✅ DONE (2026-08-23).** Lives in `agent-node/` (Python,
+  uv, matching `orchestration/` conventions). Runs against a **local LLM via Ollama**, not
+  the Anthropic API — see Decision Log. Hand-written tool-use loop, no framework, as per
+  the §2.1 learning goal. Two tools: `get_graph_schema` and `run_cypher`. Read-only is
+  enforced by `session.execute_read()` (server-side, the real guarantee) plus a keyword
+  scan for fast feedback. Entry points: `cli.py` (REPL) and `ask.py` (single question,
+  debugger-friendly). Verified end-to-end against the live graph.
+  *Note:* the earlier plan here required dual-typed-property handling from §5.1. That code
+  was written, then removed once the underlying bad row was fixed — see §5.1.
+- **Phase A0 — Keep-alive + cached snapshot. SHELVED 2026-08-23.** Nick's call: it kept
+  displacing the agent work, which is the actual learning goal and the CV-relevant skill.
+  The AuraDB free tier will keep auto-pausing in the meantime — acceptable while the site
+  is gated to Nick, but this must be revisited before going public. Design notes retained
+  in Decision Log 2026-08-23.
+- **Phase B — Ontology/schema view. ✅ DONE (2026-08-23).** Third tab in the dashboard.
+  Renders the schema as a meta-graph (labels as nodes sized by count, relationship types
+  as edges) plus a detail panel of each label's properties and connections. Derived live
+  from Neo4j via `/api/schema`, so it shows the ontology *as instantiated* rather than as
+  declared. Nick's external ontology docs were not needed to build it, and can still
+  enrich it later.
 - **Phase C — Cost tracking + BYOK.** Per-visitor $ cap on agent usage (estimated from
   Claude token usage × pricing), then prompt for the visitor's own API key beyond that.
   Needs a small persistent store beyond Neo4j — not a full Postgres, since Neo4j already
@@ -92,7 +98,7 @@ commentary, peer review, or publications into the graph.
      4. I am willing to allow a certain dollar limit user query amount, but beyond that they need to bring their own api keys
      5. Raw data access through api is permissioned (they must contact me by email)
      6. Deploy through cloud provider.
-     7. Non-goal is to let users input commentary. This would be the 'peer-review' mechanism and be incororated into the context graph. Or user could submit publication that would go into the knowledge graph. At some point this will be a goal.
+     7. Non-goal is to let users input commentary. This would be the 'peer-review' mechanism and be incororated into the context graph. Or user could submit publication that would go into the knowledge graph. At some point this will be a goal. Users ask questions and if the agent cannot find direct answer in the graph it asks user to provide a response/justification and that I will get back to them.
      8. This is probably a non-exhaustive list of goals but good for v1
 
 ### 2.1 Learning Goals
@@ -133,6 +139,27 @@ commentary, peer review, or publications into the graph.
 
      Yes, this is the part I am most interested in learning and designing. We will deep dive here when the time is right. I prefer to have a very simple agent to begin with so I can learn, use, and iterate based off the deficiencies I see when using. So start very simple, then progress to Langchain(?), etc. 
 
+**Built 2026-08-23 — `agent-node/` (v1).** Deliberately no framework, per the above.
+
+```
+ask.py / cli.py          entry points (single question / REPL)
+  └─ agent.py            the loop + tool schemas + system prompt
+       ├─ ollama Client  local model, tool calling
+       └─ graph.py       the ONLY path to Neo4j; read-only enforced here
+```
+
+The loop: send conversation + tool list → if the reply has no tool calls it's the answer,
+stop → otherwise run each tool, append its result as a `tool` message, repeat. Bounded by
+`AGENT_MAX_ITERATIONS`.
+
+The model never touches the database. It only *names* a tool and supplies arguments;
+`_dispatch` decides what actually runs. That separation is what makes it safe to let a
+model compose queries at all.
+
+Deficiencies observed so far are recorded in §5.2 — that iterate-on-real-failures loop is
+working as intended. LangChain remains deliberately unused; revisit only when the
+hand-written loop becomes the bottleneck.
+
 ### 4.4 Domain & DNS
 <!-- Where cataverse.ai is registered, what DNS records are needed,
      Cloudflare or registrar-direct, how it connects to hosting.
@@ -146,35 +173,67 @@ commentary, peer review, or publications into the graph.
 
      This should be accessible in the graph hosted on neo4j and exposed at https://cataverse.ai. I think a postgreSQL backend or liteSQL backend should be good. But I do want to keep costs down.
 
-### 5.1 Mixed property types — known, intentional, and a hazard for the agent
+### 5.1 Mixed property types — RESOLVED, but the failure mode is worth keeping
 
-Surfaced 2026-08-23 by the Ontology view (`db.schema.nodeTypeProperties()`). Several
-properties hold more than one type. Nick confirmed both causes are deliberate upstream
-behaviour in the instrument codebase, not ingestion bugs. They are **not** equally risky:
+**Status 2026-08-23: resolved.** Nick repaired the offending row directly in the database.
+`pressure_meas_g1` now types as `FLOAT` only (verified: 1,342 values, no strings), and
+`pressure_meas_g2` was always clean. The harness guard written for this
+(`DUAL_TYPED_PROPERTIES` in `agent-node/.../graph.py`) has been **removed** — with no
+string left in the data it did nothing useful, and worse, its caveat keyed on the property
+*name* rather than its *type*, so it kept asserting something false to the model.
 
-| Property | Types | Cause | Risk |
-|---|---|---|---|
-| `Pretreatment.temp`, `.duration`, `.pressure_calc` | `FLOAT \| INTEGER` | Codebase accepts `temp=400` or `temp=400.0` without breaking | **Benign.** Cypher compares INTEGER and FLOAT numerically, so `WHERE p.temp > 350` behaves correctly across both. |
-| `Pretreatment.pressure_meas_g1` | `FLOAT \| STRING` | Two gauges with different max pressures; when one is out of range the pipeline is meant to record an "off" marker. **See 5.1.1 — what is actually stored is not what was expected.** | **Real hazard in kind, tiny in current extent.** In Cypher, comparing a STRING to a NUMBER yields `null` rather than raising — so `WHERE p.pressure_meas_g1 > 5` *silently drops* the offending row instead of failing loudly. |
+Remaining benign case: `temp`, `duration`, `pressure_calc` are typed `FLOAT | INTEGER`.
+The instrument code accepts `temp=400` or `temp=400.0`. Harmless — Cypher compares
+INTEGER and FLOAT numerically.
 
-**Plan (Nick's instinct, agreed): handle it in the agent harness rather than by
-rewriting the data.** The sentinel carries real experimental meaning ("this gauge was
-out of range"), so normalizing it away at ingestion would destroy information. Layered
-approach, cheapest first:
+**Keep the lesson, not the code.** The general hazard is real and will recur:
 
-1. **Schema-aware system prompt.** The agent's schema tool reports not just types but
-   these quirks — that `pressure_meas_g1` may be a sentinel string, and what it means.
-2. **Cypher patterns in the prompt.** Teach the safe idiom for numeric filters on
-   dual-typed properties, so a range filter explicitly decides whether to include,
-   exclude, or separately report the sentinel rows.
-3. **Post-query sanity check.** Where a query filters on a dual-typed property, surface
-   how many rows were excluded by type so a silent subset never masquerades as the
-   whole population.
+> In Cypher, comparing a STRING to a NUMBER returns `null` rather than raising. A row with
+> an unexpected type is **silently excluded** from a range filter, and the agent reports a
+> confident answer computed over a subset it never knew was reduced.
 
-#### 5.1.1 What the data actually contains (measured 2026-08-23)
+The same silent-null semantics bit us a second way — see §5.2 — which is the stronger
+argument that this belongs in the harness rather than the prompt. But build the guard when
+a real instance appears, not speculatively.
 
-Nick expected the sentinel to be the string `'Off'`. Querying every value of these
-properties shows something different, and it matters:
+### 5.2 Unknown property names fail silently too (open)
+
+Observed 2026-08-23 while beta-testing the agent. Asked about gauge pressure, the model
+invented property names (`gauge_1_pressure`, `temperature`; the real ones are
+`pressure_meas_g1`, `temp`) and ran:
+
+```cypher
+MATCH (p:Pretreatment) WHERE p.gauge_1_pressure > 5 RETURN count(p) ...
+```
+
+Neo4j treats an unknown property as `null`, so this is not an error — it returns a
+legitimate-looking count of 0. The agent answered *"No pretreatment steps had a pressure
+above 5."* Confidently, and wrongly.
+
+**The information to catch this already exists and is being discarded.** The driver
+emitted a notification:
+
+```
+gql_status='01N52'  warn: property key does not exist.
+The property `gauge_1_pressure` does not exist in database
+```
+
+`GraphClient.run_read()` returns only `records` and never reads
+`result.consume().summary.notifications`. Surfacing those as tool warnings would catch
+this class for free — typos, missing labels, cartesian products.
+
+Contributing cause: the model **skipped `get_graph_schema`** on that run, though the system
+prompt instructs it to call it first. It obeyed on other runs. That inconsistency is
+precisely why this belongs in the harness — prompting was tried and observed to fail.
+
+#### 5.1.1 Historical record — what the bad row actually was
+
+*(Kept for the pipeline work: this is what a serialization escape looks like in practice,
+and the ingestion pipeline should be designed so it cannot recur. **The row itself is
+already fixed in the database.**)*
+
+Nick expected the sentinel to be the string `'Off'`. Querying every value showed something
+different, and it mattered:
 
 ```
 pressure_meas_g1 :  FLOAT   x1341
@@ -209,23 +268,13 @@ before the split existed. Correct repair: `pressure_meas_g1 = 4.2`, `g2` null/ab
   *"Cell gauge returns 'Off' when inactive (below range / valve closed)"* — never stored
   as a string either.
 
-So the `FLOAT | STRING` typing on `pressure_meas_g1` is **stale**: it is an artifact of
-this one legacy row, not of current behaviour. Once the row is repaired and reloaded, the
-property should type as FLOAT only. (Worth re-checking after reload rather than assuming
-— see Action Items.)
+So the `FLOAT | STRING` typing was **stale** — an artifact of one legacy row, not of
+current behaviour. **Confirmed fixed 2026-08-23:** Nick corrected the row in the database
+and re-querying shows `FLOAT` only.
 
-Consequences for the plan:
-
-- **Treat this as legacy data, not a designed sentinel.** A real sentinel would appear
-  consistently across many rows; a single malformed value among 1,341, which today's code
-  provably cannot emit, is a leftover. Fixing the row at the source is cheaper and more
-  honest than teaching the agent to parse `"(4.2, off)"`.
-- **The harness work in 5.1 is still worth doing**, but as a *guard* rather than the
-  primary fix — the class of problem (silent `null` comparison) will recur whenever a
-  new malformed value slips in, and the agent should notice rather than quietly answer
-  over a subset.
-- **`pressure_meas_g2` is currently clean** (all FLOAT), so the schema's FLOAT-only
-  typing there is accurate today.
+The takeaway for the pipeline: a single `str()` of a `(reading, status)` tuple, three
+years of otherwise-clean data, and one silently wrong agent answer. Ingestion should
+validate types on write rather than trusting the producer.
 
 ❓ Still open: the per-gauge max pressures.
 
@@ -261,14 +310,24 @@ pre-publication at that point.
 ## 8. Open Questions
 <!-- Running list. Questions move out of here and into sections as they're answered. -->
 
-- Should page access and data-API access ever be decoupled (public page, separately-gated
-  `/api/graph`)? See Section 6 for the mechanism if/when this matters. Not needed while
-  the whole site is gated behind Vercel Authentication.
-- Should Vercel's Root Directory be switched from `dashboard-node` to the repo root (with
-  custom build/install commands pointed at `dashboard-node`)? Would eliminate the cosmetic
-  failed-check noise on every unrelated `ir-spectro-node`/`orchestration` PR — see Decision
-  Log 2026-08-21. Deferred: current noise doesn't block merges, not worth the risk of a
-  build-config change without time to test it properly.
+*(Reviewed 2026-08-23 — both below are still genuinely open.)*
+
+- **Still open.** Should page access and data-API access ever be decoupled (public page,
+  separately-gated `/api/graph`)? See §6 for the mechanism. Not needed while the whole site
+  is gated behind Vercel Authentication, which it still is.
+- **Still open, still deferred.** Should Vercel's Root Directory be switched from
+  `dashboard-node` to the repo root (with build/install commands pointed at
+  `dashboard-node`)? Would remove the cosmetic failed-check noise on unrelated
+  `ir-spectro-node`/`orchestration` PRs — see Decision Log 2026-08-21. Doesn't block merges,
+  so not worth a build-config change without time to test it.
+- **New (2026-08-23).** If visitors are expected to bring their own local LLM (§3), how does
+  a page served from `cataverse.ai` reach an Ollama instance on the visitor's `localhost`?
+  Technically possible — Ollama's `OLLAMA_ORIGINS` permits cross-origin calls — but it means
+  every visitor must install Ollama, pull a model, and configure CORS. That is a steep ask
+  for a public research site, and it interacts with whether §7 (cost tracking + BYOK) is
+  needed at all. Unresolved; does not block the terminal agent.
+- **New (2026-08-23).** Where should `spec.md` live? It now describes `dashboard-node/` *and*
+  `agent-node/`, but sits inside `dashboard-node/`. Repo root is the more honest home.
 
 ## 9. Decision Log
 <!-- Append-only record of decisions + why (e.g., "AuraDB free tier over self-hosted
@@ -287,6 +346,30 @@ pre-publication at that point.
   a custom domain to a specific git branch (via the Preview environment), so the domain
   tracks that branch directly without touching Production. `main` still has no working
   deploy at all — that's expected, not a bug, until the PR merges.
+- **2026-08-23 — Local LLM via Ollama, not the Anthropic API.** Nick's call. Consequences,
+  all favourable for the learning goal: Phase A stopped being blocked on an API key
+  (Claude Pro does not include API access); there is no per-query cost, so the §7 cost cap
+  became optional rather than a prerequisite; and iteration is free, which matters when the
+  point is to observe failures and tune the harness. Trade-off: an 8B local model is weaker
+  than a frontier model at composing Cypher, so some observed failures are model capability
+  rather than harness design — worth keeping in mind before over-fitting the prompt to
+  them. Intended to extend to visitors bringing their own local LLM (see §8 for the
+  unresolved browser→localhost problem).
+- **2026-08-23 — Agent is Python in `agent-node/`, terminal-first.** Chosen over TypeScript
+  inside `dashboard-node/`. Reasons: matches §7's own milestone ("agent working in a
+  terminal — the learning core"), matches the Python instrument code, and agent work in
+  Python is the stronger signal for Nick's job search. Cost: the web UI integration will
+  need either a port or a small HTTP service later. Accepted deliberately.
+- **2026-08-23 — Keep-alive/snapshot and the ingestion pipeline both shelved.** Nick:
+  *"It seems like there is always something else to do."* Both are infrastructure that kept
+  displacing the agent, which is the actual learning objective. Neither blocks agent work.
+  Revisit the keep-alive before going public; revisit the pipeline when stale data starts
+  to hurt.
+- **2026-08-23 — Removed the dual-typed-property guard rather than keeping it "just in
+  case."** Nick, correctly: *"I feel like you are handling edge cases that we have not
+  encountered."* The guard was built for a single row that was then fixed at source, and
+  its schema caveat had become actively wrong. General rule adopted: build guards for
+  failures actually observed, not anticipated ones.
 - **2026-08-23 — AuraDB free tier auto-pauses, and that threatens the core premise.**
   The instance went unreachable (`getaddrinfo ENOTFOUND` on the Aura hostname) for the
   second time in ~2 weeks — free-tier instances pause after a few days of inactivity, and
@@ -317,37 +400,58 @@ pre-publication at that point.
 
 ### Data integrity
 
-- [ ] **Repair the malformed pressure record.** `20241126_112801_pd_ceo2_000-003`, node
-  `pre_20241126_112801_pd_ceo2_000-003_3`: `pressure_meas_g1` holds `"(4.2, off)"`; should
-  be `pressure_meas_g1 = 4.2` with `g2` null/absent. Fix at source, then reload into Neo4j.
-  *Owner: Nick.* Details in §5.1.1.
-- [ ] **Re-verify property typing after that reload.** Expectation: `pressure_meas_g1`
-  types as FLOAT only, confirming the `FLOAT | STRING` was stale. Confirm rather than
-  assume — if a STRING survives, current code is emitting one somewhere and §5.1's
-  assumptions need revisiting. (The Ontology tab shows this directly.)
+- [x] ~~**Repair the malformed pressure record.**~~ Done 2026-08-23 — Nick fixed it directly
+  in the database.
+- [x] ~~**Re-verify property typing.**~~ Done 2026-08-23 — `pressure_meas_g1` now types as
+  `FLOAT` only across 1,342 values; no strings remain. `pressure_meas_g2` also clean.
 - [ ] **Record the per-gauge max pressures** in §5.1 once known — needed for the agent to
-  reason about out-of-range readings.
+  reason about out-of-range readings. *Owner: Nick.*
+- [ ] **Property rename lands on the next reload.** Renamed in the source `.json` only:
+  `pressure_meas_g1` / `pressure_meas_g2` → `pressure_measure_cell` / `pressure_measure_mfld`
+  (exact names TBC). **The database still has the old names** (verified 2026-08-23: 1,342
+  nodes). Arrives when the data is reloaded. Revisit then: any saved Cypher, the Ontology
+  tab's colour map, and docs referencing the old names. Note for the pipeline design —
+  a rename is a schema migration, and the pipeline needs a story for them.
 
-### Pipeline
+### Agent
 
-- [ ] **Build a repo → Neo4j ingestion pipeline so the graph updates continuously.**
-  Today the graph is loaded by hand, so `cataverse.ai` shows a snapshot that silently goes
-  stale as new experiments land. Target: new/changed experimental data in
-  `n-nels/cataverse.ai` flows into AuraDB without manual reload. *Not yet designed* —
-  open questions before building: what triggers it (push webhook / scheduled poll / the
-  instrument writing directly), whether it's incremental or a full rebuild, how it handles
-  reruns idempotently, and where it runs (Vercel cron, GitHub Actions, or the instrument
-  host). Interacts with Phase A0 — the keep-alive cron may be the natural place to hang it.
+- [ ] **Surface Neo4j notifications as tool warnings** in `GraphClient.run_read()`. Would
+  catch invented property names, missing labels, and cartesian products — see §5.2. The
+  driver already reports them via `result.consume().summary.notifications`; we discard
+  them. Highest-value known fix.
+- [ ] **Decide how to stop the model skipping `get_schema`.** Prompting was tried and
+  observed to fail. Options: inject the schema into the system prompt at startup, or
+  validate property names before executing. See §5.2.
+- [ ] **Compare models on the same questions.** Downloaded: `qwen3:8b`, `llama3.1:8b`,
+  `ministral-3:8b`, `qwen3:14b`. Measured 2026-08-23: all three 8B models run 100% on GPU
+  at `num_ctx=32768` (~9.7 GB of 12 GB); 65536 spills to CPU. `ministral-3:8b` answered the
+  materials question correctly in 19s vs 45–77s for `qwen3:14b`. Use `agent-node/ctx_probe.py`
+  for any new model.
+- [ ] **`AGENT_MAX_ROWS=50` is now conservative** given 4× the context. 150–200 would fit.
+- [ ] **Commit `agent-node/`** — the whole package is still untracked.
 
-### Infrastructure
+### Shelved 2026-08-23 (Nick's call — kept displacing the agent work)
 
-- [ ] **Phase A0 — DB keep-alive + cached snapshot.** Approved 2026-08-23; must land
-  before the site goes public. Snapshot half needs a Vercel storage product enabled
-  (Nick, in the Vercel dashboard).
-- [ ] **Get an Anthropic API key** (console.anthropic.com — separate from Claude Pro).
-  Sole hard blocker on Phase A. *Owner: Nick.*
+- [ ] **SHELVED — repo → Neo4j ingestion pipeline.** The graph is loaded by hand, so
+  `cataverse.ai` shows a snapshot that silently goes stale as new experiments land. Not
+  yet designed; open questions when it resumes: what triggers it (push webhook / scheduled
+  poll / the instrument writing directly), incremental vs. full rebuild, idempotency on
+  reruns, where it runs (GitHub Actions / Vercel cron / instrument host), and how it
+  handles schema migrations like the pending property rename. Revisit when stale data
+  starts to hurt.
+- [ ] **SHELVED — DB keep-alive + cached snapshot.** AuraDB free tier keeps auto-pausing
+  (twice in ~2 weeks). Tolerable while the site is gated to Nick; **must be revisited
+  before going public**, or visitors will hit "Failed to load graph." Design in Decision
+  Log 2026-08-23.
 
 ### Deferred / low priority
 
 - [ ] Switch Vercel's Root Directory off `dashboard-node` to silence the cosmetic failed
   build check on unrelated PRs (see Decision Log 2026-08-21). Non-blocking.
+- [ ] Move `spec.md` to the repo root — it now covers `agent-node/` too (see §8).
+- [ ] Update `agent-node/.env.example` — its VRAM comment still cites the old
+  qwen3:14b / 8192-context math.
+
+### No longer needed
+
+- [x] ~~**Get an Anthropic API key.**~~ Obsoleted 2026-08-23 by the switch to local Ollama.
