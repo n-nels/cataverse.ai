@@ -9,6 +9,21 @@ const SEED_LIMIT = 12;
 const MAX_HISTORY = 20;
 
 /**
+ * Labels small enough to show in full. Each has at most ~15 nodes, so an
+ * arbitrary sample of 12 hid part of a set that fits on screen comfortably —
+ * and for these the complete set is the useful thing to see.
+ */
+const SEED_ALL_LABELS = new Set([
+  "ChemConcept",
+  "ChemSpecies",
+  "KineticChain",
+  "ModelParameter",
+  "PyFunction",
+  "Material",
+  "KineticModel",
+]);
+
+/**
  * Hand-picked starting points for the two labels people actually explore from.
  *
  * A dozen arbitrary nodes is a poor way in: they share a label but nothing else,
@@ -177,7 +192,9 @@ export default function ExploreView() {
           body: JSON.stringify({
             query:
               SEED_QUERIES[label]?.query ??
-              `MATCH (n:${label}) RETURN n LIMIT ${SEED_LIMIT}`,
+              (SEED_ALL_LABELS.has(label)
+                ? `MATCH (n:${label}) RETURN n`
+                : `MATCH (n:${label}) RETURN n LIMIT ${SEED_LIMIT}`),
           }),
         });
         const body = await res.json();
@@ -185,13 +202,18 @@ export default function ExploreView() {
           setError(body.error ?? "Could not load starting nodes.");
           return;
         }
-        setGraph({ nodes: body.nodes, links: body.links });
-        setExpandedIds(new Set());
-        setHistory([]);
-        setSeedKey((k) => k + 1);
+        // Add to what's on screen rather than replacing it. Switching "start
+        // from" is navigation, not a reset — hopping between entry points
+        // mid-demo should build the picture up, not wipe it. Clear is the reset.
+        const isFirst = graph.nodes.length === 0;
+        if (!isFirst) pushHistory();
+        merge({ nodes: body.nodes, links: body.links });
+        // Only remount (and therefore refit) on the first seed. Remounting on a
+        // later one would reset the layout and the viewport.
+        if (isFirst) setSeedKey((k) => k + 1);
         setNote(
           SEED_QUERIES[label]?.note ??
-            `Starting from ${body.nodes.length} ${label} node${body.nodes.length === 1 ? "" : "s"}. Click one, then Expand.`
+            `Added ${body.nodes.length} ${label} node${body.nodes.length === 1 ? "" : "s"}. Click one, then Expand.`
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Request failed.");
@@ -199,7 +221,7 @@ export default function ExploreView() {
         setSeeding(false);
       }
     },
-    [seeding]
+    [seeding, graph.nodes.length, merge, pushHistory]
   );
 
   const expand = useCallback(

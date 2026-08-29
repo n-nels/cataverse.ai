@@ -11,7 +11,21 @@ import {
 // A single expansion should stay readable. Some nodes are very high-degree —
 // one Filename has 1,107 Pretreatment steps hanging off it — so an uncapped
 // expansion would bury the user and stall the layout.
-const MAX_NODES = 120;
+// Keep an expansion readable. Some nodes are very high-degree — one Filename
+// has 1,107 Pretreatment steps hanging off it — so an uncapped expansion would
+// bury the user and stall the layout.
+const DEFAULT_MAX_NODES = 25;
+
+// KineticChain groups the experiments run on one sample / campaign, so the
+// whole set *is* the thing you want to see when you expand it. Capping that at
+// 25 would hide the comparison it exists to make.
+const MAX_NODES_BY_LABEL: Record<string, number> = {
+  KineticChain: 300,
+};
+
+// Fetched before we know the centre node's label, so pull enough rows to
+// satisfy the largest cap and trim afterwards.
+const FETCH_LIMIT = 400;
 
 export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get("id");
@@ -31,8 +45,8 @@ export async function GET(request: Request) {
          RETURN n, r, m
          LIMIT $limit`,
         // neo4j.int(): a plain JS number arrives as a float, and LIMIT rejects
-        // "121.0" — it requires an integer.
-        { id, limit: neo4j.int(MAX_NODES + 1) }
+        // "400.0" — it requires an integer.
+        { id, limit: neo4j.int(FETCH_LIMIT) }
       )
     );
 
@@ -45,9 +59,14 @@ export async function GET(request: Request) {
 
     // The centre node is on every row, and is the only thing on the row when it
     // has no relationships at all.
-    nodes.set(id, nodeToGraphNode(result.records[0].get("n") as Node));
+    const centre = nodeToGraphNode(result.records[0].get("n") as Node);
+    nodes.set(id, centre);
 
-    const rows = result.records.slice(0, MAX_NODES);
+    // Cap depends on what was clicked, so it can only be decided now.
+    const maxNodes =
+      MAX_NODES_BY_LABEL[centre.labels[0]] ?? DEFAULT_MAX_NODES;
+
+    const rows = result.records.slice(0, maxNodes);
     for (const record of rows) {
       const m = record.get("m") as Node | null;
       const r = record.get("r") as Relationship | null;
@@ -64,8 +83,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       nodes: Array.from(nodes.values()),
       links: Array.from(links.values()),
-      truncated: result.records.length > MAX_NODES,
-      limit: MAX_NODES,
+      truncated: result.records.length > maxNodes,
+      limit: maxNodes,
     });
   } catch (error) {
     console.error("Neighbor expansion failed", error);

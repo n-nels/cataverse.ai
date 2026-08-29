@@ -18,7 +18,13 @@ type LabelInfo = {
 
 type Triple = { from: string; rel: string; to: string; count: number };
 
-type SchemaData = { labels: LabelInfo[]; triples: Triple[] };
+type PropInfo = { name: string; types: string[] };
+
+type SchemaData = {
+  labels: LabelInfo[];
+  triples: Triple[];
+  relProperties?: Record<string, PropInfo[]>;
+};
 
 type MetaNode = { id: string; count: number; val: number; x?: number; y?: number };
 
@@ -56,6 +62,7 @@ export default function OntologyView() {
   const [data, setData] = useState<SchemaData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedRel, setSelectedRel] = useState<Triple | null>(null);
   const fgRef = useRef<ForceGraphMethods>(undefined);
   const [containerRef, { width, height }] = useElementSize<HTMLDivElement>();
 
@@ -251,20 +258,104 @@ export default function OntologyView() {
             // Thin curved lines are fiddly to hit; widen the hover target.
             linkHoverPrecision={8}
             linkColor={() => "rgba(255,255,255,0.3)"}
-            onNodeClick={(node) => setSelected((node as MetaNode).id)}
-            onBackgroundClick={() => setSelected(null)}
+            onNodeClick={(node) => {
+              setSelected((node as MetaNode).id);
+              setSelectedRel(null);
+            }}
+            onLinkClick={(link) => {
+              const l = link as unknown as {
+                rel: string;
+                count: number;
+                source: MetaNode | string;
+                target: MetaNode | string;
+              };
+              const id = (e: MetaNode | string) =>
+                typeof e === "string" ? e : e.id;
+              setSelectedRel({
+                rel: l.rel,
+                count: l.count,
+                from: id(l.source),
+                to: id(l.target),
+              });
+              setSelected(null);
+            }}
+            onBackgroundClick={() => {
+              setSelected(null);
+              setSelectedRel(null);
+            }}
             onEngineStop={handleEngineStop}
             backgroundColor="#000000"
           />
         )}
         <p className="pointer-events-none absolute bottom-3 left-3 text-xs text-zinc-600">
-          Node size ∝ count · hover an edge for its relationship type · click a
-          node for details
+          Node size ∝ count · click a node or a relationship for details
         </p>
       </div>
 
       <aside className="w-full shrink-0 overflow-y-auto border-t border-zinc-800 bg-zinc-950 p-4 lg:w-96 lg:border-l lg:border-t-0">
-        {!selectedInfo ? (
+        {selectedRel ? (
+          <>
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <h2 className="font-mono text-sm font-semibold text-emerald-400">
+                {selectedRel.rel}
+              </h2>
+              <button
+                onClick={() => setSelectedRel(null)}
+                className="text-zinc-500 hover:text-white"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="mb-4 text-xs text-zinc-400">
+              {([selectedRel.from, selectedRel.to] as const).map(
+                (label, index) => (
+                  <span key={index}>
+                    {index === 1 && (
+                      <span className="text-emerald-400"> → </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        setSelected(label);
+                        setSelectedRel(null);
+                      }}
+                      className="text-zinc-200 underline decoration-zinc-700 underline-offset-2 transition-colors hover:text-white hover:decoration-zinc-400"
+                    >
+                      {label}
+                    </button>
+                  </span>
+                )
+              )}
+              <span className="text-zinc-600">
+                {" "}
+                · {selectedRel.count.toLocaleString()} in the graph
+              </span>
+            </p>
+
+            <h3 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Properties
+            </h3>
+            {(data.relProperties?.[selectedRel.rel]?.length ?? 0) === 0 ? (
+              <p className="text-xs text-zinc-600">
+                This relationship carries no properties — it records the
+                connection itself.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {data.relProperties?.[selectedRel.rel]?.map((p) => (
+                  <li key={p.name} className="font-mono text-xs text-zinc-300">
+                    {p.name}
+                    <span className="text-zinc-600">
+                      {" : "}
+                      {shortType(p.types)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        ) : !selectedInfo ? (
           <>
             <h2 className="mb-1 text-sm font-semibold text-zinc-100">
               Ontology
@@ -346,9 +437,13 @@ export default function OntologyView() {
               {selectedTriples.map((t, i) => (
                 <li key={i} className="text-xs">
                   <button
-                    onClick={() =>
-                      setSelected(t.from === selected ? t.to : t.from)
-                    }
+                    // Clicking the row opens the relationship's own details.
+                    // Thin curved edges on the canvas are a fiddly click target,
+                    // and this list is where people actually read the structure.
+                    onClick={() => {
+                      setSelectedRel(t);
+                      setSelected(null);
+                    }}
                     className="text-left text-zinc-400 transition-colors hover:text-white"
                   >
                     <span

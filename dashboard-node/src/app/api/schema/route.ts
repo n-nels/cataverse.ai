@@ -39,6 +39,12 @@ export async function GET() {
     // Property keys and their types, per label.
     const propsResult = await session.run(`CALL db.schema.nodeTypeProperties()`);
 
+    // Relationships carry properties too — DELTA_FROM holds the actual delta
+    // values, which is the interesting part of that edge.
+    const relPropsResult = await session.run(
+      `CALL db.schema.relTypeProperties()`
+    );
+
     const propsByLabel = new Map<string, { name: string; types: string[] }[]>();
     for (const record of propsResult.records) {
       const label = (record.get("nodeLabels") as string[])[0];
@@ -67,7 +73,23 @@ export async function GET() {
       count: record.get("count") as number,
     }));
 
-    return NextResponse.json({ labels, triples });
+    // relTypeProperties reports the type quoted and backticked (":`DELTA_FROM`"),
+    // which will not match the plain type names used everywhere else.
+    const relProperties: Record<string, { name: string; types: string[] }[]> = {};
+    for (const record of relPropsResult.records) {
+      const relType = String(record.get("relType") ?? "").replace(
+        /^:`?|`?$/g,
+        ""
+      );
+      const name = record.get("propertyName") as string | null;
+      if (!relType || !name) continue;
+      const types = ((record.get("propertyTypes") as string[]) ?? []).map((t) =>
+        t.replace(" NOT NULL", "")
+      );
+      (relProperties[relType] ??= []).push({ name, types });
+    }
+
+    return NextResponse.json({ labels, triples, relProperties });
   } catch (error) {
     console.error("Neo4j schema query failed", error);
     return NextResponse.json(
