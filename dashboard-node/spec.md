@@ -470,19 +470,32 @@ pre-publication at that point.
 
 ### Explore tab — beta-test findings (2026-08-23, Claude driving the UI)
 
-Ordered by how much they get in the way. The first three are the ones worth doing next.
+Ordered by how much they get in the way. **Items 1–3 were fixed on 2026-08-23** and are
+kept here because the reasoning is worth having; 4–7 remain open.
 
-1. **Nodes have no labels.** Seeding 12 `ChemConcept` nodes gives twelve identical purple
+1. ~~**Nodes have no labels.**~~ **FIXED.** `lib/nodeLabel.ts` picks a display property per
+   label (`name`, `formula`, `base_name`, `id`…), falling back gracefully for labels added
+   later. Long ids are truncated from the *front*, because siblings share a prefix
+   (`pre_20241126_112801_…`) and it is the tail that distinguishes them. Bare numbers get
+   a unit ("step 3", "402 K"). On graphs over 150 nodes labels only appear once zoomed in,
+   so the 1,875-node landing view stays legible.
+   <br>*Original report:* Seeding 12 `ChemConcept` nodes gives twelve identical purple
    dots — the only way to tell them apart is to click each one and read the panel. Colour
    encodes the label, but nothing identifies the *node*. The Ontology tab already draws
    text labels on its canvas, so the technique is proven; it needs a sensible per-label
    choice of which property to show (`name` for ChemConcept, `base_name` for Filename,
    `id` for Material…), probably shown only when zoomed in or when the node is selected.
-2. **The detail panel covers the toolbar.** It is `fixed top-4 right-4`, which sits on top
+2. ~~**The detail panel covers the toolbar.**~~ **FIXED** — moved to bottom-right, and
+   "Fit view" to bottom-left (offset to clear Next.js's dev indicator).
+   <br>*Original report:* It is `fixed top-4 right-4`, which sits on top
    of the node counts and the Undo / Clear buttons. To press Undo you must first close the
    panel — which is exactly when you want Undo. Move the panel to the bottom-right, or make
    the toolbar taller than it.
-3. **Nodes are a moving target.** After a seed the simulation keeps nudging disconnected
+3. ~~**Nodes are a moving target.**~~ **FIXED** — sparse graphs (no links, i.e. a fresh
+   seed) now use `cooldownTime` 2500ms instead of the default 15000 and a higher
+   `d3VelocityDecay`, so they settle almost immediately. Verified by clicking a node
+   straight after a screenshot and hitting it first try.
+   <br>*Original report:* After a seed the simulation keeps nudging disconnected
    nodes for ~15s; aim at one and it has drifted by the time you click. Measured: two
    `Material` nodes moved from (528,505) and (268,638) to (717,407) and (79,735) between a
    screenshot and the click that followed. Worst with disconnected seed nodes, where no

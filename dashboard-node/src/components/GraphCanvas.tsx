@@ -4,8 +4,14 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ForceGraphMethods } from "react-force-graph-2d";
 import { colorForLabels } from "@/lib/labelColors";
+import { nodeDisplayLabel } from "@/lib/nodeLabel";
 import { useElementSize } from "@/lib/useElementSize";
 import type { GraphData, GraphLink, GraphNode } from "./GraphView";
+
+// Above this many nodes, labels only appear once you have zoomed in — drawing
+// 1,875 of them at once is both unreadable and slow.
+const ALWAYS_LABEL_BELOW = 150;
+const LABEL_ZOOM_THRESHOLD = 1.2;
 
 // react-force-graph-2d draws to a <canvas>, which doesn't exist during
 // server-side rendering — load it only in the browser.
@@ -42,21 +48,23 @@ export default function GraphCanvas({
   const fgRef = useRef<ForceGraphMethods>(undefined);
   const [containerRef, { width, height }] = useElementSize<HTMLDivElement>();
 
-  // Fit once, when the graph first settles — then leave the viewport alone.
-  // Every expansion reheats the simulation, and re-fitting on each settle
-  // yanked the view back out from under anyone who had zoomed in to look at
-  // something. Refitting is available on demand via the button instead.
   const hasFitted = useRef(false);
 
   const fitView = useCallback(() => {
     fgRef.current?.zoomToFit(400, 40);
   }, []);
 
+  // Where the graph can be expanded (the Explore tab), fit only the first time
+  // it settles: every expansion reheats the simulation, and re-fitting on each
+  // settle yanked the viewport away from whatever the user had zoomed in on.
+  // Elsewhere nothing reheats except the initial layout finding its shape, so
+  // fitting on each settle is what centres the view — suppressing it there left
+  // the landing graph stranded off to one side.
   const handleEngineStop = useCallback(() => {
-    if (hasFitted.current) return;
+    if (onExpand && hasFitted.current) return;
     hasFitted.current = true;
     fitView();
-  }, [fitView]);
+  }, [fitView, onExpand]);
 
   // Bound how far the repulsion force reaches, but ONLY where it is needed.
   // Seed nodes in the Explore tab have no relationships yet, so nothing pulls
@@ -94,6 +102,39 @@ export default function GraphCanvas({
           nodeLabel={(node) => (node as GraphNode).labels.join(", ")}
           nodeColor={(node) => colorForLabels((node as GraphNode).labels)}
           nodeRelSize={5}
+          // "after" so the library still paints the node and we only add text.
+          nodeCanvasObjectMode={() => "after"}
+          nodeCanvasObject={(node, ctx, globalScale) => {
+            const n = node as GraphNode & { x?: number; y?: number };
+            if (n.x == null || n.y == null) return;
+            if (
+              data.nodes.length > ALWAYS_LABEL_BELOW &&
+              globalScale < LABEL_ZOOM_THRESHOLD
+            ) {
+              return;
+            }
+
+            const text = nodeDisplayLabel(n.labels, n.properties);
+            const fontSize = 11 / globalScale;
+            ctx.font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+
+            // Outline first so the text stays readable over links and nodes.
+            ctx.strokeStyle = "rgba(0,0,0,0.9)";
+            ctx.lineWidth = 3 / globalScale;
+            ctx.lineJoin = "round";
+            const y = n.y + 6 + 3 / globalScale;
+            ctx.strokeText(text, n.x, y);
+            ctx.fillStyle = "#d4d4d8";
+            ctx.fillText(text, n.x, y);
+          }}
+          // Disconnected nodes have no link force damping them, so they drift
+          // for the full default 15s cooldown — long enough that you aim at a
+          // node and it has moved by the time you click. Settle sparse graphs
+          // faster and damp their motion harder.
+          cooldownTime={data.links.length === 0 ? 2500 : 15000}
+          d3VelocityDecay={data.links.length === 0 ? 0.6 : 0.4}
           linkLabel={(link) => (link as GraphLink).type}
           linkDirectionalArrowLength={4}
           linkDirectionalArrowRelPos={1}
@@ -107,13 +148,19 @@ export default function GraphCanvas({
       <button
         onClick={fitView}
         title="Fit the whole graph in view"
-        className="fixed bottom-3 right-3 z-10 rounded-md border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:border-zinc-500 hover:text-white"
+        // Offset from the left edge to clear Next.js's dev-mode indicator,
+        // which sits bottom-left and would otherwise cover this while
+        // developing or recording locally.
+        className="fixed bottom-3 left-20 z-10 rounded-md border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:border-zinc-500 hover:text-white"
       >
         Fit view
       </button>
 
       {selectedLive && (
-        <div className="fixed right-4 top-4 z-10 max-h-[80vh] w-80 overflow-auto rounded-lg border border-zinc-700 bg-zinc-900/95 p-4 text-sm text-zinc-100 shadow-xl">
+        // Anchored to the bottom, not the top: pinned top-right it sat on top
+        // of the Explore toolbar, hiding the node counts and the Undo button —
+        // and Undo is exactly what you reach for while a node is selected.
+        <div className="fixed bottom-4 right-4 z-10 max-h-[70vh] w-80 overflow-auto rounded-lg border border-zinc-700 bg-zinc-900/95 p-4 text-sm text-zinc-100 shadow-xl">
           <div className="mb-2 flex items-start justify-between gap-2">
             <span className="font-semibold text-orange-400">
               {selectedLive.labels.join(", ")}
