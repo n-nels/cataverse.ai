@@ -23,6 +23,11 @@ export function useElementSize<T extends HTMLElement>() {
     const observer = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
       if (!rect) return;
+      // A hidden tab panel measures 0×0. Keeping the last real size means the
+      // graph stays mounted while the user is on another tab, so returning to
+      // it shows the layout exactly as they left it rather than re-simulating
+      // from scratch. There is nothing worth rendering at zero size anyway.
+      if (rect.width === 0 || rect.height === 0) return;
       setSize({ width: Math.round(rect.width), height: Math.round(rect.height) });
     });
     observer.observe(node);

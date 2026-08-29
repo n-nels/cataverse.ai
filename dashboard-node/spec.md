@@ -129,11 +129,12 @@ commentary, peer review, or publications into the graph.
      I have no idea. I have never done these type of things before.
 
 **As built (2026-08-23).** Next.js (App Router) + TypeScript + Tailwind, deployed on
-Vercel, in `dashboard-node/`. Four tabs:
+Vercel, in `dashboard-node/`. Five tabs:
 
 | Tab | What it does |
 |---|---|
 | **Graph** | Landing view. Loads the whole graph (~1.9k nodes) and renders it force-directed. |
+| **Explore** | Start from one label, click nodes to pull in their neighbours. Per-label workspaces, undo, remove-from-view. |
 | **Query** | Cypher box → results drawn on the same canvas. Scalars fall back to a table. |
 | **Ontology** | The schema as a meta-graph: labels as nodes, relationship types as edges. |
 | **Ask the Agent** | Still a scripted mockup. The real agent lives in `agent-node/`. |
@@ -431,6 +432,19 @@ pre-publication at that point.
   (verified on PR #23 and #24 — "Able to merge" / "No conflicts with base branch" shown
   regardless). Left as cosmetic noise for now; see Open Questions for the real fix if it's
   ever worth doing.
+
+- **2026-08-29 - Tabs stay mounted once visited; switching tabs no longer discards work.**
+  The shell used to render only the active tab, so every tab switch unmounted the other
+  four and threw away their state - an Explore session built up over a dozen expansions, a
+  typed query and its results, the whole layout the force simulation had settled into. Now
+  a tab is mounted on first visit and thereafter hidden with CSS (`hidden` +
+  `aria-hidden`), never unmounted. Lazy on first visit, so an unopened tab still costs
+  nothing. This needed one supporting change: `useElementSize` ignores 0x0 measurements,
+  because a hidden panel measures zero and `GraphCanvas` only renders its canvas at
+  non-zero size - without it every hidden tab tore its canvas down and re-simulated from
+  scratch on return, which is the thing being fixed. Verified on Explore (14 nodes, undo
+  depth, open detail panel all survived a round trip), Query (Cypher text + result table),
+  and Ontology (still lays out correctly on first click).
 
 ## 10. Open Action Items
 <!-- Running to-do list. Unlike Section 8 (Open Questions, which are decisions to make),
