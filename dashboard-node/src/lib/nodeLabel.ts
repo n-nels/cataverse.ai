@@ -53,7 +53,14 @@ export function nodeDisplayLabel(
 
     // A bare number means nothing on its own — say what it is.
     if (primary === "Pretreatment" && key === "step_index") return `step ${text}`;
-    if (primary === "ExpConditions" && key === "temp") return `${text} K`;
+    if (primary === "ExpConditions" && key === "temp") {
+      // Recorded to four decimals ("44.9008"); that precision is noise in a
+      // label and is still visible in the detail panel.
+      const numeric = Number(value);
+      return Number.isFinite(numeric)
+        ? `${Math.round(numeric * 10) / 10} K`
+        : `${text} K`;
+    }
     // Reference vs. sample is the distinction people compare experiments on,
     // and two base_names side by side do not reveal which is which.
     if (primary === "Filename" && properties.is_reference === true) {

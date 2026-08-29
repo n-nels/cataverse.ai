@@ -51,8 +51,18 @@ export default function GraphCanvas({
   const hasFitted = useRef(false);
 
   const fitView = useCallback(() => {
-    fgRef.current?.zoomToFit(400, 40);
-  }, []);
+    const fg = fgRef.current;
+    if (!fg) return;
+    // One or two nodes have almost no bounding box, and zoomToFit scales to
+    // fill it — a single node ends up covering the whole canvas with its label
+    // pushed off-screen. Use a fixed, readable zoom instead.
+    if (data.nodes.length <= 2) {
+      fg.centerAt(0, 0, 400);
+      fg.zoom(2, 400);
+      return;
+    }
+    fg.zoomToFit(400, 40);
+  }, [data.nodes.length]);
 
   // Where the graph can be expanded (the Explore tab), fit only the first time
   // it settles: every expansion reheats the simulation, and re-fitting on each

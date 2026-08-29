@@ -45,6 +45,24 @@ WITH p ORDER BY p.id LIMIT 1
 RETURN p AS n`,
     note: "Step 1 of two successful experiments — one a reference measurement, one not. Expand to walk the sequence forward.",
   },
+  // Single node each: these sit downstream in the chain, so one is enough to
+  // start from and expanding immediately reveals the surrounding context. Both
+  // resolve to the same reference run as the seeds above, so every entry point
+  // leads into the same experiment.
+  ExpConditions: {
+    query: `MATCH (f:Filename)-[:CONDUCTED_UNDER]->(e:ExpConditions)
+WHERE f.exp_success AND f.is_reference
+WITH e, f ORDER BY f.datetime LIMIT 1
+RETURN e AS n`,
+    note: "The conditions of one successful reference measurement. Expand to see the experiment it belongs to and what it yielded.",
+  },
+  AdsParams: {
+    query: `MATCH (f:Filename)-[:CONDUCTED_UNDER]->(:ExpConditions)-[:YIELDS]->(a:AdsParams)
+WHERE f.exp_success AND f.is_reference
+WITH a, f ORDER BY f.datetime LIMIT 1
+RETURN a AS n`,
+    note: "Fitted adsorption parameters from one successful reference measurement. Expand to see the conditions that produced them.",
+  },
 };
 
 type LabelInfo = { label: string; count: number };
