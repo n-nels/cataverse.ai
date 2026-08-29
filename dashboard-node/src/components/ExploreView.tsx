@@ -6,14 +6,30 @@ import type { GraphData, GraphNode } from "./GraphView";
 import { colorForLabels } from "@/lib/labelColors";
 
 const SEED_LIMIT = 12;
+const MAX_HISTORY = 20;
 
 type LabelInfo = { label: string; count: number };
+
+type Snapshot = { nodes: GraphData["nodes"]; links: GraphData["links"]; expanded: Set<string> };
+
+/**
+ * A link's endpoint is a node id at first, but react-force-graph replaces it
+ * with the node object once it has processed the data. Both shapes turn up.
+ */
+function endpointId(end: unknown): string {
+  return typeof end === "string" ? end : (end as GraphNode).id;
+}
 
 export default function ExploreView() {
   const [labels, setLabels] = useState<LabelInfo[]>([]);
   const [graph, setGraph] = useState<GraphData>({ nodes: [], links: [] });
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [history, setHistory] = useState<Snapshot[]>([]);
+  // Bumped on each new seed so GraphCanvas remounts and fits the fresh graph.
+  // Expansions deliberately keep the same key: remounting there would reset the
+  // layout and the viewport the user has zoomed to.
+  const [seedKey, setSeedKey] = useState(0);
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -51,6 +67,44 @@ export default function ExploreView() {
     });
   }, []);
 
+  /** Remember the current view so an expansion that blows up can be undone. */
+  const pushHistory = useCallback(() => {
+    setHistory((h) => [
+      ...h.slice(-(MAX_HISTORY - 1)),
+      { nodes: graph.nodes, links: graph.links, expanded: expandedIds },
+    ]);
+  }, [graph, expandedIds]);
+
+  const undo = useCallback(() => {
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    setGraph({ nodes: prev.nodes, links: prev.links });
+    setExpandedIds(prev.expanded);
+    setHistory((h) => h.slice(0, -1));
+    setError(null);
+    setNote(null);
+  }, [history]);
+
+  const removeNode = useCallback(
+    (node: GraphNode) => {
+      pushHistory();
+      setGraph((prev) => ({
+        nodes: prev.nodes.filter((n) => n.id !== node.id),
+        links: prev.links.filter(
+          (l) =>
+            endpointId(l.source) !== node.id && endpointId(l.target) !== node.id
+        ),
+      }));
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(node.id);
+        return next;
+      });
+      setNote(`Removed one ${node.labels[0] ?? "node"} from the view.`);
+    },
+    [pushHistory]
+  );
+
   const seed = useCallback(
     async (label: string) => {
       if (seeding) return;
@@ -74,6 +128,8 @@ export default function ExploreView() {
         }
         setGraph({ nodes: body.nodes, links: body.links });
         setExpandedIds(new Set());
+        setHistory([]);
+        setSeedKey((k) => k + 1);
         setNote(
           `Starting from ${body.nodes.length} ${label} node${body.nodes.length === 1 ? "" : "s"}. Click one, then Expand.`
         );
@@ -92,6 +148,7 @@ export default function ExploreView() {
       setBusyId(node.id);
       setError(null);
       setNote(null);
+      pushHistory();
       try {
         const res = await fetch(
           `/api/neighbors?id=${encodeURIComponent(node.id)}`
@@ -114,12 +171,13 @@ export default function ExploreView() {
         setBusyId(null);
       }
     },
-    [busyId, merge]
+    [busyId, merge, pushHistory]
   );
 
   const reset = () => {
     setGraph({ nodes: [], links: [] });
     setExpandedIds(new Set());
+    setHistory([]);
     setError(null);
     setNote(null);
   };
@@ -150,6 +208,14 @@ export default function ExploreView() {
                 {graph.nodes.length} nodes · {graph.links.length} relationships ·{" "}
                 {expandedIds.size} expanded
               </span>
+              <button
+                onClick={undo}
+                disabled={history.length === 0}
+                title="Undo the last expansion or removal"
+                className="rounded px-2 py-0.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+              >
+                Undo{history.length > 0 ? ` (${history.length})` : ""}
+              </button>
               <button
                 onClick={reset}
                 className="rounded px-2 py-0.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
@@ -184,8 +250,10 @@ export default function ExploreView() {
         </div>
       ) : (
         <GraphCanvas
+          key={seedKey}
           data={graph}
           onExpand={expand}
+          onRemove={removeNode}
           expandedIds={expandedIds}
           busyId={busyId}
         />

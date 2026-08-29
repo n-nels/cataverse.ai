@@ -26,30 +26,37 @@ const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
 export default function GraphCanvas({
   data,
   onExpand,
+  onRemove,
   expandedIds,
   busyId,
-  autoFit = true,
 }: {
   data: GraphData;
   /** When given, the detail panel offers an "Expand" action for that node. */
   onExpand?: (node: GraphNode) => void;
-  /** Nodes already expanded — drawn with a ring so you can see where you've been. */
+  /** When given, the detail panel offers a "Remove" action for that node. */
+  onRemove?: (node: GraphNode) => void;
   expandedIds?: Set<string>;
   busyId?: string | null;
-  /**
-   * Re-fit the view when the simulation settles. Wanted on first render, but
-   * not after an expansion — refitting mid-exploration yanks the viewport away
-   * from whatever the user was looking at.
-   */
-  autoFit?: boolean;
 }) {
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const fgRef = useRef<ForceGraphMethods>(undefined);
   const [containerRef, { width, height }] = useElementSize<HTMLDivElement>();
 
+  // Fit once, when the graph first settles — then leave the viewport alone.
+  // Every expansion reheats the simulation, and re-fitting on each settle
+  // yanked the view back out from under anyone who had zoomed in to look at
+  // something. Refitting is available on demand via the button instead.
+  const hasFitted = useRef(false);
+
+  const fitView = useCallback(() => {
+    fgRef.current?.zoomToFit(400, 40);
+  }, []);
+
   const handleEngineStop = useCallback(() => {
-    if (autoFit) fgRef.current?.zoomToFit(400, 40);
-  }, [autoFit]);
+    if (hasFitted.current) return;
+    hasFitted.current = true;
+    fitView();
+  }, [fitView]);
 
   // Bound how far the repulsion force reaches, but ONLY where it is needed.
   // Seed nodes in the Explore tab have no relationships yet, so nothing pulls
@@ -96,6 +103,15 @@ export default function GraphCanvas({
           backgroundColor="#000000"
         />
       )}
+
+      <button
+        onClick={fitView}
+        title="Fit the whole graph in view"
+        className="fixed bottom-3 right-3 z-10 rounded-md border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:border-zinc-500 hover:text-white"
+      >
+        Fit view
+      </button>
+
       {selectedLive && (
         <div className="fixed right-4 top-4 z-10 max-h-[80vh] w-80 overflow-auto rounded-lg border border-zinc-700 bg-zinc-900/95 p-4 text-sm text-zinc-100 shadow-xl">
           <div className="mb-2 flex items-start justify-between gap-2">
@@ -121,6 +137,18 @@ export default function GraphCanvas({
                 : expandedIds?.has(selectedLive.id)
                   ? "Expand again"
                   : "Expand neighbours"}
+            </button>
+          )}
+
+          {onRemove && (
+            <button
+              onClick={() => {
+                onRemove(selectedLive);
+                setSelected(null);
+              }}
+              className="mb-3 w-full rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:border-red-800 hover:bg-red-950/40 hover:text-red-300"
+            >
+              Remove from view
             </button>
           )}
 

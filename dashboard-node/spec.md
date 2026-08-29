@@ -468,6 +468,39 @@ pre-publication at that point.
 - [ ] **`AGENT_MAX_ROWS=50` is now conservative** given 4× the context. 150–200 would fit.
 - [x] ~~**Commit `agent-node/`**~~ — done 2026-08-23, branch `feature/agent-node`, pushed.
 
+### Explore tab — beta-test findings (2026-08-23, Claude driving the UI)
+
+Ordered by how much they get in the way. The first three are the ones worth doing next.
+
+1. **Nodes have no labels.** Seeding 12 `ChemConcept` nodes gives twelve identical purple
+   dots — the only way to tell them apart is to click each one and read the panel. Colour
+   encodes the label, but nothing identifies the *node*. The Ontology tab already draws
+   text labels on its canvas, so the technique is proven; it needs a sensible per-label
+   choice of which property to show (`name` for ChemConcept, `base_name` for Filename,
+   `id` for Material…), probably shown only when zoomed in or when the node is selected.
+2. **The detail panel covers the toolbar.** It is `fixed top-4 right-4`, which sits on top
+   of the node counts and the Undo / Clear buttons. To press Undo you must first close the
+   panel — which is exactly when you want Undo. Move the panel to the bottom-right, or make
+   the toolbar taller than it.
+3. **Nodes are a moving target.** After a seed the simulation keeps nudging disconnected
+   nodes for ~15s; aim at one and it has drifted by the time you click. Measured: two
+   `Material` nodes moved from (528,505) and (268,638) to (717,407) and (79,735) between a
+   screenshot and the click that followed. Worst with disconnected seed nodes, where no
+   link force damps the motion. Likely fix: shorter `cooldownTime`, or higher
+   `d3VelocityDecay`, for sparse graphs.
+
+Also noticed, lower priority:
+
+4. No hover affordance — the cursor does not change over a node, so nothing suggests
+   clicking does anything.
+5. No preview of expansion size. Expanding is a coin flip between 1 new node and the 75
+   cap; showing the degree in the panel first would let you decide.
+6. Removing a node can leave neighbours stranded with no visible connection. "Collapse"
+   (drop what this node brought in) is probably the action people actually want, alongside
+   the current "remove just this one".
+7. A seed is N disconnected dots, which reads as an odd starting state. Seeding with the
+   relationships *between* the seed nodes, where any exist, would look less arbitrary.
+
 ### App — candidates for what's next
 
 - [ ] **Click-to-expand graph exploration.** Today the landing graph is an impressive but
