@@ -255,7 +255,7 @@ export default function ExploreView() {
         setExpandedIds(saved.expandedIds);
         setHistory(saved.history);
         setNote(
-          `Back to your ${label} exploration — ${saved.graph.nodes.length} node${saved.graph.nodes.length === 1 ? "" : "s"}, where you left it.`
+          `Back to your ${label} exploration — ${saved.graph.nodes.length} node${saved.graph.nodes.length === 1 ? "" : "s"}.`
         );
         return;
       }

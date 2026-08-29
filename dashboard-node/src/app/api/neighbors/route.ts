@@ -8,19 +8,21 @@ import {
   relToGraphLink,
 } from "@/lib/neo4jSerialize";
 
-// A single expansion should stay readable. Some nodes are very high-degree —
-// one Filename has 1,107 Pretreatment steps hanging off it — so an uncapped
-// expansion would bury the user and stall the layout.
 // Keep an expansion readable. Some nodes are very high-degree — one Filename
 // has 1,107 Pretreatment steps hanging off it — so an uncapped expansion would
 // bury the user and stall the layout.
 const DEFAULT_MAX_NODES = 25;
 
-// KineticChain groups the experiments run on one sample / campaign, so the
-// whole set *is* the thing you want to see when you expand it. Capping that at
-// 25 would hide the comparison it exists to make.
+// Labels where the whole neighbourhood *is* the point, so a cap would hide the
+// thing you expanded to see:
+//   KineticChain groups the experiments run on one sample / campaign — capping
+//     it at 25 hides the comparison it exists to make.
+//   Material is the sample itself, and there are only two of them; expanding one
+//     means "show me everything run on this catalyst". Degrees are 211 and 38,
+//     both comfortably inside FETCH_LIMIT.
 const MAX_NODES_BY_LABEL: Record<string, number> = {
   KineticChain: 300,
+  Material: 300,
 };
 
 // Fetched before we know the centre node's label, so pull enough rows to
