@@ -54,6 +54,11 @@ export function nodeDisplayLabel(
     // A bare number means nothing on its own — say what it is.
     if (primary === "Pretreatment" && key === "step_index") return `step ${text}`;
     if (primary === "ExpConditions" && key === "temp") return `${text} K`;
+    // Reference vs. sample is the distinction people compare experiments on,
+    // and two base_names side by side do not reveal which is which.
+    if (primary === "Filename" && properties.is_reference === true) {
+      return `${text} (ref)`;
+    }
     return text;
   }
 

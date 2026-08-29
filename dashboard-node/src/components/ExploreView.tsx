@@ -8,6 +8,45 @@ import { colorForLabels } from "@/lib/labelColors";
 const SEED_LIMIT = 12;
 const MAX_HISTORY = 20;
 
+/**
+ * Hand-picked starting points for the two labels people actually explore from.
+ *
+ * A dozen arbitrary nodes is a poor way in: they share a label but nothing else,
+ * so there is no reason to click one rather than another. Two contrasting
+ * experiments — both successful, one a reference measurement and one not — give
+ * an immediate comparison to explore, and the pair is small enough to read at a
+ * glance.
+ *
+ * Deliberately deterministic (`ORDER BY` before `LIMIT`): the same two nodes
+ * every time, so a tutorial recorded today still matches what a viewer sees.
+ */
+const SEED_QUERIES: Record<string, { query: string; note: string }> = {
+  Filename: {
+    query: `MATCH (f:Filename) WHERE f.exp_success AND f.is_reference
+WITH f ORDER BY f.datetime LIMIT 1
+RETURN f AS n
+UNION ALL
+MATCH (f:Filename) WHERE f.exp_success AND NOT f.is_reference
+WITH f ORDER BY f.datetime LIMIT 1
+RETURN f AS n`,
+    note: "Two successful experiments — one a reference measurement, one not. Click either, then Expand.",
+  },
+  Pretreatment: {
+    // Step 1 of those same two experiments, so expanding walks the pretreatment
+    // sequence forward from the beginning via NEXT_STEP.
+    query: `MATCH (f:Filename)-[:HAS_STEP]->(p:Pretreatment)
+WHERE f.exp_success AND f.is_reference AND p.step_index = 1
+WITH p ORDER BY p.id LIMIT 1
+RETURN p AS n
+UNION ALL
+MATCH (f:Filename)-[:HAS_STEP]->(p:Pretreatment)
+WHERE f.exp_success AND NOT f.is_reference AND p.step_index = 1
+WITH p ORDER BY p.id LIMIT 1
+RETURN p AS n`,
+    note: "Step 1 of two successful experiments — one a reference measurement, one not. Expand to walk the sequence forward.",
+  },
+};
+
 type LabelInfo = { label: string; count: number };
 
 type Snapshot = { nodes: GraphData["nodes"]; links: GraphData["links"]; expanded: Set<string> };
@@ -118,7 +157,9 @@ export default function ExploreView() {
           // `label` comes from /api/schema, so it is one of the graph's own
           // labels rather than free text.
           body: JSON.stringify({
-            query: `MATCH (n:${label}) RETURN n LIMIT ${SEED_LIMIT}`,
+            query:
+              SEED_QUERIES[label]?.query ??
+              `MATCH (n:${label}) RETURN n LIMIT ${SEED_LIMIT}`,
           }),
         });
         const body = await res.json();
@@ -131,7 +172,8 @@ export default function ExploreView() {
         setHistory([]);
         setSeedKey((k) => k + 1);
         setNote(
-          `Starting from ${body.nodes.length} ${label} node${body.nodes.length === 1 ? "" : "s"}. Click one, then Expand.`
+          SEED_QUERIES[label]?.note ??
+            `Starting from ${body.nodes.length} ${label} node${body.nodes.length === 1 ? "" : "s"}. Click one, then Expand.`
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Request failed.");
