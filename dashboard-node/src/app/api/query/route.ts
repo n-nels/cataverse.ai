@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import neo4j, { Node, Relationship, Path } from "neo4j-driver";
 import { driver } from "@/lib/neo4j";
+import {
+  type GraphLink,
+  type GraphNode,
+  nodeToGraphNode,
+  relToGraphLink,
+  toPlain,
+} from "@/lib/neo4jSerialize";
 
 // This endpoint runs Cypher typed by whoever is using the page, so read-only is
 // not a nicety. `session.executeRead` opens a READ-mode transaction and the
@@ -11,55 +18,6 @@ const WRITE_KEYWORDS =
   /\b(CREATE|MERGE|DELETE|DETACH|SET|REMOVE|DROP|LOAD\s+CSV|FOREACH)\b/i;
 
 const MAX_ROWS = 300;
-
-type GraphNode = {
-  id: string;
-  labels: string[];
-  properties: Record<string, unknown>;
-};
-
-type GraphLink = {
-  id: string;
-  source: string;
-  target: string;
-  type: string;
-  properties: Record<string, unknown>;
-};
-
-/** Neo4j values that JSON.stringify cannot represent on its own. */
-function toPlain(value: unknown): unknown {
-  if (value === null || value === undefined) return null;
-  if (neo4j.isInt(value)) return value.toNumber();
-  if (
-    neo4j.isDate(value) ||
-    neo4j.isDateTime(value) ||
-    neo4j.isLocalDateTime(value) ||
-    neo4j.isTime(value) ||
-    neo4j.isLocalTime(value) ||
-    neo4j.isDuration(value) ||
-    neo4j.isPoint(value)
-  ) {
-    return value.toString();
-  }
-  if (Array.isArray(value)) return value.map(toPlain);
-  if (neo4j.isNode(value)) return `(:${(value as Node).labels.join(":")})`;
-  if (neo4j.isRelationship(value)) return `[:${(value as Relationship).type}]`;
-  if (typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([k, v]) => [
-        k,
-        toPlain(v),
-      ])
-    );
-  }
-  return value;
-}
-
-function plainProps(props: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(props).map(([k, v]) => [k, toPlain(v)])
-  );
-}
 
 export async function POST(request: Request) {
   let query: string;
@@ -93,23 +51,11 @@ export async function POST(request: Request) {
     const links = new Map<string, GraphLink>();
 
     const addNode = (n: Node) => {
-      if (!nodes.has(n.elementId)) {
-        nodes.set(n.elementId, {
-          id: n.elementId,
-          labels: n.labels,
-          properties: plainProps(n.properties),
-        });
-      }
+      if (!nodes.has(n.elementId)) nodes.set(n.elementId, nodeToGraphNode(n));
     };
 
     const addRel = (r: Relationship) => {
-      links.set(r.elementId, {
-        id: r.elementId,
-        source: r.startNodeElementId,
-        target: r.endNodeElementId,
-        type: r.type,
-        properties: plainProps(r.properties),
-      });
+      links.set(r.elementId, relToGraphLink(r));
     };
 
     // Walk every value the query returned, at any nesting depth, pulling out

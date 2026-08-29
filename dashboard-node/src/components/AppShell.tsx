@@ -4,11 +4,13 @@ import { useState } from "react";
 import GraphView, { type GraphData } from "./GraphView";
 import StatsBar from "./StatsBar";
 import OntologyView from "./OntologyView";
+import ExploreView from "./ExploreView";
 import QueryView from "./QueryView";
 import AgentPreview from "./AgentPreview";
 
 const TABS = [
   { id: "graph", label: "Graph" },
+  { id: "explore", label: "Explore" },
   { id: "query", label: "Query" },
   { id: "ontology", label: "Ontology" },
   { id: "agent", label: "Ask the Agent" },
@@ -56,6 +58,7 @@ export default function AppShell() {
         <div className={tab === "graph" ? "flex flex-1" : "hidden"}>
           <GraphView onData={setData} />
         </div>
+        {tab === "explore" && <ExploreView />}
         {tab === "query" && <QueryView />}
         {tab === "ontology" && <OntologyView />}
         {tab === "agent" && <AgentPreview />}
