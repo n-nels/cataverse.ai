@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ForceGraphMethods } from "react-force-graph-2d";
 import { colorForLabels } from "@/lib/labelColors";
 import { nodeDisplayLabel } from "@/lib/nodeLabel";
@@ -18,6 +18,42 @@ const LABEL_ZOOM_THRESHOLD = 1.2;
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
   ssr: false,
 });
+
+type SimNode = { id: string; x?: number; y?: number; vx?: number; vy?: number };
+
+/** A link's endpoint is an id until force-graph swaps in the node object. */
+function endpointId(end: unknown): string {
+  return typeof end === "string" ? end : (end as GraphNode).id;
+}
+
+/**
+ * Pulls nodes with no relationships back toward the origin.
+ *
+ * Connected nodes are held near the graph by the link force. A node with no
+ * relationships has nothing balancing the charge force, so it drifts as far as
+ * the simulation will let it — and zoom-to-fit then has to include it, squashing
+ * the real cluster into a corner. The catalyst graph has exactly one such node
+ * (a PyFunction), which was enough to make "Fit view" look broken.
+ *
+ * Written by hand rather than pulling in d3-force: this is the whole of a d3
+ * force — a function over alpha, plus an `initialize` the simulation calls with
+ * its node array.
+ */
+function makeIsolatedCenteringForce(connected: Set<string>, strength: number) {
+  let nodes: SimNode[] = [];
+  const force = (alpha: number) => {
+    for (const node of nodes) {
+      if (connected.has(node.id)) continue;
+      if (node.x == null || node.y == null) continue;
+      node.vx = (node.vx ?? 0) - node.x * strength * alpha;
+      node.vy = (node.vy ?? 0) - node.y * strength * alpha;
+    }
+  };
+  force.initialize = (ns: SimNode[]) => {
+    nodes = ns;
+  };
+  return force;
+}
 
 /**
  * The force-directed graph itself, given data. Extracted from GraphView so the
@@ -91,6 +127,35 @@ export default function GraphCanvas({
     )?.distanceMax?.(300);
   }, [width, data]);
 
+  const isolatedForce = useMemo(() => {
+    const connected = new Set<string>();
+    for (const link of data.links) {
+      connected.add(endpointId(link.source));
+      connected.add(endpointId(link.target));
+    }
+    // Nothing to hold in if everything is connected, or if nothing is.
+    if (connected.size === 0 || connected.size === data.nodes.length) {
+      return null;
+    }
+    return makeIsolatedCenteringForce(connected, 0.4);
+  }, [data]);
+
+  // Registered from the simulation's own tick rather than once from an effect:
+  // force-graph rebuilds its forces when it processes graphData, and a one-shot
+  // registration can land before that and be discarded — the same race that
+  // made the ontology graph render overlapped on first mount. Re-registering is
+  // idempotent; `initialize` just reassigns the node array.
+  const applyForces = useCallback(() => {
+    const fg = fgRef.current;
+    if (!fg || !isolatedForce) return;
+    fg.d3Force("isolatedCenter", isolatedForce as never);
+  }, [isolatedForce]);
+
+  useEffect(() => {
+    if (width === 0) return;
+    applyForces();
+  }, [width, applyForces]);
+
   // Keep the panel in sync with incoming data: after an expansion the selected
   // node is a new object, and its stale copy would show outdated properties.
   const selectedLive = selected
@@ -150,6 +215,7 @@ export default function GraphCanvas({
           linkDirectionalArrowRelPos={1}
           linkColor={() => "rgba(255,255,255,0.25)"}
           onNodeClick={(node) => setSelected(node as GraphNode)}
+          onEngineTick={applyForces}
           onEngineStop={handleEngineStop}
           backgroundColor="#000000"
         />
