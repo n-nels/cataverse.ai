@@ -24,7 +24,8 @@ questions directly. Publications become a byproduct, not the interface.
 | 1 | Web app + graph viewer | Done |
 | 2 | Neo4j-backed API | Done |
 | 3 | Vercel deploy + custom domain | Done |
-| 4 | Ontology/schema view | **Done** — third tab, schema meta-graph + detail panel |
+| 4 | Ontology/schema view | **Done** — schema meta-graph + detail panel |
+| 4b | Cypher query tab (Bloom-style) | **Done** 2026-08-23 — type Cypher, results drawn on the same canvas |
 | 5 | Terminal agent (NL → Cypher → answer) | **Done, v1** — `agent-node/`, local Ollama, hand-written loop |
 | 6 | Agent in the web UI | Not started — `AgentPreview.tsx` is still a scripted mockup |
 | 7 | Cost tracking + BYOK | Not started — and the local-LLM decision may remove the need entirely |
@@ -126,6 +127,28 @@ commentary, peer review, or publications into the graph.
 <!-- Frontend + backend framework choice, what pages/views exist, hosting target. -->
 
      I have no idea. I have never done these type of things before.
+
+**As built (2026-08-23).** Next.js (App Router) + TypeScript + Tailwind, deployed on
+Vercel, in `dashboard-node/`. Four tabs:
+
+| Tab | What it does |
+|---|---|
+| **Graph** | Landing view. Loads the whole graph (~1.9k nodes) and renders it force-directed. |
+| **Query** | Cypher box → results drawn on the same canvas. Scalars fall back to a table. |
+| **Ontology** | The schema as a meta-graph: labels as nodes, relationship types as edges. |
+| **Ask the Agent** | Still a scripted mockup. The real agent lives in `agent-node/`. |
+
+API routes (all server-side; Neo4j credentials never reach the browser):
+
+```
+/api/graph    whole graph as {nodes, links}
+/api/schema   labels, relationship triples, property types
+/api/query    runs user-supplied Cypher — READ-ONLY, see §6
+```
+
+Rendering is shared: `GraphCanvas` draws any `{nodes, links}`, and both the Graph tab and
+the Query tab use it, so results look identical to the landing view rather than drifting
+into a second style.
 
 ### 4.2 Database (Neo4j AuraDB)
 <!-- Instance tier, connection model, who holds credentials, how the app talks to it. -->
@@ -289,6 +312,21 @@ This protects the page *and* `/api/graph` uniformly (confirmed: both return a 30
 Vercel's login when unauthenticated). Free, but all-or-nothing per deployment — no way to
 make the page public while keeping data gated, or vice versa, using this mechanism alone.
 
+**`/api/query` executes Cypher typed by the user (added 2026-08-23).** That is a real
+attack surface, so read-only is enforced in two places and only one of them counts:
+
+1. **`session.executeRead()`** — opens a READ-mode transaction, so the *server* rejects
+   writes no matter what is sent. Verified directly: attempting `CREATE` inside one returns
+   `Neo.ClientError.Statement.AccessMode`, "Writing in read access mode not allowed."
+   **This is the guarantee.**
+2. A keyword regex (`CREATE|MERGE|DELETE|SET|…`) in front of it. Only there to fail fast
+   with a message a human can act on. **Not** the boundary — do not rely on it, and do not
+   remove (1) on the grounds that (2) exists.
+
+Results are capped at 300 rows. Still unaddressed: there is no rate limiting, so an
+expensive query (a large cartesian product) could tie up the AuraDB free tier. Acceptable
+while the site is gated to Nick; **revisit before going public**.
+
 **Future idea, not built — page/data split:** When ready to make the site public, the
 page and the `/api/graph` data endpoint don't have to share one gate. Vercel's own
 protection is deployment-wide, but nothing stops us from adding our own app-level check
@@ -428,7 +466,23 @@ pre-publication at that point.
   materials question correctly in 19s vs 45–77s for `qwen3:14b`. Use `agent-node/ctx_probe.py`
   for any new model.
 - [ ] **`AGENT_MAX_ROWS=50` is now conservative** given 4× the context. 150–200 would fit.
-- [ ] **Commit `agent-node/`** — the whole package is still untracked.
+- [x] ~~**Commit `agent-node/`**~~ — done 2026-08-23, branch `feature/agent-node`, pushed.
+
+### App — candidates for what's next
+
+- [ ] **Click-to-expand graph exploration.** Today the landing graph is an impressive but
+  unnavigable hairball, and the only way to see a *subset* is to know Cypher. Bloom's core
+  move is: start from one node, click to pull in its neighbours. Would make the graph
+  usable by a scientist who has never written Cypher — currently the widest gap between the
+  app and the §1 vision.
+- [ ] **Better node detail panel.** Clicking a node shows raw JSON. Could show typed
+  properties, its relationships, and a button to expand from it.
+- [ ] **Plotting** (§2 goal 3). `AdsParams` carries genuinely plottable science —
+  `pfo_sec_k_a`, `q_e`, `q_inf`, `r2`, `rmse`, `time_s`. Fitted kinetic parameters across
+  experiments is the first chart a catalysis reader would want.
+- [ ] **Shareable query links.** Encode the Cypher in the URL so a query can be linked from
+  a tutorial video or a paper.
+- [ ] **Rate limiting on `/api/query`.** Required before the site goes public — see §6.
 
 ### Shelved 2026-08-23 (Nick's call — kept displacing the agent work)
 
