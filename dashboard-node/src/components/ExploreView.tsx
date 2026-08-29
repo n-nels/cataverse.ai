@@ -84,6 +84,13 @@ type LabelInfo = { label: string; count: number };
 
 type Snapshot = { nodes: GraphData["nodes"]; links: GraphData["links"]; expanded: Set<string> };
 
+/** Everything that makes up one label's exploration, stashed on switch. */
+type Session = {
+  graph: GraphData;
+  expandedIds: Set<string>;
+  history: Snapshot[];
+};
+
 /**
  * A link's endpoint is a node id at first, but react-force-graph replaces it
  * with the node object once it has processed the data. Both shapes turn up.
@@ -105,6 +112,11 @@ export default function ExploreView() {
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // Each "start from" is its own workspace. Switching stashes what you built
+  // and restores whatever that label had, so you can compare two lines of
+  // exploration without either polluting or destroying the other.
+  const [activeLabel, setActiveLabel] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<Record<string, Session>>({});
 
   useEffect(() => {
     fetch("/api/schema")
@@ -177,51 +189,79 @@ export default function ExploreView() {
     [pushHistory]
   );
 
-  const seed = useCallback(
-    async (label: string) => {
-      if (seeding) return;
-      setSeeding(true);
-      setError(null);
-      setNote(null);
-      try {
-        const res = await fetch("/api/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          // `label` comes from /api/schema, so it is one of the graph's own
-          // labels rather than free text.
-          body: JSON.stringify({
-            query:
-              SEED_QUERIES[label]?.query ??
-              (SEED_ALL_LABELS.has(label)
-                ? `MATCH (n:${label}) RETURN n`
-                : `MATCH (n:${label}) RETURN n LIMIT ${SEED_LIMIT}`),
-          }),
-        });
-        const body = await res.json();
-        if (!res.ok) {
-          setError(body.error ?? "Could not load starting nodes.");
-          return;
-        }
-        // Add to what's on screen rather than replacing it. Switching "start
-        // from" is navigation, not a reset — hopping between entry points
-        // mid-demo should build the picture up, not wipe it. Clear is the reset.
-        const isFirst = graph.nodes.length === 0;
-        if (!isFirst) pushHistory();
-        merge({ nodes: body.nodes, links: body.links });
-        // Only remount (and therefore refit) on the first seed. Remounting on a
-        // later one would reset the layout and the viewport.
-        if (isFirst) setSeedKey((k) => k + 1);
-        setNote(
-          SEED_QUERIES[label]?.note ??
-            `Added ${body.nodes.length} ${label} node${body.nodes.length === 1 ? "" : "s"}. Click one, then Expand.`
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Request failed.");
-      } finally {
-        setSeeding(false);
+  /** Load a label's starting nodes into an empty workspace. */
+  const seedFresh = useCallback(async (label: string) => {
+    setSeeding(true);
+    setError(null);
+    setNote(null);
+    try {
+      const res = await fetch("/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // `label` comes from /api/schema, so it is one of the graph's own
+        // labels rather than free text.
+        body: JSON.stringify({
+          query:
+            SEED_QUERIES[label]?.query ??
+            (SEED_ALL_LABELS.has(label)
+              ? `MATCH (n:${label}) RETURN n`
+              : `MATCH (n:${label}) RETURN n LIMIT ${SEED_LIMIT}`),
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error ?? "Could not load starting nodes.");
+        return;
       }
+      setGraph({ nodes: body.nodes, links: body.links });
+      setExpandedIds(new Set());
+      setHistory([]);
+      // Remount so the fresh graph gets fitted. Only done here — remounting on
+      // an expansion or a restore would reset the layout.
+      setSeedKey((k) => k + 1);
+      setNote(
+        SEED_QUERIES[label]?.note ??
+          `Starting from ${body.nodes.length} ${label} node${body.nodes.length === 1 ? "" : "s"}. Click one, then Expand.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed.");
+    } finally {
+      setSeeding(false);
+    }
+  }, []);
+
+  /**
+   * Switch workspaces. Each label keeps its own graph, expansions and undo
+   * history: leaving one stashes it untouched, and coming back restores exactly
+   * what was there — including node positions, since the layout lives on the
+   * node objects themselves and we deliberately do not remount on a restore.
+   */
+  const selectLabel = useCallback(
+    async (label: string) => {
+      if (seeding || label === activeLabel) return;
+
+      if (activeLabel) {
+        setSessions((prev) => ({
+          ...prev,
+          [activeLabel]: { graph, expandedIds, history },
+        }));
+      }
+      setActiveLabel(label);
+      setError(null);
+
+      const saved = sessions[label];
+      if (saved) {
+        setGraph(saved.graph);
+        setExpandedIds(saved.expandedIds);
+        setHistory(saved.history);
+        setNote(
+          `Back to your ${label} exploration — ${saved.graph.nodes.length} node${saved.graph.nodes.length === 1 ? "" : "s"}, where you left it.`
+        );
+        return;
+      }
+      await seedFresh(label);
     },
-    [seeding, graph.nodes.length, merge, pushHistory]
+    [seeding, activeLabel, graph, expandedIds, history, sessions, seedFresh]
   );
 
   const expand = useCallback(
@@ -260,10 +300,19 @@ export default function ExploreView() {
     [busyId, merge, pushHistory]
   );
 
+  /** Discard the active workspace so that label starts fresh next time. */
   const reset = () => {
     setGraph({ nodes: [], links: [] });
     setExpandedIds(new Set());
     setHistory([]);
+    if (activeLabel) {
+      setSessions((prev) => {
+        const next = { ...prev };
+        delete next[activeLabel];
+        return next;
+      });
+    }
+    setActiveLabel(null);
     setError(null);
     setNote(null);
   };
@@ -273,20 +322,38 @@ export default function ExploreView() {
       <div className="border-b border-zinc-800 bg-zinc-950 px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="text-xs text-zinc-500">Start from</span>
-          {labels.map((l) => (
-            <button
-              key={l.label}
-              onClick={() => seed(l.label)}
-              disabled={seeding}
-              className="flex items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white disabled:opacity-50"
-            >
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: colorForLabels([l.label]) }}
-              />
-              {l.label}
-            </button>
-          ))}
+          {labels.map((l) => {
+            const isActive = l.label === activeLabel;
+            const hasSession = Boolean(sessions[l.label]);
+            return (
+              <button
+                key={l.label}
+                onClick={() => selectLabel(l.label)}
+                disabled={seeding}
+                title={
+                  hasSession && !isActive
+                    ? `Return to your ${l.label} exploration`
+                    : undefined
+                }
+                className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-50 ${
+                  isActive
+                    ? "border-zinc-400 bg-zinc-800 text-white"
+                    : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
+                }`}
+              >
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: colorForLabels([l.label]) }}
+                />
+                {l.label}
+                {/* A saved-but-inactive workspace is invisible otherwise, and
+                    knowing it is there is the point of keeping it. */}
+                {hasSession && !isActive && (
+                  <span className="text-zinc-500">•</span>
+                )}
+              </button>
+            );
+          })}
 
           {graph.nodes.length > 0 && (
             <span className="ml-auto flex items-center gap-3 text-xs">
