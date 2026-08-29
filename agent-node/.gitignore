@@ -1,0 +1,18 @@
+# --- Python & Environments ---
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.ruff_cache/
+.pytest_cache/
+.env
+.env.local
+
+# --- Build & Distribution ---
+dist/
+build/
+*.egg-info/
+
+# --- IDEs ---
+.vscode/
+.idea/

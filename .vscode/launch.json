@@ -1,0 +1,53 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Best entry point for stepping through the agent loop: one question,
+      // no stdin, runs start to finish.
+      "name": "Agent: ask one question",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/agent-node/ask.py",
+      "args": [
+        "What materials have been studied, and how many experiments exist for each?"
+      ],
+      "cwd": "${workspaceFolder}/agent-node",
+      "python": "${workspaceFolder}/agent-node/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      // Required: without this the debugger skips over the ollama and neo4j
+      // libraries, and stepping into a model call or a driver call is exactly
+      // what you want to be able to do here.
+      "justMyCode": false
+    },
+    {
+      "name": "Agent: ask (prompt me for the question)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/agent-node/ask.py",
+      "args": ["${input:question}"],
+      "cwd": "${workspaceFolder}/agent-node",
+      "python": "${workspaceFolder}/agent-node/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      // The interactive REPL. Needs integratedTerminal for input() to work.
+      "name": "Agent: REPL",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "cataverse_agent.cli",
+      "cwd": "${workspaceFolder}/agent-node",
+      "python": "${workspaceFolder}/agent-node/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ],
+  "inputs": [
+    {
+      "id": "question",
+      "type": "promptString",
+      "description": "Question to ask the agent",
+      "default": "How many pretreatment steps used O2 gas?"
+    }
+  ]
+}
