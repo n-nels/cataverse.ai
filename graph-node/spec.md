@@ -228,6 +228,73 @@ still carry the old ones, mapping them as above.
   in, if not it stays hollow and the source needs fixing. *Owner: Nick, once a
   sample JSON is available.*
 
+## 5c. Rules inherited from `original/` — audit
+
+`original/` was developed in detail and encodes real decisions. It also encodes
+some scaffolding that has since been overtaken. Audited 2026-08-29, every rule
+in both instruction files classified. `original/` can be deleted once the
+**not yet built** column is empty.
+
+**Keep — still true, already built**
+
+| Rule | Where it lives now |
+|---|---|
+| Material key is `{metal, metal_loading, support, support_sa}` | `common/ids.py` |
+| Filename keyed on `base_name`; AdsParams on `(base_name, peak_name)` | `common/ids.py` |
+| `chain_id` = md5(`material_key`\|`started_at`)[:12] | `common/ids.py` |
+| Per peak, take the row with the largest `Time (s)`; no delta-window grouping | `data/fits.py` |
+| v1 loads `monomer_sum` only, schema forward-compatible with other peaks | `data/fits.py` |
+| Experiments with no CSV stay in scope: Filename and upstream nodes, no AdsParams | `data/build.py` |
+| Those experiments still participate in the kinetic chain | `data/build.py` |
+| Chains break on `is_new`, ordered by datetime | `data/build.py` |
+| **`mass_g` must be constant within a chain; disagreement is fatal** | `data/build.py` |
+| `is_new` null is fatal — never coerced to false | `data/build.py` |
+| Never guess a missing value | throughout |
+| `HAS_STEP {order}` and `NEXT_STEP` both kept, deliberately redundant | `data/build.py` |
+
+**Keep — still true, not yet built**
+
+| Rule | Note |
+|---|---|
+| Exclude the source subfolder whose name contains `_test` | `discover()` currently walks everything |
+| Exclude experiments whose base name contains `iso` (isotopic exchange) | same |
+| `RELATIVE_TO`: each Filename points at the most recent prior reference **in the same chain** | The whole §11 drift layer is unbuilt |
+| References point at the *previous* reference, forming a subchain of anchors | Edge is emitted before the pointer advances, so a reference never points at itself |
+| First reference in a chain, and any non-reference before it, get no edge | |
+| `DELTA_FROM` only when both sides have AdsParams for the *same* peak | |
+| Deltas are `source - target`, emitted for every qualifying pair with no thresholding — significance is a query-time decision | Good rule. Keep it. |
+| J=0 pretreatments **with** `has_csv=true` is a data bug and must be flagged | J=0 with no CSV is legitimate and silent |
+
+**Adapt — the intent holds, the mechanism changed**
+
+| Original rule | Now |
+|---|---|
+| A material change implies `is_new`, so no separate check is needed | Assumption is no longer taken on trust — a chain continuing onto a different material is warned about. It was never verified, and there is now a third sample. |
+| Missing values recorded in `review/missing_values_review.txt` | Collected as warnings on the run and printed by the dry run. Same purpose, no side-car file to go stale. |
+| Silent nulls for `chiller` on older records, and for ExpConditions / pretreatments when `has_csv=false` | Kept as *do not warn about these*. Absent conditions on an abandoned run are normal. |
+| Pressure tuples split into two properties, `'Off'` becomes null | Superseded upstream: `session.py` already normalises this before the JSON is written. Nothing for the loader to do. |
+| `exp_type` inferred from `iso` in the filename | `session.py` now sets `exp_type` directly. Keep the rule only as a cross-check, not as the source. |
+| `exp_success` forced false whenever `has_csv` is false | `session.py` couples them at the source (`mark_success` sets both). Worth a warning if they ever disagree, rather than a silent override. |
+
+**Drop — served its purpose**
+
+| Rule | Why |
+|---|---|
+| **"Expected count: 2 materials. Assert and flag if violated."** | Nick's confidence check during the original build. There are now three — `mat_pd_0p06645_ceo2_54` appeared in 2026. A hard assertion here would block every future sample. |
+| Stage B writes files only and never connects to Neo4j | Superseded by the Bolt write path and mark-and-sweep. |
+| Load into Aura by CSV import through the UI | Same. |
+| "Present every script for human review before running it" | A working protocol for the original build, not a property of the pipeline. |
+| The §10 "drafted without direct access, STOP if reality differs" caveats | Written when the author could not see `X:\`. Superseded: the schema is now verified directly against the database and against real source files. |
+
+### One invariant this audit surfaced
+
+§11.2 guarantees that the target of a `DELTA_FROM` edge is *always* a
+reference. Two edges in the current graph point at
+`20250313_093410_pd_ceo2_000-004`, whose `is_reference` is **false** — noted
+earlier in `dashboard-node/spec.md` as a probable mislabel and never resolved.
+It is now a checkable invariant rather than an observation, and the rebuild
+should assert it. *Owner: Nick — decide whether the flag or the edge is wrong.*
+
 ## 6. Decisions made
 
 - **2026-08-29 — graph-node is its own package in the monorepo.** Reasoning in §4.
