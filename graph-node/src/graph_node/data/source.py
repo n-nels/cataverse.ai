@@ -48,11 +48,18 @@ def _as_float(value: Any) -> Any:
 
     Booleans are excluded deliberately - `bool` is a subclass of `int` in
     Python, and `chiller: false` must stay a boolean.
+
+    Lists are mapped element-wise. `pressure_calc` is list-valued and the same
+    disagreement shows up inside it: the database holds `[0]` on some nodes and
+    the source files hold `[0.8207]`, which Neo4j stores as INTEGER[] and
+    FLOAT[] respectively.
     """
     if isinstance(value, bool) or value is None:
         return value
     if isinstance(value, (int, float)):
         return float(value)
+    if isinstance(value, list):
+        return [_as_float(v) for v in value]
     return value
 
 
