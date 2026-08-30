@@ -134,8 +134,40 @@ forever. So "rebuild" is really a choice between:
   each node was last confirmed by source data. Costs one extra property per node
   and one sweep query.
 
-Nick has raised **hashing each experiment run in `orchestration/`** as a possible
-answer here. Not yet worked through — see §7.
+### Hashing — complementary, not an alternative
+
+Nick raised hashing each experiment run so the graph is *verified*. Worked through
+2026-08-29: it solves a real problem, but a different one from the sweep, and the
+two compose.
+
+A hash answers **"did the inputs change?"** The sweep answers **"should this node
+still exist?"** Neither implies the other. If an experiment folder is deleted off
+`X:\`, its input has not changed — it is absent, and nothing on the source side
+fires. Noticing requires enumerating every experiment that exists and comparing
+against every node in the graph, which is the sweep. So hashing cannot replace it.
+
+What hashing does add, if the hash is stored **on the graph node**: verification
+without rebuilding. Compare each source's hash to the hash on its node and you
+learn immediately whether the graph is consistent with its source. That catches
+the failed-write case cleanly — the node is missing or its hash is stale, visible
+in one query. It also makes a future incremental rebuild safe, if throughput ever
+matters, because deletions are still caught by enumeration.
+
+Two constraints on where the hash is computed:
+
+1. **`orchestration/` cannot see everything that feeds a node.** AdsParams comes
+   from ir-spectro's `*_CarbonylPeakArea.csv`, produced after the run and
+   regenerable if fits are redone. A hash computed in `orchestration/` at
+   end-of-run covers the JSON but not the fits, so it would report "unchanged"
+   while the fits changed underneath. The hash belongs in `graph-node`, over the
+   actual inputs it reads.
+2. **Hashes are per-experiment; chains are not.** KineticChain and NEXT_EXP depend
+   on the ordering of all experiments. Every individual hash can match while chain
+   boundaries are wrong. Only recomputation fixes that.
+
+Suggested order: rebuild + sweep first — it is small, and it is what makes
+"rebuild" mean rebuild. Add node hashes when a `verify` command is wanted.
+Neither forecloses the other.
 
 ## 6. Decisions made
 
@@ -160,10 +192,10 @@ answer here. Not yet worked through — see §7.
 ## 7. Open questions
 
 1. **Rebuild semantics** — (a), (b), or (c) in §5. Blocks everything else.
-2. **Does per-run hashing in `orchestration/` change the answer to #1?** Nick's
-   idea. Needs working through: a hash detects whether an experiment's inputs
-   changed, which is a different question from whether the graph was correctly
-   written from them.
+   Recommendation on the table: (c) mark and sweep.
+2. ~~Does per-run hashing change the answer to #1?~~ **Answered 2026-08-29:** no,
+   it is orthogonal — see §5. Hashing stays on the list as a later `verify`
+   capability, computed in `graph-node` rather than `orchestration/`.
 3. **The "done" signal.** End of `session.py`? A watcher on the share drive? A
    scheduled sweep? Three days per experiment makes latency a non-issue, which
    argues for whatever is simplest to reason about.
