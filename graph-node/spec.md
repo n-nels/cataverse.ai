@@ -1,7 +1,10 @@
 # graph-node — Project Spec
 
-Status: **planning**. Nothing in `src/` is implemented yet. Kept current as work
-lands; this is the durable record across sessions.
+Status: **in progress.** `common/` is built — the mark-and-sweep rebuild, the
+ownership boundary, and the id builders, all verified against the live database.
+`data/` and `knowledge/` are still empty; the loaders are next, and are blocked
+on a sample experiment JSON (§7.2). Kept current as work lands; this is the
+durable record across sessions.
 
 Related: `dashboard-node/spec.md` covers the website that reads this graph, and
 `agent-node/` the terminal agent that queries it. Neither is a dependency —
@@ -93,9 +96,11 @@ experiment ends
   graph-node: read JSON + CSV -> write to Aura         (new)
 ```
 
-## 5. Rebuild vs incremental append — OPEN
+## 5. Rebuild with mark and sweep — DECIDED (2026-08-29)
 
-**Not yet decided. Nick wants to work through this before it is settled.**
+**Option (c), mark and sweep.** Implemented in `common/rebuild.py`; the scope it
+is allowed to delete within is declared in `common/ownership.py`. The reasoning
+below is kept because it is why, not just what.
 
 The existing pipeline is a whole-world batch rebuild. `build_chains()` sorts every
 experiment and walks the list; DELTA_FROM needs each reference's neighbours.
@@ -169,6 +174,60 @@ Suggested order: rebuild + sweep first — it is small, and it is what makes
 "rebuild" mean rebuild. Add node hashes when a `verify` command is wanted.
 Neither forecloses the other.
 
+## 5a. Schema of record
+
+**`orchestration/src/experiments/session.py` defines the field names, not
+`original/`.** The vendored instructions predate the current writer and carry
+names that are already stale (they still say `pd_loading` / `ceo2_sa`, renamed
+long ago to `metal_loading` / `support_sa`, flagged in their own §9c as "update
+on next spec pass" and never updated). Build against what the code emits.
+
+Verified field-by-field against the live graph on 2026-08-29. `Filename`,
+`Material`, `Pretreatment` and `ExpConditions` all match `session.py` exactly,
+with two intended differences and one rename:
+
+| Difference | Resolution |
+|---|---|
+| `material.mass_g` is in the JSON but not on `:Material` | Intended. It lives on `:KineticChain`, one per chain, constant within a chain. |
+| Every node has an `id` not present in the JSON | Intended. Deterministic, built by `common/ids.py`. |
+| JSON says `pressure_meas_mfld` / `pressure_meas_cell`; graph says `pressure_meas_g1` / `pressure_meas_g2` | **Rename. The JSON names win.** |
+
+### The pressure rename
+
+`session.py` normalises the recorded pressure tuple to
+`(pressure_meas_mfld, pressure_meas_cell)` from `(values[0], values[1])`. The
+old `md_to_json.py` wrote the same two positions as `pressure_meas_g1` /
+`pressure_meas_g2`. So:
+
+```
+pressure_meas_g1  ->  pressure_meas_mfld     (manifold)
+pressure_meas_g2  ->  pressure_meas_cell     (cell)
+```
+
+**Confirmed by Nick 2026-08-29.** Worth recording because it was not
+self-evident: `dashboard-node/spec.md`'s rename action item guesses the
+*opposite* order (`g1/g2 -> cell/mfld`, marked "exact names TBC"), and that
+entry needs correcting. Getting it backwards would silently mislabel 1,342
+pressure readings rather than fail loudly.
+
+Supporting evidence from the live graph, for the record: on `:Pretreatment`,
+g1 averages 1.264 (max 8.778, n=1104) while g2 averages 0.014 (max 1.012,
+n=810) — consistent with g1 being the dosing volume.
+
+The loader should accept both key spellings while historical JSONs on `X:\`
+still carry the old ones, mapping them as above.
+
+## 5b. Data integrity — found during verification
+
+- **One hollow `:Pretreatment` node.** `pre_20250802_073857_pd_ceo2_003-001_1`
+  has an `id` and nothing else: no `step_index`, no `gas`, no `temp`. Steps 2–4
+  of that experiment are normal, and the `HAS_STEP` edge still carries
+  `order: 1`. It is the only Pretreatment in 1,107 missing `step_index`.
+  Unresolved: whether the source JSON has an empty step 1 or the original load
+  dropped it. The rebuild will settle it — if the source is good the node fills
+  in, if not it stays hollow and the source needs fixing. *Owner: Nick, once a
+  sample JSON is available.*
+
 ## 6. Decisions made
 
 - **2026-08-29 — graph-node is its own package in the monorepo.** Reasoning in §4.
@@ -191,19 +250,24 @@ Neither forecloses the other.
 
 ## 7. Open questions
 
-1. **Rebuild semantics** — (a), (b), or (c) in §5. Blocks everything else.
-   Recommendation on the table: (c) mark and sweep.
-2. ~~Does per-run hashing change the answer to #1?~~ **Answered 2026-08-29:** no,
+1. ~~Rebuild semantics.~~ **Decided 2026-08-29: (c) mark and sweep.** Built.
+2. **A sample experiment JSON is needed.** The loader reads
+   `<base>_expParams.json` off `X:\`, and no example has been transferred — the
+   shape is known from `session.py` but has never been checked against a real
+   file. One current experiment plus one historical (pre-`session.py`, to
+   confirm it carries the old `pressure_meas_g1` spelling) would settle it, and
+   would also resolve the hollow-node question in §5b. *Owner: Nick.*
+3. ~~Does per-run hashing change the answer to #1?~~ **Answered 2026-08-29:** no,
    it is orthogonal — see §5. Hashing stays on the list as a later `verify`
    capability, computed in `graph-node` rather than `orchestration/`.
-3. **The "done" signal.** End of `session.py`? A watcher on the share drive? A
+4. **The "done" signal.** End of `session.py`? A watcher on the share drive? A
    scheduled sweep? Three days per experiment makes latency a non-issue, which
    argues for whatever is simplest to reason about.
-4. **What happens when Aura is paused.** Free tier auto-pauses. The experiment
+5. **What happens when Aura is paused.** Free tier auto-pauses. The experiment
    must never fail because the database is asleep.
-5. **Where this runs.** Any machine with `X:\` mounted — but which one, and
+6. **Where this runs.** Any machine with `X:\` mounted — but which one, and
    started by what?
-6. **AdsParams timing.** Fit results come from post-processing, not the run
+7. **AdsParams timing.** Fit results come from post-processing, not the run
    itself. Does the graph update once, when fits are ready, or twice?
 
 ## 8. Non-goals for now
