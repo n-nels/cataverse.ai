@@ -15,7 +15,7 @@ from pathlib import Path
 from neo4j import GraphDatabase
 
 from .common.config import Settings
-from .data import build, plan, source
+from .data import build, fits, plan, source
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -74,7 +74,10 @@ def main(argv: list[str] | None = None) -> int:
         except source.SourceError as exc:
             unreadable.append(str(exc))
 
-    intended = build.build(experiments)
+    adsparams = fits.load_all([e.base_name for e in experiments], root)
+    print(f"Found fit CSVs for {len(adsparams)} of {len(experiments)} experiment(s)\n")
+
+    intended = build.build(experiments, adsparams=adsparams)
     intended.warnings.extend(f"unreadable: {u}" for u in unreadable)
 
     driver = GraphDatabase.driver(
