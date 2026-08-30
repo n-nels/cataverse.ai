@@ -17,6 +17,28 @@ from __future__ import annotations
 
 import hashlib
 
+#: How each label is identified in the database, as (property, id prefix).
+#:
+#: Not uniform, and deliberately left that way: these are the keys the stored
+#: graph already uses. Filename is keyed on `base_name` and KineticChain on
+#: `chain_id`; neither carries an `id` property at all. Assuming `id`
+#: everywhere makes a rebuild think all 6 chains and all 249 filenames are new,
+#: which then makes the sweep delete the originals.
+IDENTITY: dict[str, tuple[str, str]] = {
+    "Material": ("id", ""),
+    "Filename": ("base_name", "fn_"),
+    "Pretreatment": ("id", ""),
+    "ExpConditions": ("id", ""),
+    "AdsParams": ("id", ""),
+    "KineticChain": ("chain_id", "kc_"),
+}
+
+
+def node_id_from_stored(label: str, stored_value: str) -> str:
+    """The synthetic node id corresponding to a stored identity value."""
+    _, prefix = IDENTITY[label]
+    return f"{prefix}{stored_value}"
+
 
 def material_key(material: dict) -> str:
     """The natural key for a Material: what physically distinguishes a sample.

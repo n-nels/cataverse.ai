@@ -14,6 +14,7 @@ from typing import Any
 
 from neo4j import Session
 
+from ..common import ids
 from ..common.ownership import DATA
 from .build import IntendedGraph
 
@@ -38,27 +39,28 @@ class Plan:
 
 
 def _stored_ids_by_label(session: Session) -> dict[str, set[str]]:
-    """Every stored data node's id, grouped by label.
+    """Every stored data node, as the synthetic id the builder would give it.
 
-    Filename has no `id` property - it is keyed on `base_name` - so it is read
-    separately and given the same synthetic form the builder produces.
+    Each label is read on its own identity property. Filename is keyed on
+    `base_name` and KineticChain on `chain_id` - neither has an `id` property.
+    Reading them all as `n.id` returns nothing for those two, which makes the
+    plan report 249 filenames and 6 chains as new and their originals as
+    deletions.
     """
-    stored: dict[str, set[str]] = {label: set() for label in DATA.labels}
+    stored: dict[str, set[str]] = {}
 
-    for record in session.run(
-        """
-        MATCH (n)
-        WHERE any(l IN labels(n) WHERE l IN $labels) AND n.id IS NOT NULL
-        RETURN labels(n)[0] AS label, collect(n.id) AS ids
-        """,
-        labels=sorted(DATA.labels),
-    ):
-        stored[record["label"]] = set(record["ids"])
-
-    filenames = session.run(
-        "MATCH (f:Filename) RETURN collect(f.base_name) AS names"
-    ).single()["names"]
-    stored["Filename"] = {f"fn_{name}" for name in filenames}
+    for label in sorted(DATA.labels):
+        prop, _ = ids.IDENTITY[label]
+        # Label and property are interpolated rather than parameterised because
+        # Cypher allows neither as a parameter. Both come from IDENTITY, which
+        # is a module constant, so nothing user-supplied reaches the query.
+        record = session.run(
+            f"MATCH (n:{label}) WHERE n.`{prop}` IS NOT NULL "
+            f"RETURN collect(n.`{prop}`) AS values"
+        ).single()
+        stored[label] = {
+            ids.node_id_from_stored(label, value) for value in record["values"]
+        }
 
     return stored
 

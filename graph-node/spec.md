@@ -1,10 +1,11 @@
 # graph-node — Project Spec
 
-Status: **in progress.** `common/` is built — the mark-and-sweep rebuild, the
-ownership boundary, and the id builders, all verified against the live database.
-`data/` and `knowledge/` are still empty; the loaders are next, and are blocked
-on a sample experiment JSON (§7.2). Kept current as work lands; this is the
-durable record across sessions.
+Status: **in progress.** The whole read side is built and verified against the
+live database: `common/` (mark-and-sweep, ownership boundary, id builders) and
+`data/` (source JSON, fit CSVs, graph assembly, reference drift, and a dry run
+that diffs the intended graph against Aura). What remains is the write path and
+`knowledge/`. Kept current as work lands; this is the durable record across
+sessions.
 
 Related: `dashboard-node/spec.md` covers the website that reads this graph, and
 `agent-node/` the terminal agent that queries it. Neither is a dependency —
@@ -251,6 +252,7 @@ in both instruction files classified. `original/` can be deleted once the
 | `is_new` null is fatal — never coerced to false | `data/build.py` |
 | Never guess a missing value | throughout |
 | `HAS_STEP {order}` and `NEXT_STEP` both kept, deliberately redundant | `data/build.py` |
+| The whole §11 drift layer: `RELATIVE_TO` to the most recent prior reference in the same chain, references pointing at the previous reference, nothing before the first reference, `DELTA_FROM` only on matching peaks, deltas as `source - target` with no thresholding | `data/drift.py` |
 
 **Keep — still true, not yet built**
 
@@ -258,11 +260,6 @@ in both instruction files classified. `original/` can be deleted once the
 |---|---|
 | Exclude the source subfolder whose name contains `_test` | `discover()` currently walks everything |
 | Exclude experiments whose base name contains `iso` (isotopic exchange) | same |
-| `RELATIVE_TO`: each Filename points at the most recent prior reference **in the same chain** | The whole §11 drift layer is unbuilt |
-| References point at the *previous* reference, forming a subchain of anchors | Edge is emitted before the pointer advances, so a reference never points at itself |
-| First reference in a chain, and any non-reference before it, get no edge | |
-| `DELTA_FROM` only when both sides have AdsParams for the *same* peak | |
-| Deltas are `source - target`, emitted for every qualifying pair with no thresholding — significance is a query-time decision | Good rule. Keep it. |
 | J=0 pretreatments **with** `has_csv=true` is a data bug and must be flagged | J=0 with no CSV is legitimate and silent |
 
 **Adapt — the intent holds, the mechanism changed**

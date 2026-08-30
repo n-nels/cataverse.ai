@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from ..common import ids
+from .drift import build_drift_edges, check_targets_are_references
 from .source import Experiment
 
 
@@ -246,6 +247,13 @@ def build(
             graph.edges.append(
                 Edge("NEXT_EXP", ids.filename_id(earlier), ids.filename_id(later))
             )
+
+    # Reference-state drift, section 11. Added last: it needs the chains, and
+    # it only produces edges.
+    drift_edges, drift_warnings = build_drift_edges(chains, by_name, adsparams)
+    graph.edges.extend(drift_edges)
+    graph.warnings.extend(drift_warnings)
+    graph.warnings.extend(check_targets_are_references(drift_edges, by_name))
 
     if not by_name:
         graph.warnings.append("no experiments found - check SOURCE_ROOT")

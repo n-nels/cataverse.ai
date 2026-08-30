@@ -68,3 +68,26 @@ def test_chain_hash_distinguishes_start_times():
     a = ids.chain_hash("pd|0.04983|ceo2|54", "2025-08-02T07:38:57")
     b = ids.chain_hash("pd|0.04983|ceo2|54", "2025-08-03T07:38:57")
     assert a != b
+
+
+def test_identity_map_covers_every_data_label():
+    from graph_node.common.ownership import DATA
+
+    assert set(ids.IDENTITY) == set(DATA.labels)
+
+
+def test_filename_and_chain_are_not_keyed_on_id():
+    """Neither carries an `id` property in the database.
+
+    Reading them as `n.id` returns nothing, which makes a rebuild treat all 249
+    filenames and all 6 chains as new and sweep away the originals. Verified
+    against the live graph 2026-08-30.
+    """
+    assert ids.IDENTITY["Filename"] == ("base_name", "fn_")
+    assert ids.IDENTITY["KineticChain"] == ("chain_id", "kc_")
+
+
+def test_stored_values_map_back_to_builder_ids():
+    assert ids.node_id_from_stored("Filename", BASE) == ids.filename_id(BASE)
+    assert ids.node_id_from_stored("KineticChain", "abc123") == "kc_abc123"
+    assert ids.node_id_from_stored("Material", "mat_x") == "mat_x"
