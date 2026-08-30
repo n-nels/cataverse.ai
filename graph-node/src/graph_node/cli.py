@@ -1,8 +1,7 @@
 """Command line entry point.
 
-Only the dry run exists today. Applying is deliberately not wired up: the
-write path has not been built, and pointing it at the live Aura instance is
-Nick's call to make, not a default.
+Dry run by default. Writing to the database requires `--apply`, said out loud,
+because the sweep deletes and there is no undo.
 """
 
 from __future__ import annotations
@@ -10,12 +9,27 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 from neo4j import GraphDatabase
 
 from .common.config import Settings
+from .data import apply as apply_module
 from .data import build, fits, plan, source
+
+
+@contextmanager
+def driver_session(settings: Settings):
+    """A session against the configured Aura instance, closed on the way out."""
+    driver = GraphDatabase.driver(
+        settings.uri, auth=(settings.username, settings.password)
+    )
+    try:
+        with driver.session(database=settings.database) as session:
+            yield session
+    finally:
+        driver.close()
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -32,10 +46,17 @@ def _parser() -> argparse.ArgumentParser:
         "--env", type=Path, default=None, help="Path to the .env file to read."
     )
     parser.add_argument(
-        "--dry-run",
+        "--apply",
         action="store_true",
-        default=True,
-        help="Report what would change without writing. Currently the only mode.",
+        help="Write to the database. Without it, nothing is touched.",
+    )
+    parser.add_argument(
+        "--allow-mass-deletion",
+        action="store_true",
+        help=(
+            "Permit the sweep to delete more than 20%% of the data graph. Use "
+            "only when the dry run's delete column is what you intend."
+        ),
     )
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
@@ -80,22 +101,34 @@ def main(argv: list[str] | None = None) -> int:
     intended = build.build(experiments, adsparams=adsparams)
     intended.warnings.extend(f"unreadable: {u}" for u in unreadable)
 
-    driver = GraphDatabase.driver(
-        settings.uri, auth=(settings.username, settings.password)
-    )
-    try:
-        with driver.session(database=settings.database) as session:
-            result = plan.plan(session, intended)
-            print(plan.render(result, intended))
-    finally:
-        driver.close()
+    with driver_session(settings) as session:
+        result = plan.plan(session, intended)
+        print(plan.render(result, intended))
 
     gap = plan.summarise_missing_adsparams(intended)
     if not gap["adsparams_built"]:
         print(f"\nNOTE: {gap['note']}")
 
-    print("\nDry run only - applying is not implemented yet.")
-    return 0 if result.is_safe_to_apply else 1
+    if not args.apply:
+        print("\nDry run. Nothing was written. Pass --apply to write.")
+        return 0 if result.is_safe_to_apply else 1
+
+    if not result.is_safe_to_apply:
+        print("\nRefusing to apply: resolve the errors above first.")
+        return 1
+
+    try:
+        with driver_session(settings) as session:
+            outcome = apply_module.apply(
+                session, intended, allow_mass_deletion=args.allow_mass_deletion
+            )
+    except apply_module.RefusedError as exc:
+        print(f"\nRefused: {exc}")
+        return 1
+
+    print("\nApplied.")
+    print(outcome.summary())
+    return 1 if (outcome.sweep and outcome.sweep.aborted) else 0
 
 
 if __name__ == "__main__":

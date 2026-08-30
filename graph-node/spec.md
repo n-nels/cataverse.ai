@@ -1,11 +1,12 @@
 # graph-node — Project Spec
 
-Status: **in progress.** The whole read side is built and verified against the
-live database: `common/` (mark-and-sweep, ownership boundary, id builders) and
-`data/` (source JSON, fit CSVs, graph assembly, reference drift, and a dry run
-that diffs the intended graph against Aura). What remains is the write path and
-`knowledge/`. Kept current as work lands; this is the durable record across
-sessions.
+Status: **in progress.** The data pipeline is complete end to end - read,
+build, plan, write, sweep - and has never been run against the live database.
+`knowledge/` is still empty. Kept current as work lands; this is the durable
+record across sessions.
+
+**Before the first `--apply`**, read §5d. A rebuild run today would delete
+things, and the reasons are understood but need a decision.
 
 Related: `dashboard-node/spec.md` covers the website that reads this graph, and
 `agent-node/` the terminal agent that queries it. Neither is a dependency —
@@ -291,6 +292,35 @@ reference. Two edges in the current graph point at
 earlier in `dashboard-node/spec.md` as a probable mislabel and never resolved.
 It is now a checkable invariant rather than an observation, and the rebuild
 should assert it. *Owner: Nick — decide whether the flag or the edge is wrong.*
+
+## 5d. Before the first apply
+
+The write path is built but has never been run. Two things to settle first.
+
+**A rebuild is only as complete as its source root.** The plan deletes whatever
+the sources do not account for, so `--source-root` must point at the whole of
+`X:\peakFit`, not a subset. Run without `--apply` and check the delete column
+first, every time. The sweep refuses to remove more than 20% of the data graph
+unless `--allow-mass-deletion` says so, which is the backstop for exactly this
+mistake - not a substitute for reading the plan.
+
+**The first run will legitimately delete and recreate.** Expect it, and check
+it matches this list:
+
+| Change | Why |
+|---|---|
+| `pressure_meas_g1` / `g2` disappear, `pressure_meas_mfld` / `cell` appear | The rename (§5a). Nodes are written with `SET n = props`, so properties the source no longer produces are dropped rather than left behind. |
+| One hollow `:Pretreatment` disappears | `pre_20250802_073857_pd_ceo2_003-001_1`, id and nothing else. Skipped at source now, so the sweep removes it - unless the source really does have an empty step 1, which the run will reveal. |
+| `is_reference` flips to true on `20250313_093410_pd_ceo2_000-004` | Confirmed wrong in the database and right in source, 2026-08-30. Also fixes the two `DELTA_FROM` edges that violate the §11.2 invariant. |
+| Experiments after 2026-05-05 appear, plus `mat_pd_0p06645_ceo2_54` | The graph is months stale; the third sample has never been loaded. |
+| Six uniqueness constraints appear | `constraints.cypher` from the original §8, specified and never built. Verified 2026-08-30: no constraints exist and no duplicate identity values, so creating them succeeds. |
+
+Pre-flight, all read-only, all verified 2026-08-30:
+
+- Every writer query plans cleanly against Aura under `EXPLAIN` (14 queries).
+- No duplicate identity values on any label, so the constraints will take.
+- The drift algorithm reproduces 223/223 stored `DELTA_FROM` edges across 249
+  experiments and 6 chains.
 
 ## 6. Decisions made
 
