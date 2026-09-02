@@ -30,33 +30,45 @@ It needs three things: the `X:` share drive mounted, network access to Aura, and
 to be switched on when the task fires.
 
 The obvious candidate is the PC running `orchestration/`, since it already has
-`X:` and is always on. The one thing to weigh: this puts Neo4j credentials on
-the instrument machine. They are read-write to the graph, so treat `.env` there
-the way you would any other credential. If another always-on machine has `X:`
-mounted, prefer it.
+`X:` and is always on.
+
+One thing to be aware of rather than worried about: `.env` grants read-write
+access to the graph, and Aura Free has no read-only user to fall back on. But
+the graph is entirely derived from files on `X:`, so the worst case is that it
+has to be rebuilt — minutes, not data loss. Nothing about the experiment data
+itself is exposed. The only version where this matters is if the machine is
+shared with people who should not be able to modify the graph.
 
 ---
 
 ## 1. Get the code onto that machine
 
+Once `feature/graph-node` has been merged, `main` has everything and that is
+what to use:
+
 ```powershell
 cd C:\Users\<you>\Documents
 git clone https://github.com/n-nels/cataverse.ai.git
 cd cataverse.ai
-git checkout feature/graph-node
 ```
 
-If the repo is already there, just fetch and check out the branch:
+If the repo is already there:
 
 ```powershell
-git fetch origin
-git checkout feature/graph-node
+git checkout main
 git pull
 ```
 
-> `feature/graph-node` does not touch `orchestration/` or `ir-spectro-node/` —
-> the diff against `main` for those directories is empty. Checking it out cannot
-> disturb the instrument code.
+Before the merge, use `git checkout feature/graph-node` instead. Either way,
+confirm the package is present:
+
+```powershell
+Test-Path graph-node\SCHEDULING.md    # should print True
+```
+
+> This adds `graph-node/` and nothing else — the diff against `main` touches no
+> file outside that directory, so it cannot disturb `orchestration/` or
+> `ir-spectro-node/`.
 
 ---
 
