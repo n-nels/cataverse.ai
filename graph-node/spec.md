@@ -1,9 +1,9 @@
 # graph-node — Project Spec
 
-Status: **live.** The data pipeline runs end to end and has rebuilt the
-production graph twice (2026-09-02). `knowledge/` is still empty - the YAML
-loader has not been ported. Kept current as work lands; this is the durable
-record across sessions.
+Status: **live.** Both halves of the pipeline - data and knowledge - rebuild
+the production graph from source in one pass, verified 2026-09-02. The
+remaining gap is the trigger: a rebuild is still started by hand. Kept current
+as work lands; this is the durable record across sessions.
 
 Related: `dashboard-node/spec.md` covers the website that reads this graph, and
 `agent-node/` the terminal agent that queries it. Neither is a dependency —
@@ -346,6 +346,52 @@ append, exercised for real on the first day.
    backstop for that mistake, not a substitute for reading the plan.
 3. Verify after. The single most useful check is that `_run` has exactly one
    distinct value covering every data node - two values means a partial write.
+
+## 5e. Knowledge graph port — 2026-09-02
+
+Ported from `original/scripts/load_knowledge.py` into `knowledge/`, and the
+hand-authored YAML moved to `graph-node/knowledge/` where it belongs - it is
+repo content, edited by hand, not instrument output.
+
+**`DELTA_FROM` and `RELATIVE_TO` were removed from this loader**, per the §2
+provenance rule. They are arithmetic on AdsParams and are emitted by
+`data/drift.py`. Both being emitted twice would mean two loaders writing the
+same edges under different run stamps, and whichever swept last deleting the
+other's work. A test asserts their absence here.
+
+### Attachment is computed against the intended data, not the stored data
+
+`INSTANCE_OF` and `FIT_BY` are built from the data graph the same run is about
+to write, so new nodes get their concepts in the rebuild that creates them.
+This is not theoretical: the first data-only rebuild created 190 Pretreatment
+nodes, and every one of them had no concept attached until the knowledge port
+landed.
+
+Ordering follows from that - data first, knowledge second, under one shared run
+id. Knowledge edges attach to data nodes, so the nodes must exist first.
+
+### Verified after the live run
+
+| | |
+|---|---|
+| Run stamps | One value across 2,179 data and 35 knowledge nodes |
+| Vocabulary | Reproduces the stored graph exactly: 15/8/5/1/6 nodes, SUBTYPE_OF 8, PARAMETER_OF 6, IMPLEMENTS 12, USES_SPECIES 12 |
+| Pretreatment concepts | 1,297 / 1,297 — the 190-node gap closed |
+| AdsParams `FIT_BY` | 283 / 283 |
+| Reference marking | Filename 141/141, AdsParams 138/138 |
+| Relationship ownership | Every type in the graph claimed by exactly one scope; none unclaimed |
+| Drift edges | Stamped once, by the data run |
+| §11.2 invariant | 0 violations |
+
+### The 11 uncovered ExpConditions are correct
+
+Eleven `:ExpConditions` have no `INSTANCE_OF`. All eleven are aborted runs -
+`exp_success=false`, `has_csv=false`, `gas=null`, `temp=null`. Rule E1 needs a
+CO isotope in the gas, and an experiment that never ran recorded none. There is
+no measurement to call an `adsorption_measurement`.
+
+Real coverage is 283/283. Worth writing down because the naive check - concepts
+per ExpConditions node - reads as a gap and is not one.
 
 ## 6. Decisions made
 
