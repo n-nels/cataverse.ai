@@ -177,10 +177,77 @@ def load(path: str | Path) -> Experiment:
     )
 
 
-def discover(root: str | Path) -> list[Path]:
-    """Every experiment metadata file beneath `root`, sorted by name.
+#: A directory whose name contains this is not real data.
+TEST_DIRECTORY_MARKER = "_test"
+
+#: A base name containing this is an isotopic-exchange run.
+ISOTOPIC_MARKER = "iso"
+
+
+def exclusion_reason(path: Path, root: str | Path) -> str | None:
+    """Why `path` is out of scope, or None if it is in scope.
+
+    Both rules come from the original pipeline, where they applied to the
+    `.md` -> `.json` converter. That converter only ever produced JSON for
+    in-scope experiments, so the rules were implicitly enforced by which files
+    existed at all - which is why nothing out of scope is in the graph today.
+
+    **That protection has expired.** `session.py` writes `_expParams.json` for
+    every run, isotopic exchange included, so the next such experiment would be
+    discovered and loaded unless it is excluded here.
+
+    Only directories *beneath* `root` are considered. The first version walked
+    the whole absolute path, which meant a source root that happened to sit
+    under a directory named like a test - a CI checkout, a scratch folder -
+    excluded every file under it. A rebuild finding no sources does not fail;
+    it sweeps the graph clean.
+    """
+    try:
+        relative = Path(path).relative_to(root)
+    except ValueError:
+        relative = Path(path)
+    for parent in relative.parents:
+        if parent.name and TEST_DIRECTORY_MARKER in parent.name.lower():
+            return f"under a test directory ({parent.name})"
+    # Matches the original rule: a substring check on the base name. Loose
+    # enough to catch a sample deliberately named with `iso` in it, which has
+    # not happened - no base name in the graph contains it.
+    if ISOTOPIC_MARKER in path.name.lower().removesuffix(SUFFIX.lower()):
+        return "isotopic exchange (not an adsorption experiment)"
+    return None
+
+
+@dataclass(frozen=True)
+class Discovered:
+    """What a scan of the source tree found, and what it left out."""
+
+    included: list[Path]
+    excluded: list[tuple[Path, str]]
+
+    def __len__(self) -> int:
+        return len(self.included)
+
+    def __iter__(self):
+        return iter(self.included)
+
+
+def discover(root: str | Path) -> Discovered:
+    """Every in-scope experiment metadata file beneath `root`, sorted by name.
 
     Sorted so a rebuild is reproducible: the same tree always yields the same
     order, which matters because chain construction is order-dependent.
+
+    Exclusions are returned rather than dropped quietly. A rebuild deletes
+    whatever its sources do not account for, so a file silently skipped here
+    becomes a node silently deleted later.
     """
-    return sorted(Path(root).rglob(f"*{SUFFIX}"))
+    root = Path(root)
+    included: list[Path] = []
+    excluded: list[tuple[Path, str]] = []
+    for path in sorted(root.rglob(f"*{SUFFIX}")):
+        reason = exclusion_reason(path, root)
+        if reason is None:
+            included.append(path)
+        else:
+            excluded.append((path, reason))
+    return Discovered(included=included, excluded=excluded)

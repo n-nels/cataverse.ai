@@ -252,14 +252,14 @@ in both instruction files classified. `original/` can be deleted once the
 | Never guess a missing value | throughout |
 | `HAS_STEP {order}` and `NEXT_STEP` both kept, deliberately redundant | `data/build.py` |
 | The whole §11 drift layer: `RELATIVE_TO` to the most recent prior reference in the same chain, references pointing at the previous reference, nothing before the first reference, `DELTA_FROM` only on matching peaks, deltas as `source - target` with no thresholding | `data/drift.py` |
+| Exclude source subfolders whose name contains `_test` | `data/source.py` |
+| Exclude experiments whose base name contains `iso` (isotopic exchange) | `data/source.py` |
 
 **Keep — still true, not yet built**
 
 | Rule | Note |
 |---|---|
-| Exclude the source subfolder whose name contains `_test` | `discover()` currently walks everything |
-| Exclude experiments whose base name contains `iso` (isotopic exchange) | same |
-| J=0 pretreatments **with** `has_csv=true` is a data bug and must be flagged | J=0 with no CSV is legitimate and silent |
+*(empty — everything still applicable is built.)*
 
 **Adapt — the intent holds, the mechanism changed**
 
@@ -281,6 +281,24 @@ in both instruction files classified. `original/` can be deleted once the
 | Load into Aura by CSV import through the UI | Same. |
 | "Present every script for human review before running it" | A working protocol for the original build, not a property of the pipeline. |
 | The §10 "drafted without direct access, STOP if reality differs" caveats | Written when the author could not see `X:\`. Superseded: the schema is now verified directly against the database and against real source files. |
+| **J=0 pretreatments with `has_csv=true` must be flagged** | Nick's call, 2026-09-02: not applicable. Zero cases in the graph; the only two J=0 experiments are aborted runs with no CSV, which is the legitimate shape. |
+
+### The exclusions are prospective, not cleanup
+
+Built 2026-09-02. Nothing out of scope is in the graph today - zero `iso`
+experiments, zero `_test` files, all 295 Filenames are `exp_type: adsorption`.
+That is not because the rules were enforced; it is because `md_to_json.py` only
+ever produced JSON for in-scope experiments, so the scope was implicit in which
+files existed.
+
+**That protection expired when `session.py` became the writer.** It emits
+`_expParams.json` for every run, and `orchestration/src/experiments/isotopic_exchange.py`
+exists. The next isotopic-exchange run would have been discovered and loaded as
+an adsorption experiment, silently. The rules matter going forward, not
+backwards.
+
+Exclusions are reported by the dry run rather than applied quietly: a file
+skipped here is a node the sweep deletes later.
 
 ### One invariant this audit surfaced
 

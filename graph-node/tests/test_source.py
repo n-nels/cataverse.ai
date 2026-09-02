@@ -132,7 +132,69 @@ def test_discover_finds_files_and_sorts_them(tmp_path):
     (tmp_path / "unrelated.txt").write_text("x")
 
     found = source.discover(tmp_path)
-    assert [p.name for p in found] == [f"a{source.SUFFIX}", f"b{source.SUFFIX}"]
+    assert [p.name for p in found.included] == [f"a{source.SUFFIX}", f"b{source.SUFFIX}"]
+    assert found.excluded == []
+
+
+def test_test_directories_are_excluded(tmp_path):
+    """The share drive has a _test subfolder that is not real data."""
+    (tmp_path / "nn1120-3_pd_ceo2_004").mkdir()
+    (tmp_path / "nn1120-3_pd_ceo2_test").mkdir()
+    real = tmp_path / "nn1120-3_pd_ceo2_004" / f"a{source.SUFFIX}"
+    fake = tmp_path / "nn1120-3_pd_ceo2_test" / f"b{source.SUFFIX}"
+    real.write_text("{}")
+    fake.write_text("{}")
+
+    found = source.discover(tmp_path)
+    assert [p.name for p in found.included] == [real.name]
+    assert len(found.excluded) == 1
+    assert "test directory" in found.excluded[0][1]
+
+
+def test_isotopic_exchange_runs_are_excluded(tmp_path):
+    """Not adsorption experiments, so their fits are not AdsParams.
+
+    Nothing in the graph matches today, but session.py writes expParams.json
+    for iso runs too - so the next one would be loaded without this rule.
+    """
+    (tmp_path / f"20260101_120000_pd_ceo2_iso_000-001{source.SUFFIX}").write_text("{}")
+    (tmp_path / f"20260101_120000_pd_ceo2_000-001{source.SUFFIX}").write_text("{}")
+
+    found = source.discover(tmp_path)
+    assert len(found.included) == 1
+    assert "iso" not in found.included[0].name
+    assert "isotopic" in found.excluded[0][1]
+
+
+def test_exclusion_is_case_insensitive(tmp_path):
+    (tmp_path / "SAMPLE_TEST").mkdir()
+    (tmp_path / "SAMPLE_TEST" / f"a{source.SUFFIX}").write_text("{}")
+    (tmp_path / f"20260101_120000_ISO_x{source.SUFFIX}").write_text("{}")
+
+    found = source.discover(tmp_path)
+    assert found.included == []
+    assert len(found.excluded) == 2
+
+
+def test_real_fixtures_are_not_excluded():
+    """Guards against an over-eager rule quietly dropping live data."""
+    assert source.exclusion_reason(OLD, FIXTURES) is None
+    assert source.exclusion_reason(NEW, FIXTURES) is None
+
+
+def test_directories_above_the_root_are_ignored(tmp_path):
+    """A root under a path like /ci_test/ must not exclude everything.
+
+    The first version walked the whole absolute path. A rebuild that finds no
+    sources does not fail - it sweeps the graph clean.
+    """
+    root = tmp_path / "some_test_checkout" / "peakFit"
+    root.mkdir(parents=True)
+    (root / f"a{source.SUFFIX}").write_text("{}")
+
+    found = source.discover(root)
+    assert len(found.included) == 1
+    assert found.excluded == []
 
 
 def test_step_index_stays_an_integer(experiment):

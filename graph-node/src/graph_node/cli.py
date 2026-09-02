@@ -82,8 +82,18 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    paths = source.discover(root)
-    print(f"Found {len(paths)} experiment file(s) under {root}\n")
+    found = source.discover(root)
+    paths = found.included
+    print(f"Found {len(paths)} experiment file(s) under {root}")
+    if found.excluded:
+        # Reported, not silent: an excluded file is a node the sweep will
+        # delete, so it has to be visible before --apply, not after.
+        print(f"Excluded {len(found.excluded)}:")
+        for path, reason in found.excluded[:10]:
+            print(f"    {path.name} - {reason}")
+        if len(found.excluded) > 10:
+            print(f"    ... and {len(found.excluded) - 10} more")
+    print()
     if not paths:
         return 2
 
