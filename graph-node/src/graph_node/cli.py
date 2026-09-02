@@ -17,6 +17,7 @@ from neo4j import GraphDatabase
 from .common.config import Settings
 from .common.ownership import DATA, KNOWLEDGE
 from .common.rebuild import new_run_id
+from .common.tls import use_system_trust_store
 from .data import apply as apply_module
 from .data import build, fits, plan, source
 from .knowledge import build as kbuild
@@ -78,6 +79,10 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s %(message)s",
     )
+
+    # Before any connection: on a network that inspects TLS, Python's bundled
+    # certificate authorities do not include the one doing the inspecting.
+    use_system_trust_store()
 
     settings = Settings.from_env(args.env)
     root = args.source_root or settings.source_root
