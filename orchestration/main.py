@@ -75,23 +75,23 @@ def run_adsorption_experiment(inst: Instruments):
     success = False
     
     try:
-        ads.clean_surface(evac_temp=535,
-                          evac_time=0.85,
+        ads.clean_surface(evac_temp=510,
+                          evac_time=1.0,
                           enable_ms=False,
                           chiller=True)
         
-        ads.oxidize_surface(pressure=3.9,
-                            temp=535,
-                            time=2.34,
-                            evac_temp=535,
-                            evac_time=0.5)
+        ads.oxidize_surface(pressure=2.5,
+                            temp=510,
+                            time=1.2,
+                            evac_temp=510,
+                            evac_time=1.0)
         
-        ads.pretreat_adsorbate(adsorbate=["O2", "H2"],
-                               pressure=[1.25, 1.25],
-                               temp=190,
-                               time=1.4,
-                               evac_temp=190,
-                               evac_time=0.50)
+        # ads.pretreat_adsorbate(adsorbate=["O2", "H2"],
+        #                        pressure=[1.25, 1.25],
+        #                        temp=190,
+        #                        time=1.4,
+        #                        evac_temp=190,
+        #                        evac_time=0.50)
         
         # ads.pretreat_adsorbate(adsorbate="O2",
         #                        pressure=3.0,
@@ -101,7 +101,7 @@ def run_adsorption_experiment(inst: Instruments):
         #                        evac_time=0.5)
         
         ads.monitor_adsorption(adsorbate="13CO",
-                               pressure=0.84,
+                               pressure=3.8,
                                temp=45,
                                repeat=[10, 5, 15, 100],
                                delay=[60, 300, 600, 1800])
