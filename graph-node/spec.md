@@ -436,6 +436,178 @@ Two lasting consequences:
   the host must be a machine with both share-drive access and that egress. As
   of 2026-09-02 the lab PC has the first and not the second.
 
+## 5g. Raw data on S3 — design (2026-09-02, not built)
+
+### The decision
+
+**Bulk data goes to AWS S3. The graph holds pointers, never payloads.**
+
+The requirement is that a user can plot anything they choose, with the agent
+turning a question into the right data. That rules out curating a subset: every
+column has to be reachable. The volumes then make the store obvious:
+
+| Data | Size | Where |
+|---|---|---|
+| Derived CSVs (seven kinds per experiment, plus pressure logs) | ~92 MB for the peak areas alone; more across all kinds | S3 |
+| Raw spectra (`.dpt`, 89–180 per experiment) | **~7 GB** | S3 |
+| Pointers and metadata | kilobytes | Graph |
+
+An earlier plan also put a plottable time series in the graph. Dropped: it would
+mean the same numbers in two representations, and it does not scale to the
+spectra, which were never going in the graph. One store for bulk data, one for
+structure. The cost is an S3 round trip per plot — a few hundred milliseconds —
+which is a fair trade for not maintaining two truths.
+
+AWS specifically, rather than the cheaper Cloudflare R2, because Nick wants
+cloud experience that transfers. R2 is S3-compatible so the code would be nearly
+identical, but IAM, policies and presigned URLs are the skills worth having and
+they are AWS-native. At ~7 GB the cost is around $0.20/month.
+
+### What the sources actually look like
+
+Verified on the share, 2026-09-02:
+
+```
+peakFit/<notebook folder>/
+    <base>_expParams.json              -> already in the graph
+    <base>_CarbonylPeakArea.csv        284 files, 92 MB, avg 332 KB
+    <base>_CarbonylPeakFitParams.csv   285
+    <base>_CarbonylFitResidual.csv     284
+    <base>_CarbonylFitBaseline.csv     284
+    <base>_PeakHeight.csv              860
+    <base>_Params.csv                  240
+    <base>_PeakHeight_binned.csv        35
+    <base>_pressureLog.csv
+    <base>_README.md                   259
+
+<opus root>/OpusConvert_lgRfl/
+    <base>.0000 .. <base>.0129         two-column text, 1660 points, ~44 KB each
+<opus root>/OpusReadParams/
+    <base>.txt                         one line per spectrum: path, date, time, ...
+    <base>_subIFGfiles.txt             which pairs form each delta
+```
+
+The spectra are **plain text**, not OPUS binary — `3997.75357884,-0.00052956`.
+A browser can parse and plot them directly, so no conversion layer is needed.
+
+A finding worth recording: the fit-parameter columns in the peak-area CSV
+**vary per row** — `pfo-sec_k_a` has 83 distinct values across 147 rows. Each
+row is the fit as of that time point, so the file carries the fit converging,
+not a repeated final answer. `AdsParams` in the graph holds only the final row.
+That is why the whole file is worth keeping rather than a reduction of it.
+
+### Object key layout
+
+```
+peakfit/<base_name>/<original filename>
+spectra/<base_name>/<original filename>
+spectra/<base_name>/index.json          (generated, see below)
+```
+
+Prefix by source root, then `base_name`, then the source filename verbatim.
+
+- `base_name` is already the `Filename` identity key, so it is unique and
+  stable, and it sorts chronologically for browsing.
+- The **notebook folder is deliberately not in the key.** It is derivable from
+  the graph, and if a file were ever reorganised into a different folder the key
+  would change — producing both a re-upload and an orphan.
+- **Filenames are kept verbatim** rather than normalised to `PeakArea.csv`. No
+  mapping can then be wrong, and a downloaded file is self-describing. The
+  `base_name` repeating inside the prefix costs nothing.
+- The spectra have numeric extensions (`.0000`) and no MIME type, so
+  `Content-Type: text/plain` is set explicitly on upload; otherwise a browser
+  downloads them instead of reading them.
+
+`index.json` is the one generated artifact: the file list for an experiment with
+each spectrum's timestamp, parsed from `OpusReadParams/<base>.txt`. The dashboard
+fetches it first, to know what exists before requesting any spectra.
+
+### Graph additions
+
+Pointers only. Two new labels, both in the DATA scope:
+
+```
+(:RawFile {key, kind, base_name, bytes, source_mtime, content_type, uploaded_at})
+(:SpectrumSeries {base_name, prefix, index_key, count, first_at, last_at})
+
+(Filename)-[:HAS_RAW_FILE]->(RawFile)
+(Filename)-[:HAS_SPECTRA]->(SpectrumSeries)
+```
+
+One `RawFile` per derived file — roughly 2,300 nodes. One `SpectrumSeries` per
+experiment rather than one node per spectrum: at 130 spectra × ~300 experiments
+that would be 39,000 nodes for no benefit, since nothing queries an individual
+spectrum on its own. About 2,600 new nodes in total, against Aura Free's 200,000
+limit and the 2,214 in use today.
+
+`kind` is what makes the agent able to answer at all — it can see that a
+`CarbonylFitResidual` exists for an experiment without guessing filenames.
+
+### Knowing what is already uploaded
+
+Re-reading 7 GB every six hours to work out what changed is not an option.
+
+The `RawFile` node stores `bytes` and `source_mtime`. The uploader stats each
+source file — cheap — and skips anything whose size and mtime match the node.
+Only a mismatch triggers a read and an upload. Raw spectra never change once
+written, so in steady state almost nothing is read.
+
+This is where the content-hash idea raised on 2026-08-29 finally earns its
+place. It was correctly deferred then, being orthogonal to the rebuild; here it
+is load-bearing. A hash is the tiebreaker when size and mtime are ambiguous, and
+it is what would catch a file rewritten to an identical size.
+
+Neither IAM user has `DeleteObject`. Nothing in this design deletes, and the
+sweep does not extend to S3 — a `RawFile` node can be swept while the object it
+pointed at stays. Orphaned objects are a later problem, and a cheap one.
+
+### Access is gated, via presigned URLs
+
+```
+graph-node (lab PC)  --PutObject-->  S3 bucket (private, no public access)
+                     --writes key + metadata into the graph
+
+browser --> cataverse.ai API route (behind Vercel Authentication)
+              --> generates a short-lived presigned URL
+        --> browser fetches the object directly from S3
+```
+
+The bucket is never public. The dashboard authorises the request and returns a
+URL that expires in minutes. Files stream from S3 rather than through Vercel, so
+there is no function timeout or bandwidth cost on a 130-file spectrum fetch.
+
+Two IAM identities, least privilege:
+
+| Identity | Permitted | Where its key lives |
+|---|---|---|
+| `cataverse-uploader` | `PutObject`, `ListBucket` | Lab PC, `graph-node/.env` |
+| `cataverse-reader` | `GetObject` | Vercel, dashboard environment |
+
+`ListBucket` on the uploader so it can verify what is present; `GetObject`
+withheld from it so a leaked lab-PC key cannot read the data back.
+
+Useful accident: **S3 is port 443, which the lab firewall already allows** (§5f).
+Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
+
+### Deferred
+
+- **gzip on upload.** The spectra are text and compress 3–4×, taking ~7 GB to
+  ~2 GB. `Content-Encoding: gzip` makes browsers decompress transparently. Not
+  in v1: it complicates hashing, and the storage saving is about ten cents a
+  month. Worth revisiting if transfer time becomes noticeable.
+- **Reconciling S3 against the graph.** The graph could claim a file is uploaded
+  when the object is missing. A periodic `ListBucket` comparison would catch it.
+  Not built until it happens.
+
+### Open
+
+- Whether the `README.md` files and `subIFGfiles.txt` are data worth uploading,
+  or working notes that are not.
+- `PeakHeight.csv` has 860 files against 284 for the other kinds — roughly three
+  per experiment, suggesting a naming variant this design has not accounted for.
+- Where the Opus roots live on the share. They were inspected from a flash-drive
+  copy; their path under `X:\` is not yet known.
+
 ## 6. Decisions made
 
 - **2026-08-29 — graph-node is its own package in the monorepo.** Reasoning in §4.
@@ -463,13 +635,9 @@ Two lasting consequences:
 2. **Noticing if the scheduled task stops.** A job that dies quietly looks
    exactly like a graph with no new experiments. Every run logs, but nothing
    watches the logs. No design yet.
-3. **Loading the raw data.** Pressure logs, mass-spec logs, and the full
-   peak-fit time series. Not a matter of loading more into Neo4j: the peak fits
-   alone are roughly 296 experiments x 106 time points x 20 peaks, which is
-   about three times Aura Free's 200,000 node limit, and a graph is the wrong
-   store for time series regardless. The design depends on what the data is
-   for — plotting on the site, agent reasoning, or ML — and those want
-   different things. Not started.
+3. ~~Loading the raw data.~~ **Designed 2026-09-02 — see §5g.** Everything
+   bulk goes to AWS S3; the graph gains pointers only. Not built: waiting on the
+   AWS account and bucket.
 4. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
    worth having: storing a source hash on each node would let "is the graph
    consistent with its sources?" be answered without rebuilding. Computed in
