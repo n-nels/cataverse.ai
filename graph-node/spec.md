@@ -1,8 +1,9 @@
 # graph-node — Project Spec
 
 Status: **live.** Both halves of the pipeline - data and knowledge - rebuild
-the production graph from source in one pass, verified 2026-09-02. The
-remaining gap is the trigger: a rebuild is still started by hand. Kept current
+the production graph from source in one pass, verified 2026-09-02. Running it
+on a schedule is designed and documented (§5f) but not yet deployed: the lab
+machine cannot reach Aura until its firewall allows outbound 7687. Kept current
 as work lands; this is the durable record across sessions.
 
 Related: `dashboard-node/spec.md` covers the website that reads this graph, and
@@ -66,7 +67,7 @@ The pipeline is complete except for its trigger.
 | Deterministic node ids | `common/ids.py` | **Done.** Carried over unchanged from the original pipeline, so a rebuild matches the nodes already stored rather than duplicating them. |
 | Dry run | `data/plan.py` | **Done.** Diffs the intended graph against the database, per scope, writing nothing. |
 | Writing to Neo4j | `common/writer.py`, `data/apply.py` | **Done 2026-09-02.** MERGE on the per-label identity property, stamp, then sweep. Replaced the manual Aura CSV import. |
-| **A trigger** | — | **Missing.** Nothing tells the loader an experiment finished; a rebuild is started by hand. This is the only remaining gap. |
+| Running it unattended | Windows Task Scheduler, `scripts/rebuild.ps1` | **Designed, not deployed.** No trigger and no change to `orchestration/` — see §5f. Blocked on the lab network allowing outbound 7687. |
 
 Source data root is `X:\peakFit\` (share drive), which is why this does not need
 to live in `orchestration/` — see §4.
@@ -84,17 +85,17 @@ means a format change and the loader that consumes it land in one commit.
 Not inside `orchestration/`: `orchestration/` runs on the lab PC beside the
 hardware. Putting Neo4j credentials and network egress there buys nothing, and it
 would make `orchestration/` implicitly depend on `ir-spectro-node`'s CSV format.
-Because the source data is on `X:\`, this package can run from any machine with
-that drive mounted. `orchestration/`'s only new responsibility is to signal that
-an experiment finished.
+Because the source data is on `X:\`, this package runs on any machine with that
+drive mounted *and* outbound access to Aura (§5f). `orchestration/` gains no new
+responsibility at all — it already writes everything the rebuild needs.
 
 ```
 experiment ends
   -> orchestration writes <base>_expParams.json        (exists)
   -> ir-spectro writes <base>_CarbonylPeakArea.csv     (exists)
-  -> orchestration signals "done"                      (new, small)
-       |
-  graph-node: read JSON + CSV -> write to Aura         (new)
+
+every six hours, independently
+  -> graph-node: read the share drive, rebuild, write to Aura
 ```
 
 ## 5. Rebuild with mark and sweep — DECIDED (2026-08-29)
@@ -396,6 +397,45 @@ no measurement to call an `adsorption_measurement`.
 Real coverage is 283/283. Worth writing down because the naive check - concepts
 per ExpConditions node - reads as a gap and is not one.
 
+## 5f. The trigger — a scheduled rebuild, and no change to `orchestration/`
+
+Decided 2026-09-02. Written up for the machine it runs on in
+[SCHEDULING.md](SCHEDULING.md).
+
+**There is no trigger.** A rebuild reads the share drive and works out what
+changed by comparing; it does not need telling that an experiment finished. So
+Windows Task Scheduler runs it every six hours and `orchestration/` is
+untouched. The lab PC's experiment code keeps knowing nothing about Neo4j, and
+no database problem can reach a running experiment.
+
+Nick's instinct was to trigger from `finalize()` in `orchestration/adsorption.py`
+— which is where the `_expParams.json` is copied to the share drive, so it is
+the right place if a signal were needed. The reason not to: the last spectrum
+fit can take up to six minutes after the run ends, so a trigger there has to be
+coordinated with a queue it cannot see. Under a rebuild it does not matter. A
+run that happens mid-fit loads the experiment without its AdsParams and the
+next run adds it — running early is self-correcting, which is the same property
+that made rebuild-over-append worth choosing in §5.
+
+### Network requirements, learned the hard way
+
+The first attempt on the lab PC failed three times, each further along:
+
+| Symptom | Cause |
+|---|---|
+| `Timed out ... 7687` | Outbound 7687 blocked by the lab firewall |
+| `certificate verify failed: self-signed certificate in chain` on :443 | The network terminates and re-signs TLS. Windows trusts the appliance's authority; Python ships its own CA bundle and does not |
+| `Cannot connect to Bolt service ... (looks like HTTP)` on :443 | **Aura does not serve Bolt on 443.** 443 is the browser console and Query API; Bolt is 7687 only |
+
+Two lasting consequences:
+
+- `common/tls.py` verifies TLS against the OS trust store, so a machine behind
+  an inspecting proxy still connects. Deliberately not `neo4j+ssc://`, which
+  accepts *any* certificate and would defeat the point of verifying.
+- **Outbound TCP 7687 is a hard requirement.** There is no alternative port, so
+  the host must be a machine with both share-drive access and that egress. As
+  of 2026-09-02 the lab PC has the first and not the second.
+
 ## 6. Decisions made
 
 - **2026-08-29 — graph-node is its own package in the monorepo.** Reasoning in §4.
@@ -418,25 +458,23 @@ per ExpConditions node - reads as a gap and is not one.
 
 ## 7. Open questions
 
-Answered questions have been removed; the decisions they produced live in §5
-and §6.
-
-1. **The "done" signal.** End of `session.py`? A watcher on the share drive? A
-   scheduled sweep? Three days per experiment makes latency a non-issue, which
-   argues for whatever is simplest to reason about. Touches `orchestration/`,
-   which is why it is last.
-2. **Where this runs, and started by what.** Any machine with `X:\` mounted.
-   Note that `.env` is gitignored, so a fresh clone or a scheduled job needs
-   one; `.env.example` lists the four variables.
-3. **What happens when Aura is paused.** The free tier auto-pauses. An
-   experiment must never fail because the database is asleep — which argues for
-   the trigger enqueueing work rather than performing it inline.
-4. **AdsParams timing.** Fits are produced by post-processing, after the run.
-   Does a rebuild happen once when fits are ready, or twice?
-5. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
+1. **Getting the scheduled rebuild running.** Designed and documented (§5f,
+   SCHEDULING.md); blocked on the lab network allowing outbound 7687.
+2. **Noticing if the scheduled task stops.** A job that dies quietly looks
+   exactly like a graph with no new experiments. Every run logs, but nothing
+   watches the logs. No design yet.
+3. **Loading the raw data.** Pressure logs, mass-spec logs, and the full
+   peak-fit time series. Not a matter of loading more into Neo4j: the peak fits
+   alone are roughly 296 experiments x 106 time points x 20 peaks, which is
+   about three times Aura Free's 200,000 node limit, and a graph is the wrong
+   store for time series regardless. The design depends on what the data is
+   for — plotting on the site, agent reasoning, or ML — and those want
+   different things. Not started.
+4. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
    worth having: storing a source hash on each node would let "is the graph
    consistent with its sources?" be answered without rebuilding. Computed in
-   `graph-node`, not `orchestration/`, which cannot see the fit CSVs.
+   `graph-node`, not `orchestration/`, which cannot see the fit CSVs. Deferred
+   by Nick, 2026-09-02.
 
 ## 8. Non-goals for now
 
