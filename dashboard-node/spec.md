@@ -458,12 +458,21 @@ pre-publication at that point.
   `FLOAT` only across 1,342 values; no strings remain. `pressure_meas_g2` also clean.
 - [ ] **Record the per-gauge max pressures** in §5.1 once known — needed for the agent to
   reason about out-of-range readings. *Owner: Nick.*
-- [ ] **Property rename lands on the next reload.** Renamed in the source `.json` only:
-  `pressure_meas_g1` / `pressure_meas_g2` → `pressure_measure_cell` / `pressure_measure_mfld`
-  (exact names TBC). **The database still has the old names** (verified 2026-08-23: 1,342
-  nodes). Arrives when the data is reloaded. Revisit then: any saved Cypher, the Ontology
-  tab's colour map, and docs referencing the old names. Note for the pipeline design —
-  a rename is a schema migration, and the pipeline needs a story for them.
+- [x] ~~**Property rename lands on the next reload.**~~ **Done 2026-09-02**, by the first
+  `graph-node` rebuild. The database now has `pressure_meas_mfld` / `pressure_meas_cell`
+  and zero `pressure_meas_g1` remaining.
+  <br>**The mapping is the opposite of what this item guessed.** It said
+  `g1`/`g2` → `cell`/`mfld`; the truth is **`g1` → `mfld`, `g2` → `cell`** (manifold
+  first, cell second). Confirmed two ways: `session.py`'s `_normalize_pressure_meas`
+  assigns `(values[0], values[1])` to `(mfld, cell)`, and the stored values were compared
+  against a real source file row by row — every one matched. Nick confirmed the physical
+  ordering. Had the guess been applied, 1,342 pressure readings would have been silently
+  mislabelled rather than failing.
+  <br>Names are `pressure_meas_*`, not `pressure_measure_*`. Nothing in `src/` referenced
+  the old names, so no code changed — only this file did.
+  <br>The pipeline's story for renames turned out to be nothing special: nodes are written
+  with `SET n = props`, so a property the source stops producing is dropped rather than
+  left behind. See `graph-node/spec.md` §5a.
 
 ### Agent
 
