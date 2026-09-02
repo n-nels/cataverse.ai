@@ -8,6 +8,9 @@ dependencies = [
     "pandas",
     "pyyaml",
     "python-dotenv",
+    # Verify TLS against the OS trust store, so a machine behind a TLS-
+    # inspecting firewall can still reach Aura. See common/tls.py.
+    "truststore>=0.9",
 ]
 
 [project.scripts]
