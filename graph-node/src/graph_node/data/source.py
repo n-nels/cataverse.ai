@@ -1,0 +1,253 @@
+"""Reading experiment metadata off the share drive.
+
+One `<base>_expParams.json` per experiment, written by
+`orchestration/src/experiments/session.py`. That writer is the schema of record
+- not the vendored instructions in `original/`, whose field names are stale by
+their own admission.
+
+Verified against two real files spanning the dataset (2025-02 and 2026-08): the
+shape is stable, and both use `pressure_meas_mfld` / `pressure_meas_cell`. The
+older `pressure_meas_g1` / `g2` spelling exists only in the *database*, never in
+the source, so there is no dual-spelling problem to handle here.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+#: Suffix identifying an experiment metadata file.
+SUFFIX = "_expParams.json"
+
+REQUIRED_TOP_LEVEL = ("base_name", "datetime", "material", "filename_flags")
+
+#: Material fields that make up the node id, and so must never be retyped.
+#:
+#: `material_id` turns `.` into `p`, so coercing `support_sa` from 54 to 54.0
+#: rewrites the id from `mat_pd_0p0339_ceo2_54` to `..._54p0` - a different
+#: node. Every Material in the database would be orphaned, and the sweep would
+#: then delete the originals. Normalisation stops at this boundary.
+MATERIAL_IDENTITY_FIELDS = frozenset({"metal", "metal_loading", "support", "support_sa"})
+
+#: Ordinals, not measurements. Coerced to int rather than float.
+#:
+#: `step_index` counts steps; there is no such thing as step 1.5. Floating it
+#: made the graph store `step_index: 1.0` while the redundant `order` property
+#: on the HAS_STEP edge stayed an integer, and made the dashboard render
+#: "step 1.0" - its label code interpolates the value without rounding.
+#: Caught after the first live rebuild on 2026-09-02.
+INTEGER_FIELDS = frozenset({"step_index"})
+
+
+class SourceError(Exception):
+    """A source file could not be read as an experiment."""
+
+
+def _as_float(value: Any) -> Any:
+    """Coerce numbers to float, leaving everything else alone.
+
+    Neo4j types each property value individually, so the same property can end
+    up INTEGER on one node and FLOAT on another - which then breaks queries that
+    compare or aggregate across them. This is not hypothetical: the observed
+    files disagree already, with `temp: 600` and `rate: 20` in the 2025 file
+    against `temp: 450.0` and `rate: 20.0` in the 2026 one.
+
+    Booleans are excluded deliberately - `bool` is a subclass of `int` in
+    Python, and `chiller: false` must stay a boolean.
+
+    Lists are mapped element-wise. `pressure_calc` is list-valued and the same
+    disagreement shows up inside it: the database holds `[0]` on some nodes and
+    the source files hold `[0.8207]`, which Neo4j stores as INTEGER[] and
+    FLOAT[] respectively.
+    """
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, list):
+        return [_as_float(v) for v in value]
+    return value
+
+
+def _as_int(value: Any) -> Any:
+    """Coerce a number to int, leaving non-numbers and booleans alone."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, (int, float)):
+        return int(value)
+    return value
+
+
+def _clean_block(
+    block: dict[str, Any], *, preserve: frozenset[str] = frozenset()
+) -> dict[str, Any]:
+    def clean(key: str, value: Any) -> Any:
+        if key in preserve:
+            return value
+        if key in INTEGER_FIELDS:
+            return _as_int(value)
+        return _as_float(value)
+
+    return {k: clean(k, v) for k, v in block.items()}
+
+
+@dataclass(frozen=True)
+class Experiment:
+    """One experiment's metadata, normalised and ready to become nodes."""
+
+    base_name: str
+    started_at: datetime
+    material: dict[str, Any]
+    flags: dict[str, Any]
+    pretreatments: list[dict[str, Any]]
+    conditions: dict[str, Any]
+    source_path: Path
+    #: Problems worth a human's attention that are not fatal. Collected rather
+    #: than raised so one bad file cannot stop a whole rebuild.
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def is_new_sample(self) -> bool | None:
+        return self.flags.get("is_new")
+
+    @property
+    def has_csv(self) -> bool:
+        return bool(self.flags.get("has_csv"))
+
+    @property
+    def mass_g(self) -> float | None:
+        """Catalyst mass. Lives on KineticChain, not Material.
+
+        It is a property of the physical loading rather than of the material
+        formulation, and is constant within a chain.
+        """
+        return self.material.get("mass_g")
+
+
+def load(path: str | Path) -> Experiment:
+    """Parse one `_expParams.json`. Raises SourceError if it is unusable."""
+    path = Path(path)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SourceError(f"{path.name}: {exc}") from exc
+
+    missing = [k for k in REQUIRED_TOP_LEVEL if k not in raw]
+    if missing:
+        raise SourceError(f"{path.name}: missing key(s) {', '.join(missing)}")
+
+    try:
+        started_at = datetime.fromisoformat(raw["datetime"])
+    except (TypeError, ValueError) as exc:
+        raise SourceError(f"{path.name}: unparseable datetime {raw['datetime']!r}") from exc
+
+    warnings: list[str] = []
+
+    steps: list[dict[str, Any]] = []
+    for position, step in enumerate(raw.get("pretreatments") or [], start=1):
+        if step.get("step_index") is None:
+            # This is the hollow-node bug, caught at the source rather than
+            # written into the graph. pre_20250802_073857_pd_ceo2_003-001_1
+            # exists in the database with an id and no other properties at all,
+            # because a step like this was loaded without complaint.
+            warnings.append(
+                f"pretreatment at position {position} has no step_index; skipped"
+            )
+            continue
+        steps.append(_clean_block(step))
+
+    conditions = raw.get("exp_conditions") or {}
+    if not conditions and raw["filename_flags"].get("exp_success"):
+        # Absent conditions are normal for a run that was started and abandoned,
+        # but a *successful* run without them means something was lost.
+        warnings.append("exp_success is true but exp_conditions is empty")
+
+    return Experiment(
+        base_name=raw["base_name"],
+        started_at=started_at,
+        material=_clean_block(raw["material"], preserve=MATERIAL_IDENTITY_FIELDS),
+        flags=dict(raw["filename_flags"]),
+        pretreatments=steps,
+        conditions=_clean_block(conditions),
+        source_path=path,
+        warnings=warnings,
+    )
+
+
+#: A directory whose name contains this is not real data.
+TEST_DIRECTORY_MARKER = "_test"
+
+#: A base name containing this is an isotopic-exchange run.
+ISOTOPIC_MARKER = "iso"
+
+
+def exclusion_reason(path: Path, root: str | Path) -> str | None:
+    """Why `path` is out of scope, or None if it is in scope.
+
+    Both rules come from the original pipeline, where they applied to the
+    `.md` -> `.json` converter. That converter only ever produced JSON for
+    in-scope experiments, so the rules were implicitly enforced by which files
+    existed at all - which is why nothing out of scope is in the graph today.
+
+    **That protection has expired.** `session.py` writes `_expParams.json` for
+    every run, isotopic exchange included, so the next such experiment would be
+    discovered and loaded unless it is excluded here.
+
+    Only directories *beneath* `root` are considered. The first version walked
+    the whole absolute path, which meant a source root that happened to sit
+    under a directory named like a test - a CI checkout, a scratch folder -
+    excluded every file under it. A rebuild finding no sources does not fail;
+    it sweeps the graph clean.
+    """
+    try:
+        relative = Path(path).relative_to(root)
+    except ValueError:
+        relative = Path(path)
+    for parent in relative.parents:
+        if parent.name and TEST_DIRECTORY_MARKER in parent.name.lower():
+            return f"under a test directory ({parent.name})"
+    # Matches the original rule: a substring check on the base name. Loose
+    # enough to catch a sample deliberately named with `iso` in it, which has
+    # not happened - no base name in the graph contains it.
+    if ISOTOPIC_MARKER in path.name.lower().removesuffix(SUFFIX.lower()):
+        return "isotopic exchange (not an adsorption experiment)"
+    return None
+
+
+@dataclass(frozen=True)
+class Discovered:
+    """What a scan of the source tree found, and what it left out."""
+
+    included: list[Path]
+    excluded: list[tuple[Path, str]]
+
+    def __len__(self) -> int:
+        return len(self.included)
+
+    def __iter__(self):
+        return iter(self.included)
+
+
+def discover(root: str | Path) -> Discovered:
+    """Every in-scope experiment metadata file beneath `root`, sorted by name.
+
+    Sorted so a rebuild is reproducible: the same tree always yields the same
+    order, which matters because chain construction is order-dependent.
+
+    Exclusions are returned rather than dropped quietly. A rebuild deletes
+    whatever its sources do not account for, so a file silently skipped here
+    becomes a node silently deleted later.
+    """
+    root = Path(root)
+    included: list[Path] = []
+    excluded: list[tuple[Path, str]] = []
+    for path in sorted(root.rglob(f"*{SUFFIX}")):
+        reason = exclusion_reason(path, root)
+        if reason is None:
+            included.append(path)
+        else:
+            excluded.append((path, reason))
+    return Discovered(included=included, excluded=excluded)

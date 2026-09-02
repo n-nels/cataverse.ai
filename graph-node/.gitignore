@@ -1,0 +1,16 @@
+# Generated graph artifacts. Regenerable from source data on X:\ — a rebuild
+# reproduces them exactly, so committing 4 MB of them would only bloat history.
+exports/
+review/
+
+# Credentials for the Aura instance. Never commit.
+.env
+
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Scheduled-run logs.
+logs/

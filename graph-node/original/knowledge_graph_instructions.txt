@@ -1,0 +1,655 @@
+# Project: Knowledge Graph Layer for Cataverse.ai Adsorption Experiments
+
+## 0. Execution Policy (HARD RULES)
+- DO NOT execute any script you write. Present scripts for human review first.
+- DO NOT create files unless explicitly asked.
+- DO NOT guess missing values. Collect them in a review list.
+- For any task with "human confirms," "human decides," or an ambiguity,
+  STOP and ask before proceeding. Matches the working protocol in the
+  Cataverse.ai repo [1].
+- Read target files and any sibling `AGENTS.md` before editing [1].
+- This file is a SUPPLEMENT to `data_graph_instructions.txt`. Where the
+  two files refer to the same node or edge type, the data graph file is
+  authoritative for instance-level nodes (Material, Filename,
+  Pretreatment, ExpConditions, AdsParams, KineticChain) and this file
+  is authoritative for concept-level nodes added in §4.
+
+## 1. Goal
+Build a knowledge-graph layer that sits alongside the data graph
+defined in `data_graph_instructions.txt`. The data graph holds
+INSTANCES (this experiment, this pretreatment). The knowledge graph
+holds CONCEPTS (oxidation, evacuation, kinetic model parameters) and
+VOCABULARY (high-level Python API methods, chemical species). The two
+layers connect via `:INSTANCE_OF`, `:IMPLEMENTS`, `:USES_SPECIES`,
+`:PARAMETER_OF`, `:FIT_BY`, and `:SUBTYPE_OF` edges.
+
+This file delivers two coordinated layers:
+  - v1: concepts, species, python functions, model parameters, and
+    their interconnections + :INSTANCE_OF edges from data nodes to
+    concepts.
+  - v1.5: reference-state relativity edges between Filenames (and between
+    their AdsParams) within a kinetic chain.
+
+## 2. Working Folder Additions
+The data graph already establishes `X:\graphDB\`. This file adds:
+
+  X:\graphDB\
+  ├── knowledge\
+  │   ├── concepts.yaml
+  │   ├── species.yaml
+  │   ├── py_functions.yaml
+  │   ├── model_parameters.yaml
+  │   └── mappings.yaml
+  ├── scripts\
+  │   └── load_knowledge.py
+  └── exports\
+      ├── knowledge.cypher              (single-file Cypher dump)
+      ├── nodes_knowledge.csv           (knowledge-only nodes for LOAD CSV)
+      └── relationships_knowledge.csv   (all knowledge edges, including knowledge↔data instantiation edges)
+
+The four YAML files are author-time source. They are read by
+`load_knowledge.py`, which writes `exports/knowledge.cypher`. Once
+loaded into Neo4j, the YAMLs are dormant until the user adds a new
+concept, species, function, or rule.
+
+## 3. Source Material
+- `adsorption.py` [4]: the high-level scientist-facing API. PyFunction
+  nodes are seeded from this file's class methods on `Adsorption`.
+- README.md files [2]: source of pretreatment / exp_conditions
+  property values that the :INSTANCE_OF rules match against.
+- CarbonylPeakArea CSVs [3]: source of AdsParams property names. The
+  PFO secondary-process model column names map to ModelParameter
+  nodes.
+- Cataverse.ai repo [1]: source of the kinetic model definitions
+  (PFO and PFO with secondary process, including the ODE form
+  `dq/dt = k_a*(q_e - q) - k_s*p`, `dp/dt = k_p*(q - q_inf - p)`).
+
+## 4. New Node Types
+
+(:PyFunction)
+  - Uniqueness: name
+  - Properties:
+      name              e.g. "oxidize_surface"
+      signature         e.g. "oxidize_surface(pressure, temp, time, evac_temp, evac_time)"
+      parameters        list of {name, type, unit, description}
+                        e.g. [{"name":"pressure","type":"float",
+                               "unit":"Torr",
+                               "desc":"O2 target pressure"}]
+      docstring         one-line summary lifted from the source
+  - Scope: high-level API only. The agent consumer (LLM writing an
+    experiment script) interacts at this layer; it does not need
+    low-level building-block functions.
+
+(:ChemConcept)
+  - Uniqueness: name
+  - Properties:
+      name              short snake_case identifier
+      definition        plain-English definition
+      aliases           list (e.g. ["calcination"] for oxidation)
+      kind              "operational" | "chemistry" | "state"
+  - Concepts may have a :SUBTYPE_OF edge to another :ChemConcept
+    (e.g. reference_state -[:SUBTYPE_OF]-> metastable_state).
+  - A :Pretreatment, :ExpConditions, :Filename, or :AdsParams node
+    may have multiple :INSTANCE_OF edges (e.g., an oxidation step
+    that includes a thermal soak is an instance of both).
+
+(:ChemSpecies)
+  - Uniqueness: formula
+  - Properties:
+      formula           e.g. "O2", "13CO"
+      role              list (e.g. ["probe","isotopologue"])
+
+(:KineticModel)
+  - Uniqueness: name
+  - Properties:
+      name              "pfo_secondary"
+      description       "PFO with secondary process via coupled ODEs"
+      equations         list of equation strings, e.g.
+                        ["dq/dt = k_a*(q_e - q) - k_s*p",
+                         "dp/dt = k_p*(q - q_inf - p)"]
+  - For v1 the only model is `pfo_secondary` because AdsParams loads
+    only monomer_sum rows. When cluster_sum (PFO simple) is added
+    later, a second :KineticModel node is added.
+
+(:ModelParameter)
+  - Uniqueness: composite (name, model_name) so `q_e` of pfo_secondary
+    is distinct from `q_e` of a future simpler model if their
+    definitions differ.
+  - Properties:
+      name              e.g. "k_a"
+      definition        plain-English definition
+      role              "primary" | "secondary" | "initial"
+      quantity_kind     "rate_constant" | "capacity" | "threshold"
+      units             e.g. "s^-1", "a.u."
+      fitted            Bool; false for q_0 (fixed to first observed
+                        intensity per repo constraints [1])
+  - Defined ONCE for the entire database. For pfo_secondary that is
+    exactly six nodes: k_a, q_e, k_s, k_p, q_inf, q_0.
+
+## 5. New Edge Types
+
+Knowledge-internal:
+  (PyFunction)     -[:IMPLEMENTS]->        (ChemConcept)
+  (ChemConcept)    -[:USES_SPECIES]->      (ChemSpecies)
+  (ChemConcept)    -[:SUBTYPE_OF]->        (ChemConcept)
+  (ModelParameter) -[:PARAMETER_OF]->      (KineticModel)
+
+Knowledge-to-data (instantiation):
+  (Pretreatment)   -[:INSTANCE_OF]->       (ChemConcept)
+  (ExpConditions)  -[:INSTANCE_OF]->       (ChemConcept)
+  (Filename)       -[:INSTANCE_OF]->       (ChemConcept {name:"reference_state"})
+                                            -- only when is_reference=True
+  (AdsParams)      -[:INSTANCE_OF]->       (ChemConcept {name:"reference_state"})
+                                            -- only when parent Filename.is_reference=True
+  (AdsParams)      -[:FIT_BY]->            (KineticModel)
+
+Reference-state relativity (v1.5; defined in detail in §11):
+  (Filename)       -[:RELATIVE_TO]->       (Filename)
+  (AdsParams)      -[:DELTA_FROM {delta_*}]-> (AdsParams)
+
+Note on :SUBTYPE_OF. The knowledge graph encodes chemistry-concept
+inheritance once via :SUBTYPE_OF, rather than attaching multiple
+:INSTANCE_OF edges to each data node. Example: oxidation, reduction,
+hydroxylation, carbonation, deuteroxylation, adsorption_measurement, and isotopic_exchange_measurement
+are all :SUBTYPE_OF gas_dosing_cell. A Pretreatment with gas="O2"
+gets only :INSTANCE_OF oxidation; the gas_dosing_cell membership is
+recoverable via traversal:
+
+  MATCH (n)-[:INSTANCE_OF]->(c)-[:SUBTYPE_OF*0..]->(parent:ChemConcept {name:"gas_dosing_cell"})
+
+## 6. Starter Concept List (v1)
+
+Operational concepts (kind="operational"):
+  - evacuation                  -- pumping the cell, no chemistry
+  - gas_dosing_cell             -- exposing the sample to a gas; parent concept for all chemistry below
+  - thermal_ramp                -- non-zero rate
+  - thermal_soak                -- zero rate, non-zero duration
+  - cooling                     -- lowering cell temperature
+  - acquire_spectra             -- IR measurement during a step
+
+Chemistry concepts (kind="chemistry"); each :SUBTYPE_OF gas_dosing_cell:
+  - oxidation                   -- O2, CO2 dosed to cell
+  - reduction                   -- H2 dosed to cell
+  - hydroxylation     		-- H2O dosed to cell
+  - deuteroxylation 		-- D2O dosed to cell
+  - carbonation		-- CO2 dosed to cell
+  - adsorption_measurement      -- ExpConditions with gas in {CO,13CO,12CO}
+                                   when Filename.exp_type == "adsorption"
+  - isotopic_exchange_measurement
+                                -- ExpConditions, exp_type == "isotopic_exchange"
+
+Note: `evacuation` (operational) carries `desorption` as an alias.
+The two are treated as a single concept here: pumping the cell IS the
+operation, desorption IS the chemical effect, and they always co-occur
+in this dataset (rule R1 fires on RoughPump/TurboPump).
+
+State concepts (kind="state"):
+  - metastable_state            -- parent concept; every Filename in a
+                                   chain occupies a metastable state.
+                                   Not directly attached to data nodes;
+                                   reached by traversing :SUBTYPE_OF.
+  - reference_state             -[:SUBTYPE_OF]-> metastable_state
+                                   -- attached to Filename and AdsParams
+                                   when is_reference=True
+
+The :SUBTYPE_OF tree (declared once in concepts.yaml):
+
+  gas_dosing_cell
+    ├── oxidation
+    ├── reduction
+    ├── hydroxylation
+    ├── deuteroxylation
+    ├── carbonation
+    ├── adsorption_measurement
+    └── isotopic_exchange_measurement
+
+  metastable_state
+    └── reference_state
+
+## 7. :INSTANCE_OF Rules (v1)
+
+Rules apply to :Pretreatment, :ExpConditions, :Filename, and
+:AdsParams nodes. A single node may match multiple rules and gets one
+:INSTANCE_OF edge per match. The chemistry-concept rule is driven by
+the species → chemistry table in mappings.yaml (§12), not hardcoded
+per gas. To add a new chemistry-active species, add one line to the
+species mapping; no rule edits needed.
+
+Species → chemistry mapping (declared in mappings.yaml):
+  O2          -> oxidation
+  H2          -> reduction
+  H2O         -> hydroxylation
+  CO,13CO,12CO -> (context-dependent: see ExpConditions rule)
+  D2O         -> deuteroxylation
+  CO2         -> oxidation, carbonation
+
+For :Pretreatment nodes (rules applied independently, all matches kept):
+  R1. gas in {"RoughPump","TurboPump"}    -> evacuation
+  R2. gas matches a species with chemistry mapping
+      (single gas)                        -> that chemistry concept
+      (dual gas, e.g. ["H2O","O2"])       -> all matching concepts
+                                             (e.g. hydroxylation +
+                                              oxidation)
+  R3. rate > 0                            -> thermal_ramp
+  R4. rate == 0 AND duration > 0          -> thermal_soak
+
+For :ExpConditions nodes:
+  E1. gas in {"CO","13CO","12CO"} AND
+      Filename.exp_type == "adsorption"
+                                      -> adsorption_measurement
+  E2. gas in {"CO","13CO","12CO"} AND
+      Filename.exp_type == "isotopic_exchange"
+                                      -> isotopic_exchange_measurement
+  ExpConditions does NOT also receive :INSTANCE_OF gas_dosing_cell or
+  acquire_spectra. Both are implied: gas_dosing_cell via :SUBTYPE_OF
+  (recoverable by traversal); acquire_spectra is what an ExpConditions
+  node represents by definition.
+
+For :Filename nodes:
+  F1. is_reference == true                -> reference_state
+
+For :AdsParams nodes:
+  A1. parent Filename.is_reference == true -> reference_state
+  A2. always                              -> :FIT_BY (KineticModel
+                                         {name:"pfo_secondary"})
+
+The distinction between gas_dosing_mfld and gas_dosing_cell is real
+operationally but is NOT applied to data nodes here. The README does
+not separately record manifold-only dosing steps; only cell exposure
+appears as a Pretreatment / ExpConditions step. The mfld/cell split
+lives in the PyFunction layer (§8) where it matters for script
+authoring.
+
+## 8. PyFunction Layer and Mappings (from adsorption.py)
+
+PyFunction nodes (one per high-level API method on `Adsorption` [4]):
+
+  clean_surface(evac_temp, evac_time, ramp_rate=20,
+                enable_ms=False, chiller=False)
+    -> evacuation, thermal_ramp, thermal_soak
+
+  oxidize_surface(pressure, temp, time, evac_temp, evac_time)
+    -> oxidation, thermal_soak, evacuation
+
+  pretreat_adsorbate(adsorbate, pressure, temp, time,
+                     evac_temp, evac_time)
+    -> thermal_soak, evacuation, gas_dosing_cell
+       (specific chemistry concept depends on adsorbate at runtime;
+        attached at the data-node level by R2 in §7. gas_dosing_cell
+        is kept here because no specific subtype is known at author
+        time; for PyFunctions whose chemistry concept is known and
+        is a subtype of gas_dosing_cell, the parent edge is omitted
+        as redundant.)
+
+  monitor_adsorption(adsorbate, pressure, temp, repeat,
+                     delay=None, all_fileids=True,
+                     do_bckg=True, do_fit=True)
+    -> cooling, acquire_spectra, adsorption_measurement
+  finalize(success)
+    -> (no concept; housekeeping only)
+
+The signature, parameter list, and one-line docstring for each
+PyFunction node are seeded from `adsorption.py` [4]. Re-run the seeder
+when the API changes.
+
+ChemConcept -> ChemSpecies edges (typical species per concept):
+  oxidation                      -> O2
+  reduction                      -> H2
+  adsorption_measurement         -> CO, 13CO, 12CO
+  isotopic_exchange_measurement  -> CO, 13CO, 12CO
+  hydroxylation			 -> H2O
+  deuteroxylation		 -> D2O
+  carbonation			 -> CO2
+
+## 9. Species Seed (v1)
+
+  O2    role=["oxidizer"]
+  H2    role=["reductant"]
+  CO    role=["probe"]
+  13CO  role=["probe","isotopologue"]
+  12CO  role=["probe","isotopologue"]
+  H2O   role=["hydroxylation"]
+  D2O   role=["deuteroxylation", "isotopologue"]
+  CO2    role=["carbonation", "oxidizer"]
+
+12CO is included for forward compatibility (co-adsorption with 13CO is
+mentioned in [4]); it may not appear in the initial six folders.
+
+## 10. ModelParameter Seed (v1)
+
+For KineticModel name="pfo_secondary" [1]:
+
+  k_a    role=primary    quantity_kind=rate_constant   units="s^-1"
+         definition="adsorption rate constant; equivalently the
+         monomer formation rate constant. Primary process."
+         fitted=true
+
+  q_e    role=primary    quantity_kind=capacity        units="a.u."
+         definition="equilibrium capacity; sets the uptake ceiling
+         of the primary process."
+         fitted=true
+
+  k_s    role=secondary  quantity_kind=rate_constant   units="s^-1"
+         definition="secondary process rate constant; how strongly
+         the drainage state removes mass."
+         fitted=true
+
+  k_p    role=secondary  quantity_kind=rate_constant   units="s^-1"
+         definition="how quickly the drainage state responds to
+         overshoot above q_inf."
+         fitted=true
+
+  q_inf  role=secondary  quantity_kind=threshold       units="a.u."
+         definition="threshold above which drainage activates;
+         long-term residual loading."
+         fitted=true
+
+  q_0    role=initial    quantity_kind=capacity        units="a.u."
+         definition="initial loading; fixed to the first observed
+         intensity, not fitted [1]."
+         fitted=false
+
+Equations attached to the :KineticModel node:
+  dq/dt = k_a * (q_e - q) - k_s * p
+  dp/dt = k_p * (q - q_inf - p)
+
+## 11. Reference-State Drift Layer (v1.5)
+
+Purpose. The kinetic chain (data graph §5) traverses a series of
+metastable states. Reference experiments are deliberately revisited
+anchors in this trajectory: identical script execution on the same
+sample. They probe whether prior operations caused
+irreversible changes under the reference state condition (pretreatment + experiment). Two reference experiments in the same chain
+may not be identical; the difference between them is itself
+the scientifically interesting signal. A non-reference experiment
+between two references is interpreted relative to the most recent
+prior reference.
+
+This layer adds relativity edges, no new nodes.
+
+### 11.1 Edges
+
+(Filename) -[:RELATIVE_TO]-> (Filename)
+  - Source = any Filename in a chain that has a valid prior reference.
+  - Target = the most recent prior `is_reference=True` Filename in the
+    SAME KineticChain.
+  - Reference Filenames also receive :RELATIVE_TO edges pointing at
+    the previous reference in the same chain. This forms a connected
+    subchain of references inside the kinetic chain (drift between
+    anchors is recoverable via traversal).
+
+(AdsParams) -[:DELTA_FROM {delta_*}]-> (AdsParams)
+  - Mirrors :RELATIVE_TO at the AdsParams level.
+  - Created ONLY when both source and target Filenames have
+    has_csv=true AND both have AdsParams nodes for the same peak_name
+    (per the data graph composite key for AdsParams).
+  - Edge properties (computed as source - target):
+      delta_ka, delta_qe, delta_ks, delta_kp,
+      delta_qinf, delta_q0, delta_time
+  - Emitted for every qualifying pair without thresholding.
+    Significance is decided at query time, not at load time.
+
+### 11.2 relativity-resolution Algorithm (per KineticChain)
+
+Per kinetic chain (data graph §5):
+  1. Walk the chain in time order.
+  2. Maintain pointer `current_reference` (initially null).
+  3. For each Filename F in the chain:
+       a. If `current_reference` is not null, emit
+            (F) -[:RELATIVE_TO]-> (current_reference).
+          If both F and current_reference have AdsParams for the same
+          peak_name, also emit the :DELTA_FROM edge between those
+          AdsParams with the computed deltas.
+       b. If F.is_reference == true, set
+            `current_reference` = F  (AFTER step a, so a reference
+          compares to the previous reference, not itself).
+  4. The first reference in a chain has no prior reference; no
+     outgoing :RELATIVE_TO edge.
+  5. Non-reference Filenames before the first reference in a chain
+     get no :RELATIVE_TO edge. They occupy a metastable state but
+     have no anchor to compare against.
+
+Reference subchain traversal (informational; no extra schema needed):
+  MATCH path = (r1:Filename {is_reference:true})-[:RELATIVE_TO*]->(r2:Filename {is_reference:true})
+  WHERE (r1)-[:IN_CHAIN]->(:KineticChain)<-[:IN_CHAIN]-(r2)
+  RETURN path
+
+## 12. Author-Time YAML Format
+
+`knowledge/concepts.yaml`:
+  - name: evacuation
+    kind: operational
+    definition: "Pumping the cell with rough or turbo pump; physically
+                 removes gas-phase species and drives surface
+                 desorption."
+    aliases: ["desorption"]
+    subtype_of: null
+  - name: oxidation
+    kind: chemistry
+    definition: "Exposure of catalyst to O2 with intent to oxidize."
+    aliases: ["calcination"]
+    subtype_of: gas_dosing_cell
+  - name: hydroxylation
+    kind: chemistry
+    definition: "Exposure of catalyst to H2O with intent to hydroxylate
+               the surface."
+    aliases: []
+    subtype_of: gas_dosing_cell
+    ....
+  - name: metastable_state
+    kind: state
+    definition: "A kinetically trapped configuration of the sample
+                 along the experimental trajectory."
+    aliases: []
+    subtype_of: null
+  - name: reference_state
+    kind: state
+    definition: "A metastable state reached by a notionally
+                 identical reference script execution."
+    aliases: []
+    subtype_of: metastable_state
+  ...
+
+`knowledge/species.yaml`:
+  - formula: O2
+    role: ["oxidizer"]
+  ...
+
+`knowledge/py_functions.yaml`:
+  - name: oxidize_surface
+    signature: "oxidize_surface(pressure, temp, time, evac_temp, evac_time)"
+    parameters:
+      - {name: pressure, type: float, unit: Torr,
+         desc: "O2 target pressure in the total volume"}
+      - {name: temp,     type: float, unit: "°C",
+         desc: "Temperature during oxidation"}
+      - {name: time,     type: float, unit: "hours",
+         desc: "Hold time under O2"}
+      - {name: evac_temp, type: float, unit: "°C",
+         desc: "Temperature during post-oxidation evacuation"}
+      - {name: evac_time, type: float, unit: "hours",
+         desc: "Hold time under turbo pump after oxidation"}
+    docstring: "Dose O2 to oxidize the surface, hold at temperature, then evacuate."
+  ...
+
+`knowledge/model_parameters.yaml`:
+  model:
+    name: pfo_secondary
+    description: "PFO with secondary process via coupled ODEs"
+    equations:
+      - "dq/dt = k_a*(q_e - q) - k_s*p"
+      - "dp/dt = k_p*(q - q_inf - p)"
+  parameters:
+    - name: k_a
+      role: primary
+      quantity_kind: rate_constant
+      units: "s^-1"
+      definition: "Adsorption rate constant; primary process."
+      fitted: true
+    ...
+
+`knowledge/mappings.yaml`:
+  py_to_concept:
+    clean_surface:        [evacuation, thermal_ramp, thermal_soak]
+    oxidize_surface:      [oxidation, thermal_soak, evacuation]
+    pretreat_adsorbate:   [thermal_soak, evacuation, gas_dosing_cell]
+    monitor_adsorption:   [cooling, acquire_spectra, adsorption_measurement]
+    finalize:             []
+  concept_to_species:
+    oxidation:                       [O2, CO2]
+    reduction:                       [H2]
+    adsorption_measurement:          [CO, 13CO, 12CO]
+    isotopic_exchange_measurement:   [CO, 13CO, 12CO]
+    hydroxylation:		     [H2O]
+    deuteroxylation:		     [D2O]
+    carbonation:		     [CO2]
+
+instance_of_rules:
+  # Species-driven chemistry rule (declared via species_to_chemistry below).
+  # Other rules listed explicitly. All matches applied; no top-to-bottom
+  # short-circuiting.
+
+  species_to_chemistry:
+    O2:   oxidation
+    H2:   reduction
+    H2O:  hydroxylation
+    D2O:  deuteroxylation
+    CO2:  [oxidation, carbonation]
+    # CO/13CO/12CO handled by ExpConditions rules; context-dependent.
+
+  pretreatment_rules:
+    - id: R1_evacuation
+      when: "gas in ['RoughPump','TurboPump']"
+      concepts: [evacuation]
+    - id: R2_chemistry
+      when: "gas matches species_to_chemistry"
+      concepts: [<looked_up_from_species_to_chemistry>]
+    - id: R3_ramp
+      when: "rate > 0"
+      concepts: [thermal_ramp]
+    - id: R4_soak
+      when: "rate == 0 and duration > 0"
+      concepts: [thermal_soak]
+
+  expconditions_rules:
+    - id: E1_adsorption
+      when: "gas in ['CO','13CO','12CO'] and exp_type == 'adsorption'"
+      concepts: [adsorption_measurement]
+    - id: E2_isotopic
+      when: "gas in ['CO','13CO','12CO'] and exp_type == 'isotopic_exchange'"
+      concepts: [isotopic_exchange_measurement]
+
+  filename_rules:
+    - id: F1_reference
+      when: "is_reference == true"
+      concepts: [reference_state]
+
+  adsparams_rules:
+    - id: A1_reference
+      when: "parent_filename.is_reference == true"
+      concepts: [reference_state]
+    - id: A2_fit_by
+      when: "always"
+      fit_by: pfo_secondary
+
+## 13. Stage C: load_knowledge.py
+
+- Reads the five YAML files in `knowledge/`.
+- Reads the existing data graph from `exports/nodes.csv` and
+  `exports/relationships.csv` produced by Stage B (does NOT connect
+  to a live Neo4j instance).
+- Builds the v1 knowledge graph:
+    a. MERGE :ChemConcept, :ChemSpecies, :PyFunction,
+       :KineticModel, :ModelParameter nodes from YAMLs.
+    b. MERGE :IMPLEMENTS, :USES_SPECIES, :SUBTYPE_OF, :PARAMETER_OF
+       edges from YAMLs.
+    c. Evaluate :INSTANCE_OF rules against every :Pretreatment,
+       :ExpConditions, :Filename, :AdsParams node. Emit MERGE edges,
+       keyed on data-node uniqueness keys (Filename.base_name;
+       composite Pretreatment key (base_name, step_index); composite
+       ExpConditions key (base_name); composite AdsParams key
+       (base_name, peak_name)).
+    d. MERGE :FIT_BY edges from every :AdsParams to the
+       :KineticModel node.
+- Builds the v1.5 drift layer:
+    e. For each KineticChain, walk it in time order per the
+       algorithm in §11.2. Emit :RELATIVE_TO and :DELTA_FROM edges.
+- Writes three files under exports/:
+    1. exports/knowledge.cypher           single-file Cypher dump,
+                                          paste-ready for Aura.
+    2. exports/nodes_knowledge.csv        all knowledge-layer nodes
+                                          (ChemConcept, ChemSpecies,
+                                           PyFunction, KineticModel,
+                                           ModelParameter).
+    3. exports/relationships_knowledge.csv  all knowledge edges
+                                          (IMPLEMENTS, USES_SPECIES,
+                                           SUBTYPE_OF, PARAMETER_OF,
+                                           INSTANCE_OF, FIT_BY,
+                                           RELATIVE_TO, DELTA_FROM).
+- Present the script for review before running.
+
+## 14. Execution Order (full pipeline)
+
+  1. Stage A (md_to_json.py)
+        -> `<base>_expParams.json` files in peakFit
+  2. Stage B (load_graph.py)
+        -> exports/graph.cypher
+        -> exports/nodes.csv, exports/relationships.csv
+        -> exports/schema.arrows.json
+  3. Human uploads to Aura Free:
+        a. schema.cypher (constraints + indexes)
+        b. nodes.csv + relationships.csv (or graph.cypher)
+  4. Stage C (load_knowledge.py)
+        -> exports/knowledge.cypher
+        -> exports/nodes_knowledge.csv
+        -> exports/relationships_knowledge.csv
+  5. Human uploads to Aura:
+        a. nodes_knowledge.csv + relationships_knowledge.csv
+           (or knowledge.cypher).
+
+Each stage presented for review before running. No stage connects to
+a live Neo4j.
+
+## 15. Open Items - Confirm With User Before Coding
+- Confirm the species role list (§9) is acceptable; expand if other
+  gases appear in the actual six in-scope folders.
+- Confirm that PyFunction signatures (§8) should be lifted verbatim
+  from `adsorption.py` [4] including default values, or reduced to
+  the parameter names only.
+
+## 16. Drafted Without Direct Access (Caveat)
+These instructions were drafted WITHOUT the LLM having direct access
+to `X:\peakFit\`, `X:\graphDB\`, or the live Cataverse.ai repo.
+PyFunction signatures, concept rules, and species lists are based on
+[1], [2], [3], [4] and on user statements.
+
+If during implementation you (Claude Code) find ANY of the following,
+STOP and flag the user rather than silently reconciling:
+
+  - A README field name in actual files differs from the data graph
+    spec or §7 (e.g., a gas value not covered by the rule set).
+  - A high-level method exists on `Adsorption` [4] that is not
+    captured in §8.
+  - A new chemical species appears that is not in §9.
+  - The KineticModel parameters in actual CSVs [3] differ from §10.
+  - An :INSTANCE_OF rule fires zero times across the whole dataset
+    (likely a misnamed gas value).
+  - More than one KineticModel is needed (e.g., monomer fit and
+    cluster fit coexist) but the load filter still selects only
+    monomer_sum.
+
+In all such cases: do not guess, do not "fix," do not proceed. Report
+the discrepancy, propose options, and wait for the user.
+
+## References
+[1] Cataverse.ai repo. Source for: secondary PFO model definition
+    (coupled ODEs), q_0 fixed-to-first-data-point constraint, and
+    the working protocol with human-decision gates.
+[2] Representative experimental metadata README. Source for:
+    pretreatment field shapes (gas, temp, rate, duration, etc.) and
+    tuple-valued pressures.
+[3] Representative experimental data CSV. Source for: AdsParams
+    column names (pfo_sec_*) and the Peak_Name filter convention.
+[4] adsorption.py. Source for: high-level PyFunction node vocabulary
+    and signatures (clean_surface, oxidize_surface, pretreat_adsorbate,
+    monitor_adsorption, finalize).
