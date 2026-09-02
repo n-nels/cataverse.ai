@@ -10,13 +10,12 @@ Reads only.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from neo4j import Session
 
 from ..common import ids
-from ..common.ownership import DATA
-from .build import IntendedGraph
+from ..common.model import IntendedGraph
+from ..common.ownership import DATA, GraphScope
 
 
 @dataclass
@@ -38,7 +37,7 @@ class Plan:
         return sum(self.nodes_to_delete.values())
 
 
-def _stored_ids_by_label(session: Session) -> dict[str, set[str]]:
+def _stored_ids_by_label(session: Session, scope: GraphScope) -> dict[str, set[str]]:
     """Every stored data node, as the synthetic id the builder would give it.
 
     Each label is read on its own identity property. Filename is keyed on
@@ -49,7 +48,7 @@ def _stored_ids_by_label(session: Session) -> dict[str, set[str]]:
     """
     stored: dict[str, set[str]] = {}
 
-    for label in sorted(DATA.labels):
+    for label in sorted(scope.labels):
         prop, _ = ids.IDENTITY[label]
         # Label and property are interpolated rather than parameterised because
         # Cypher allows neither as a parameter. Both come from IDENTITY, which
@@ -65,7 +64,9 @@ def _stored_ids_by_label(session: Session) -> dict[str, set[str]]:
     return stored
 
 
-def plan(session: Session, intended: IntendedGraph) -> Plan:
+def plan(
+    session: Session, intended: IntendedGraph, scope: GraphScope = DATA
+) -> Plan:
     """Diff `intended` against the database. Makes no writes."""
     result = Plan(
         warnings=list(intended.warnings),
@@ -73,12 +74,12 @@ def plan(session: Session, intended: IntendedGraph) -> Plan:
         relationships_intended=len(intended.edges),
     )
 
-    stored = _stored_ids_by_label(session)
-    intended_by_label: dict[str, set[str]] = {label: set() for label in DATA.labels}
+    stored = _stored_ids_by_label(session, scope)
+    intended_by_label: dict[str, set[str]] = {label: set() for label in scope.labels}
     for node in intended.nodes:
         intended_by_label.setdefault(node.label, set()).add(node.id)
 
-    for label in sorted(DATA.labels):
+    for label in sorted(scope.labels):
         want = intended_by_label.get(label, set())
         have = stored.get(label, set())
         if created := len(want - have):
@@ -90,24 +91,26 @@ def plan(session: Session, intended: IntendedGraph) -> Plan:
 
     result.relationships_stored = session.run(
         "MATCH ()-[r]->() WHERE type(r) IN $types RETURN count(r) AS c",
-        types=sorted(DATA.relationship_types),
+        types=sorted(scope.relationship_types),
     ).single()["c"]
 
     return result
 
 
-def render(plan_result: Plan, intended: IntendedGraph) -> str:
+def render(
+    plan_result: Plan, intended: IntendedGraph, scope: GraphScope = DATA
+) -> str:
     """A human-readable dry-run report."""
     lines: list[str] = []
     add = lines.append
 
-    add("Rebuild plan (dry run - nothing was written)")
+    add(f"Rebuild plan: {scope.name} graph (dry run - nothing was written)")
     add("=" * 60)
 
     add("")
     add(f"{'label':<16}{'create':>8}{'update':>8}{'delete':>8}")
     add("-" * 40)
-    for label in sorted(DATA.labels):
+    for label in sorted(scope.labels):
         create = plan_result.nodes_to_create.get(label, 0)
         update = plan_result.nodes_to_update.get(label, 0)
         delete = plan_result.nodes_to_delete.get(label, 0)
@@ -120,8 +123,9 @@ def render(plan_result: Plan, intended: IntendedGraph) -> str:
     for rel_type, count in sorted(intended.edges_by_type().items()):
         add(f"    {rel_type:<18} {count}")
 
-    add("")
-    add(f"kinetic chains: {len(intended.chains)}")
+    if intended.chains:
+        add("")
+        add(f"kinetic chains: {len(intended.chains)}")
     for chain in intended.chains:
         add(
             f"    {chain.node_id}  {chain.started_at}  "
@@ -152,15 +156,3 @@ def render(plan_result: Plan, intended: IntendedGraph) -> str:
         add("Result: would apply cleanly, no deletions.")
 
     return "\n".join(lines)
-
-
-def summarise_missing_adsparams(intended: IntendedGraph) -> dict[str, Any]:
-    """AdsParams is not built yet; report that plainly rather than silently."""
-    return {
-        "adsparams_built": any(n.label == "AdsParams" for n in intended.nodes),
-        "note": (
-            "AdsParams and YIELDS are absent: the fit CSV reader is not written "
-            "yet, pending a sample *_CarbonylPeakArea.csv. A rebuild run now "
-            "would sweep away the 238 AdsParams nodes currently stored."
-        ),
-    }

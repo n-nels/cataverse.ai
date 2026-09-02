@@ -15,8 +15,12 @@ from pathlib import Path
 from neo4j import GraphDatabase
 
 from .common.config import Settings
+from .common.ownership import DATA, KNOWLEDGE
+from .common.rebuild import new_run_id
 from .data import apply as apply_module
 from .data import build, fits, plan, source
+from .knowledge import build as kbuild
+from .knowledge import source as ksource
 
 
 @contextmanager
@@ -44,6 +48,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--env", type=Path, default=None, help="Path to the .env file to read."
+    )
+    parser.add_argument(
+        "--knowledge-root",
+        type=Path,
+        default=None,
+        help="Directory of knowledge YAML. Defaults to graph-node/knowledge.",
     )
     parser.add_argument(
         "--apply",
@@ -111,34 +121,58 @@ def main(argv: list[str] | None = None) -> int:
     intended = build.build(experiments, adsparams=adsparams)
     intended.warnings.extend(f"unreadable: {u}" for u in unreadable)
 
-    with driver_session(settings) as session:
-        result = plan.plan(session, intended)
-        print(plan.render(result, intended))
+    knowledge = kbuild.build(ksource.load(args.knowledge_root), intended)
 
-    gap = plan.summarise_missing_adsparams(intended)
-    if not gap["adsparams_built"]:
-        print(f"\nNOTE: {gap['note']}")
+    with driver_session(settings) as session:
+        result = plan.plan(session, intended, DATA)
+        print(plan.render(result, intended, DATA))
+        print()
+        knowledge_result = plan.plan(session, knowledge, KNOWLEDGE)
+        print(plan.render(knowledge_result, knowledge, KNOWLEDGE))
+
+    safe = result.is_safe_to_apply and knowledge_result.is_safe_to_apply
 
     if not args.apply:
         print("\nDry run. Nothing was written. Pass --apply to write.")
-        return 0 if result.is_safe_to_apply else 1
+        return 0 if safe else 1
 
-    if not result.is_safe_to_apply:
+    if not safe:
         print("\nRefusing to apply: resolve the errors above first.")
         return 1
 
+    # One run id for both halves, and data first: knowledge edges attach to
+    # data nodes, so those nodes must exist before the edges reach for them.
+    run_id = new_run_id()
     try:
         with driver_session(settings) as session:
-            outcome = apply_module.apply(
-                session, intended, allow_mass_deletion=args.allow_mass_deletion
+            data_outcome = apply_module.apply(
+                session,
+                intended,
+                DATA,
+                run_id=run_id,
+                allow_mass_deletion=args.allow_mass_deletion,
             )
+            print("\nApplied: data")
+            print(data_outcome.summary())
+
+            knowledge_outcome = apply_module.apply(
+                session,
+                knowledge,
+                KNOWLEDGE,
+                run_id=run_id,
+                allow_mass_deletion=args.allow_mass_deletion,
+                extra_node_labels={n.id: n.label for n in intended.nodes},
+            )
+            print("\nApplied: knowledge")
+            print(knowledge_outcome.summary())
     except apply_module.RefusedError as exc:
         print(f"\nRefused: {exc}")
         return 1
 
-    print("\nApplied.")
-    print(outcome.summary())
-    return 1 if (outcome.sweep and outcome.sweep.aborted) else 0
+    aborted = [
+        o for o in (data_outcome, knowledge_outcome) if o.sweep and o.sweep.aborted
+    ]
+    return 1 if aborted else 0
 
 
 if __name__ == "__main__":

@@ -84,7 +84,24 @@ KNOWLEDGE = GraphScope(
             "KineticModel",
         }
     ),
-    relationship_types=frozenset(),  # populated when the knowledge loader lands
+    relationship_types=frozenset(
+        {
+            # Within the knowledge graph.
+            "SUBTYPE_OF",
+            "USES_SPECIES",
+            "IMPLEMENTS",
+            "PARAMETER_OF",
+            # Crossing from data into knowledge. These start on a data node
+            # (Pretreatment, ExpConditions, Filename, AdsParams) and end on a
+            # knowledge node, but the knowledge loader is what creates them, so
+            # it is what must be able to sweep them. The data sweep never
+            # touches them by type - though DETACH DELETE will remove one whose
+            # data endpoint is being deleted, which is correct: an edge cannot
+            # outlive the node it hangs off.
+            "INSTANCE_OF",
+            "FIT_BY",
+        }
+    ),
 )
 
 ALL_SCOPES = (DATA, KNOWLEDGE)

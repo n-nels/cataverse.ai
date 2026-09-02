@@ -31,6 +31,13 @@ IDENTITY: dict[str, tuple[str, str]] = {
     "ExpConditions": ("id", ""),
     "AdsParams": ("id", ""),
     "KineticChain": ("chain_id", "kc_"),
+    # Knowledge. Only ModelParameter carries an `id`; the rest are keyed on
+    # their natural name, which is what the YAML authors them by.
+    "ChemConcept": ("name", "cc_"),
+    "ChemSpecies": ("formula", "sp_"),
+    "PyFunction": ("name", "pf_"),
+    "KineticModel": ("name", "km_"),
+    "ModelParameter": ("id", ""),
 }
 
 
@@ -91,3 +98,23 @@ def adsparams_id(base_name: str, peak_name: str = "monomer_sum") -> str:
 
 def chain_id(chain_hash_value: str) -> str:
     return f"kc_{chain_hash_value}"
+
+
+def concept_id(name: str) -> str:
+    return f"cc_{name}"
+
+
+def species_id(formula: str) -> str:
+    return f"sp_{formula}"
+
+
+def py_function_id(name: str) -> str:
+    return f"pf_{name}"
+
+
+def kinetic_model_id(name: str) -> str:
+    return f"km_{name}"
+
+
+def model_parameter_id(model_name: str, name: str) -> str:
+    return f"mp_{model_name}_{name}"

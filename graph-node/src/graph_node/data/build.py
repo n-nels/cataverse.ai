@@ -17,27 +17,9 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from ..common import ids
+from ..common.model import Edge, IntendedGraph, Node
 from .drift import build_drift_edges, check_targets_are_references
 from .source import Experiment
-
-
-@dataclass(frozen=True)
-class Node:
-    id: str
-    label: str
-    properties: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class Edge:
-    type: str
-    start: str
-    end: str
-    properties: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def key(self) -> tuple[str, str, str]:
-        return (self.start, self.type, self.end)
 
 
 @dataclass
@@ -56,29 +38,6 @@ class Chain:
     @property
     def node_id(self) -> str:
         return ids.chain_id(self.chain_hash)
-
-
-@dataclass
-class IntendedGraph:
-    nodes: list[Node] = field(default_factory=list)
-    edges: list[Edge] = field(default_factory=list)
-    chains: list[Chain] = field(default_factory=list)
-    #: Non-fatal, but a human should see them.
-    warnings: list[str] = field(default_factory=list)
-    #: Fatal. The rebuild must not be written while any of these stand.
-    errors: list[str] = field(default_factory=list)
-
-    def nodes_by_label(self) -> dict[str, int]:
-        counts: dict[str, int] = {}
-        for node in self.nodes:
-            counts[node.label] = counts.get(node.label, 0) + 1
-        return counts
-
-    def edges_by_type(self) -> dict[str, int]:
-        counts: dict[str, int] = {}
-        for edge in self.edges:
-            counts[edge.type] = counts.get(edge.type, 0) + 1
-        return counts
 
 
 def build_chains(

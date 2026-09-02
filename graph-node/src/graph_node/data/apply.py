@@ -14,10 +14,10 @@ from dataclasses import dataclass, field
 
 from neo4j import Session
 
-from ..common.ownership import DATA
+from ..common.model import IntendedGraph
+from ..common.ownership import DATA, GraphScope
 from ..common.rebuild import SweepResult, new_run_id, sweep
 from ..common.writer import ensure_constraints, write_nodes, write_relationships
-from .build import IntendedGraph
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +55,11 @@ class ApplyResult:
 def apply(
     session: Session,
     intended: IntendedGraph,
+    scope: GraphScope = DATA,
     *,
     allow_mass_deletion: bool = False,
     run_id: str | None = None,
+    extra_node_labels: dict[str, str] | None = None,
 ) -> ApplyResult:
     """Write `intended` into the database and sweep the remainder.
 
@@ -75,7 +77,11 @@ def apply(
     result = ApplyResult(run_id=run_id or new_run_id())
     result.constraints = ensure_constraints(session)
 
-    node_labels = {node.id: node.label for node in intended.nodes}
+    # Knowledge edges (INSTANCE_OF, FIT_BY) start on *data* nodes, which are
+    # not in this graph's node list. Without their labels the writer cannot
+    # build the MATCH and would drop them as unknown endpoints.
+    node_labels = dict(extra_node_labels or {})
+    node_labels.update({node.id: node.label for node in intended.nodes})
     result.nodes_written = write_nodes(session, intended.nodes, result.run_id)
     result.relationships_written = write_relationships(
         session, intended.edges, node_labels, result.run_id
@@ -83,7 +89,7 @@ def apply(
 
     result.sweep = sweep(
         session,
-        DATA,
+        scope,
         result.run_id,
         allow_mass_deletion=allow_mass_deletion,
     )

@@ -70,10 +70,12 @@ def test_chain_hash_distinguishes_start_times():
     assert a != b
 
 
-def test_identity_map_covers_every_data_label():
-    from graph_node.common.ownership import DATA
+def test_identity_map_covers_every_label_in_every_scope():
+    """A label with no identity entry cannot be written or swept."""
+    from graph_node.common.ownership import ALL_SCOPES
 
-    assert set(ids.IDENTITY) == set(DATA.labels)
+    claimed = set().union(*(s.labels for s in ALL_SCOPES))
+    assert set(ids.IDENTITY) == claimed
 
 
 def test_filename_and_chain_are_not_keyed_on_id():
