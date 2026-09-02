@@ -1,12 +1,9 @@
 # graph-node — Project Spec
 
-Status: **in progress.** The data pipeline is complete end to end - read,
-build, plan, write, sweep - and has never been run against the live database.
-`knowledge/` is still empty. Kept current as work lands; this is the durable
+Status: **live.** The data pipeline runs end to end and has rebuilt the
+production graph twice (2026-09-02). `knowledge/` is still empty - the YAML
+loader has not been ported. Kept current as work lands; this is the durable
 record across sessions.
-
-**Before the first `--apply`**, read §5d. A rebuild run today would delete
-things, and the reasons are understood but need a decision.
 
 Related: `dashboard-node/spec.md` covers the website that reads this graph, and
 `agent-node/` the terminal agent that queries it. Neither is a dependency —
@@ -55,7 +52,7 @@ So: each loader declares the labels and relationship types it owns, and a test
 fails if it writes anything outside that set. Cheap, and it would have caught
 `DELTA_FROM` on the day it was written.
 
-## 3. Current state (as of 2026-08-29)
+## 3. Current state (as of 2026-09-02)
 
 Everything below already exists and works. The gap is narrower than it looks.
 
@@ -66,8 +63,8 @@ Everything below already exists and works. The gap is narrower than it looks.
 | JSON + CSV to graph artifacts | `original/scripts/load_graph.py` | **Done.** Emits `exports/nodes.csv`, `relationships.csv`, `graph.cypher`, `schema.arrows.json`. Dry run: 1840 nodes, 3422 edges, 6 chains, 0 review records. |
 | YAML to knowledge artifacts | `original/scripts/load_knowledge.py` | **Done.** Also emits DELTA_FROM / RELATIVE_TO, which belong to data (see §2). |
 | Deterministic node IDs | `load_graph.py` `_id_mat`, `_id_fn`, `_id_pre`, `_id_ec`, `_id_ap`, `_id_kc` | **Done.** These are already MERGE keys — idempotency is solved, not open. |
-| **Artifacts into Neo4j** | — | **Missing.** Done by hand through the Aura UI. This is the actual gap. |
-| **A trigger** | — | **Missing.** Nothing tells the loader an experiment finished. |
+| Artifacts into Neo4j | `common/writer.py`, `data/apply.py` | **Done 2026-09-02.** MERGE on the per-label identity property, stamp, then sweep. Replaced the manual Aura CSV import. |
+| **A trigger** | — | **Missing.** Nothing tells the loader an experiment finished; today it is run by hand. This is the remaining gap. |
 
 Source data root is `X:\peakFit\` (share drive), which is why this does not need
 to live in `orchestration/` — see §4.
@@ -221,14 +218,15 @@ still carry the old ones, mapping them as above.
 
 ## 5b. Data integrity — found during verification
 
-- **One hollow `:Pretreatment` node.** `pre_20250802_073857_pd_ceo2_003-001_1`
-  has an `id` and nothing else: no `step_index`, no `gas`, no `temp`. Steps 2–4
-  of that experiment are normal, and the `HAS_STEP` edge still carries
-  `order: 1`. It is the only Pretreatment in 1,107 missing `step_index`.
-  Unresolved: whether the source JSON has an empty step 1 or the original load
-  dropped it. The rebuild will settle it — if the source is good the node fills
-  in, if not it stays hollow and the source needs fixing. *Owner: Nick, once a
-  sample JSON is available.*
+- ~~**One hollow `:Pretreatment` node.**~~ **Resolved 2026-09-02 by the first
+  rebuild.** `pre_20250802_073857_pd_ceo2_003-001_1` had an `id` and nothing
+  else. The source turned out to hold a perfectly good step 1, so this was a
+  bug in the original load rather than bad data, and the rebuild filled the
+  node in. Kept here because it is the reason `source.load()` warns on a null
+  `step_index` instead of passing it through.
+- ~~**`is_reference` wrong on `20250313_093410_pd_ceo2_000-004`.**~~ **Resolved
+  2026-09-02.** Nick confirmed the source was right and the database wrong. The
+  rebuild corrected it, and the §11.2 invariant query now returns zero rows.
 
 ## 5c. Rules inherited from `original/` — audit
 
@@ -293,34 +291,43 @@ earlier in `dashboard-node/spec.md` as a probable mislabel and never resolved.
 It is now a checkable invariant rather than an observation, and the rebuild
 should assert it. *Owner: Nick — decide whether the flag or the edge is wrong.*
 
-## 5d. Before the first apply
+## 5d. First live rebuild — 2026-09-02
 
-The write path is built but has never been run. Two things to settle first.
+Ran twice. Both runs wrote every data node and deleted nothing.
 
-**A rebuild is only as complete as its source root.** The plan deletes whatever
-the sources do not account for, so `--source-root` must point at the whole of
-`X:\peakFit`, not a subset. Run without `--apply` and check the delete column
-first, every time. The sweep refuses to remove more than 20% of the data graph
-unless `--allow-mass-deletion` says so, which is the backstop for exactly this
-mistake - not a substitute for reading the plan.
+| | Before | After |
+|---|---|---|
+| Pretreatment | 1,107 | 1,297 |
+| Filename | 249 | 295 |
+| ExpConditions | 238 | 294 |
+| AdsParams | 238 | 283 |
+| KineticChain | 6 | 7 |
+| Material | 2 | 3 |
+| **Total data nodes** | 1,840 | **2,179** |
 
-**The first run will legitimately delete and recreate.** Expect it, and check
-it matches this list:
+Everything §5a and §5b predicted happened: `pressure_meas_g1`/`g2` gone and
+`mfld`/`cell` in their place, the hollow Pretreatment filled in, `is_reference`
+corrected, four months of missing experiments loaded, the third material
+appearing, and six uniqueness constraints created. Knowledge nodes were
+untouched — 35 before, 35 after — so the ownership boundary held under a real
+write.
 
-| Change | Why |
-|---|---|
-| `pressure_meas_g1` / `g2` disappear, `pressure_meas_mfld` / `cell` appear | The rename (§5a). Nodes are written with `SET n = props`, so properties the source no longer produces are dropped rather than left behind. |
-| One hollow `:Pretreatment` disappears | `pre_20250802_073857_pd_ceo2_003-001_1`, id and nothing else. Skipped at source now, so the sweep removes it - unless the source really does have an empty step 1, which the run will reveal. |
-| `is_reference` flips to true on `20250313_093410_pd_ceo2_000-004` | Confirmed wrong in the database and right in source, 2026-08-30. Also fixes the two `DELTA_FROM` edges that violate the §11.2 invariant. |
-| Experiments after 2026-05-05 appear, plus `mat_pd_0p06645_ceo2_54` | The graph is months stale; the third sample has never been loaded. |
-| Six uniqueness constraints appear | `constraints.cypher` from the original §8, specified and never built. Verified 2026-08-30: no constraints exist and no duplicate identity values, so creating them succeeds. |
+**The second run existed because the first had a bug**, and that is the part
+worth remembering. `_as_float` coerced `step_index` to `1.0`, leaving it
+disagreeing with the `order` property on its own `HAS_STEP` edge and making the
+dashboard render "step 1.0". Nothing broke functionally; Cypher compares across
+numeric types. The fix was a one-line change in `source.py` plus a re-run — the
+database was never edited by hand. That is the whole argument for rebuild over
+append, exercised for real on the first day.
 
-Pre-flight, all read-only, all verified 2026-08-30:
+### Standing procedure
 
-- Every writer query plans cleanly against Aura under `EXPLAIN` (14 queries).
-- No duplicate identity values on any label, so the constraints will take.
-- The drift algorithm reproduces 223/223 stored `DELTA_FROM` edges across 249
-  experiments and 6 chains.
+1. Dry run first, every time. Read the delete column.
+2. `--source-root` must cover the whole of `X:\peakFit`. A subset means the
+   sweep deletes everything the subset does not account for. The 20% guard is a
+   backstop for that mistake, not a substitute for reading the plan.
+3. Verify after. The single most useful check is that `_run` has exactly one
+   distinct value covering every data node - two values means a partial write.
 
 ## 6. Decisions made
 
