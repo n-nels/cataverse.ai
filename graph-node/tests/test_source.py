@@ -133,3 +133,30 @@ def test_discover_finds_files_and_sorts_them(tmp_path):
 
     found = source.discover(tmp_path)
     assert [p.name for p in found] == [f"a{source.SUFFIX}", f"b{source.SUFFIX}"]
+
+
+def test_step_index_stays_an_integer(experiment):
+    """It counts steps; there is no step 1.5.
+
+    The first live rebuild floated it, which left step_index as 1.0 while the
+    redundant `order` on the HAS_STEP edge stayed an integer, and made the
+    dashboard render "step 1.0" - its label code interpolates without rounding.
+    """
+    for step in experiment.pretreatments:
+        assert isinstance(step["step_index"], int), type(step["step_index"])
+        assert not isinstance(step["step_index"], bool)
+
+
+def test_step_index_survives_a_float_in_the_source(tmp_path):
+    raw = json.loads(NEW.read_text())
+    raw["pretreatments"][0]["step_index"] = 1.0
+    path = tmp_path / "x_expParams.json"
+    path.write_text(json.dumps(raw))
+    assert source.load(path).pretreatments[0]["step_index"] == 1
+
+
+def test_measurements_are_still_floated(experiment):
+    """Only ordinals are integers; temperatures and rates stay floats."""
+    step = experiment.pretreatments[0]
+    assert isinstance(step["temp"], float)
+    assert isinstance(step["rate"], float)

@@ -32,6 +32,15 @@ REQUIRED_TOP_LEVEL = ("base_name", "datetime", "material", "filename_flags")
 #: then delete the originals. Normalisation stops at this boundary.
 MATERIAL_IDENTITY_FIELDS = frozenset({"metal", "metal_loading", "support", "support_sa"})
 
+#: Ordinals, not measurements. Coerced to int rather than float.
+#:
+#: `step_index` counts steps; there is no such thing as step 1.5. Floating it
+#: made the graph store `step_index: 1.0` while the redundant `order` property
+#: on the HAS_STEP edge stayed an integer, and made the dashboard render
+#: "step 1.0" - its label code interpolates the value without rounding.
+#: Caught after the first live rebuild on 2026-09-02.
+INTEGER_FIELDS = frozenset({"step_index"})
+
 
 class SourceError(Exception):
     """A source file could not be read as an experiment."""
@@ -63,11 +72,26 @@ def _as_float(value: Any) -> Any:
     return value
 
 
-def _clean_block(block: dict[str, Any], *, preserve: frozenset[str] = frozenset()) -> dict[str, Any]:
-    return {
-        k: v if k in preserve else _as_float(v)
-        for k, v in block.items()
-    }
+def _as_int(value: Any) -> Any:
+    """Coerce a number to int, leaving non-numbers and booleans alone."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, (int, float)):
+        return int(value)
+    return value
+
+
+def _clean_block(
+    block: dict[str, Any], *, preserve: frozenset[str] = frozenset()
+) -> dict[str, Any]:
+    def clean(key: str, value: Any) -> Any:
+        if key in preserve:
+            return value
+        if key in INTEGER_FIELDS:
+            return _as_int(value)
+        return _as_float(value)
+
+    return {k: clean(k, v) for k, v in block.items()}
 
 
 @dataclass(frozen=True)
