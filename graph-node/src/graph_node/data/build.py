@@ -4,7 +4,7 @@ Pure functions: nothing here touches the database. That is what makes the dry
 run possible - the intended graph is computed in full, then compared against
 what is actually stored.
 
-Ported from `original/scripts/load_graph.py`, with one behavioural change. The
+Ported from the original `load_graph.py`, with one behavioural change. The
 original calls `sys.exit()` on a null `is_new` or a mass mismatch, which is
 right for a script a human runs and watches. Here those become collected
 errors, so a rebuild can report everything wrong in one pass instead of one

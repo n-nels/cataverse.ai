@@ -54,17 +54,19 @@ fails if it writes anything outside that set. Cheap, and it would have caught
 
 ## 3. Current state (as of 2026-09-02)
 
-Everything below already exists and works. The gap is narrower than it looks.
+The pipeline is complete except for its trigger.
 
 | Piece | Where | State |
 |---|---|---|
-| Per-experiment JSON (`material`, `filename_flags`, `pretreatments`, `exp_conditions`) | `orchestration/src/experiments/session.py` | **Done.** `build_exp_params_payload()` assembles it; `_persist_exp_params_json()` writes it beside the experiment. Maps 1:1 onto the graph's node labels. |
-| Fit results CSV (`*_CarbonylPeakArea.csv`) | `ir-spectro-node`, analysis + file I/O | **Done.** Source of every AdsParams property. |
-| JSON + CSV to graph artifacts | `original/scripts/load_graph.py` | **Done.** Emits `exports/nodes.csv`, `relationships.csv`, `graph.cypher`, `schema.arrows.json`. Dry run: 1840 nodes, 3422 edges, 6 chains, 0 review records. |
-| YAML to knowledge artifacts | `original/scripts/load_knowledge.py` | **Done.** Also emits DELTA_FROM / RELATIVE_TO, which belong to data (see §2). |
-| Deterministic node IDs | `load_graph.py` `_id_mat`, `_id_fn`, `_id_pre`, `_id_ec`, `_id_ap`, `_id_kc` | **Done.** These are already MERGE keys — idempotency is solved, not open. |
-| Artifacts into Neo4j | `common/writer.py`, `data/apply.py` | **Done 2026-09-02.** MERGE on the per-label identity property, stamp, then sweep. Replaced the manual Aura CSV import. |
-| **A trigger** | — | **Missing.** Nothing tells the loader an experiment finished; today it is run by hand. This is the remaining gap. |
+| Per-experiment JSON (`material`, `filename_flags`, `pretreatments`, `exp_conditions`) | `orchestration/src/experiments/session.py` | **Done**, and unchanged by this work. `build_exp_params_payload()` assembles it; `_persist_exp_params_json()` writes it beside the experiment. It is the schema of record — see §5a. |
+| Fit results CSV (`*_CarbonylPeakArea.csv`) | `ir-spectro-node`, analysis + file I/O | **Done**, unchanged. Source of every AdsParams property. |
+| Reading both | `data/source.py`, `data/fits.py` | **Done.** Tested against real files from both ends of the dataset. |
+| Assembling the data graph | `data/build.py`, `data/drift.py` | **Done.** Nodes, edges, kinetic chains, and the §11 reference-drift layer. |
+| Assembling the knowledge graph | `knowledge/source.py`, `knowledge/build.py` | **Done 2026-09-02.** Vocabulary from YAML plus the attachment to data — see §5e. |
+| Deterministic node ids | `common/ids.py` | **Done.** Carried over unchanged from the original pipeline, so a rebuild matches the nodes already stored rather than duplicating them. |
+| Dry run | `data/plan.py` | **Done.** Diffs the intended graph against the database, per scope, writing nothing. |
+| Writing to Neo4j | `common/writer.py`, `data/apply.py` | **Done 2026-09-02.** MERGE on the per-label identity property, stamp, then sweep. Replaced the manual Aura CSV import. |
+| **A trigger** | — | **Missing.** Nothing tells the loader an experiment finished; a rebuild is started by hand. This is the only remaining gap. |
 
 Source data root is `X:\peakFit\` (share drive), which is why this does not need
 to live in `orchestration/` — see §4.
@@ -228,12 +230,16 @@ still carry the old ones, mapping them as above.
   2026-09-02.** Nick confirmed the source was right and the database wrong. The
   rebuild corrected it, and the §11.2 invariant query now returns zero rows.
 
-## 5c. Rules inherited from `original/` — audit
+## 5c. Rules inherited from the original pipeline — audit
 
-`original/` was developed in detail and encodes real decisions. It also encodes
-some scaffolding that has since been overtaken. Audited 2026-08-29, every rule
-in both instruction files classified. `original/` can be deleted once the
-**not yet built** column is empty.
+The original pipeline was developed in detail and encodes real decisions. It
+also encodes scaffolding that has since been overtaken. Audited 2026-08-29,
+every rule in both instruction files classified.
+
+**The ported scripts and YAML copies were deleted on 2026-09-02**, once every
+rule had been either built or consciously dropped. The two instruction
+documents remain in `original/` as the historical record — they are the only
+place the original reasoning exists in full.
 
 **Keep — still true, already built**
 
@@ -255,11 +261,8 @@ in both instruction files classified. `original/` can be deleted once the
 | Exclude source subfolders whose name contains `_test` | `data/source.py` |
 | Exclude experiments whose base name contains `iso` (isotopic exchange) | `data/source.py` |
 
-**Keep — still true, not yet built**
-
-| Rule | Note |
-|---|---|
-*(empty — everything still applicable is built.)*
+**Keep — still true, not yet built:** none. Every applicable rule is built,
+which is what allowed the ported scripts to be deleted.
 
 **Adapt — the intent holds, the mechanism changed**
 
@@ -349,7 +352,7 @@ append, exercised for real on the first day.
 
 ## 5e. Knowledge graph port — 2026-09-02
 
-Ported from `original/scripts/load_knowledge.py` into `knowledge/`, and the
+Ported from the original `load_knowledge.py` into `knowledge/`, and the
 hand-authored YAML moved to `graph-node/knowledge/` where it belongs - it is
 repo content, edited by hand, not instrument output.
 
@@ -415,25 +418,25 @@ per ExpConditions node - reads as a gap and is not one.
 
 ## 7. Open questions
 
-1. ~~Rebuild semantics.~~ **Decided 2026-08-29: (c) mark and sweep.** Built.
-2. **A sample experiment JSON is needed.** The loader reads
-   `<base>_expParams.json` off `X:\`, and no example has been transferred — the
-   shape is known from `session.py` but has never been checked against a real
-   file. One current experiment plus one historical (pre-`session.py`, to
-   confirm it carries the old `pressure_meas_g1` spelling) would settle it, and
-   would also resolve the hollow-node question in §5b. *Owner: Nick.*
-3. ~~Does per-run hashing change the answer to #1?~~ **Answered 2026-08-29:** no,
-   it is orthogonal — see §5. Hashing stays on the list as a later `verify`
-   capability, computed in `graph-node` rather than `orchestration/`.
-4. **The "done" signal.** End of `session.py`? A watcher on the share drive? A
+Answered questions have been removed; the decisions they produced live in §5
+and §6.
+
+1. **The "done" signal.** End of `session.py`? A watcher on the share drive? A
    scheduled sweep? Three days per experiment makes latency a non-issue, which
-   argues for whatever is simplest to reason about.
-5. **What happens when Aura is paused.** Free tier auto-pauses. The experiment
-   must never fail because the database is asleep.
-6. **Where this runs.** Any machine with `X:\` mounted — but which one, and
-   started by what?
-7. **AdsParams timing.** Fit results come from post-processing, not the run
-   itself. Does the graph update once, when fits are ready, or twice?
+   argues for whatever is simplest to reason about. Touches `orchestration/`,
+   which is why it is last.
+2. **Where this runs, and started by what.** Any machine with `X:\` mounted.
+   Note that `.env` is gitignored, so a fresh clone or a scheduled job needs
+   one; `.env.example` lists the four variables.
+3. **What happens when Aura is paused.** The free tier auto-pauses. An
+   experiment must never fail because the database is asleep — which argues for
+   the trigger enqueueing work rather than performing it inline.
+4. **AdsParams timing.** Fits are produced by post-processing, after the run.
+   Does a rebuild happen once when fits are ready, or twice?
+5. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
+   worth having: storing a source hash on each node would let "is the graph
+   consistent with its sources?" be answered without rebuilding. Computed in
+   `graph-node`, not `orchestration/`, which cannot see the fit CSVs.
 
 ## 8. Non-goals for now
 
