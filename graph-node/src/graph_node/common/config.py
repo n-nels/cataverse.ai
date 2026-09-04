@@ -24,6 +24,12 @@ class Settings:
     #: `<base>_expParams.json` plus an optional `<base>_CarbonylPeakArea.csv`
     #: somewhere beneath this.
     source_root: Path
+    #: Where the raw files go. None when S3 is not configured on this machine -
+    #: a rebuild still works, it just does not upload. Credentials are read by
+    #: boto3 from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY directly, so they
+    #: are deliberately not held here or passed around.
+    s3_bucket: str | None
+    aws_region: str
 
     @classmethod
     def from_env(cls, env_file: str | Path | None = None) -> "Settings":
@@ -45,4 +51,6 @@ class Settings:
             # Aura's default database name. Only differs on self-hosted.
             database=os.environ.get("NEO4J_DATABASE", "neo4j"),
             source_root=Path(os.environ.get("SOURCE_ROOT", r"X:\peakFit")),
+            s3_bucket=os.environ.get("S3_BUCKET") or None,
+            aws_region=os.environ.get("AWS_REGION", "us-east-2"),
         )
