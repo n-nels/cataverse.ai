@@ -30,6 +30,10 @@ class Settings:
     #: are deliberately not held here or passed around.
     s3_bucket: str | None
     aws_region: str
+    #: Drive or directory holding peakFit, OpusConvert_lgRfl, OpusReadParams and
+    #: pressureData. The backup mirrors everything beneath it. Distinct from
+    #: `source_root`, which points at peakFit alone for the graph rebuild.
+    share_root: Path | None
 
     @classmethod
     def from_env(cls, env_file: str | Path | None = None) -> "Settings":
@@ -53,4 +57,7 @@ class Settings:
             source_root=Path(os.environ.get("SOURCE_ROOT", r"X:\peakFit")),
             s3_bucket=os.environ.get("S3_BUCKET") or None,
             aws_region=os.environ.get("AWS_REGION", "us-east-2"),
+            share_root=Path(os.environ["SHARE_ROOT"])
+            if os.environ.get("SHARE_ROOT")
+            else None,
         )
