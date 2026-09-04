@@ -465,27 +465,33 @@ they are AWS-native. At ~7 GB the cost is around $0.20/month.
 
 ### What the sources actually look like
 
-Verified on the share, 2026-09-02:
+Verified on the share, 2026-09-02. Counts exclude the `_test` folder.
 
 ```
-peakFit/<notebook folder>/
-    <base>_expParams.json              -> already in the graph
-    <base>_CarbonylPeakArea.csv        284 files, 92 MB, avg 332 KB
+X:\peakFit\<notebook folder>\
+    <base>_expParams.json              already in the graph, not uploaded
+    <base>_CarbonylPeakArea.csv        284    avg 332 KB, 92 MB total
     <base>_CarbonylPeakFitParams.csv   285
     <base>_CarbonylFitResidual.csv     284
     <base>_CarbonylFitBaseline.csv     284
-    <base>_PeakHeight.csv              860
     <base>_Params.csv                  240
-    <base>_PeakHeight_binned.csv        35
     <base>_pressureLog.csv
-    <base>_README.md                   259
 
-<opus root>/OpusConvert_lgRfl/
+X:\OpusConvert_lgRfl\
     <base>.0000 .. <base>.0129         two-column text, 1660 points, ~44 KB each
-<opus root>/OpusReadParams/
+                                       89-180 per experiment, ~7 GB in total
+X:\OpusReadParams\
     <base>.txt                         one line per spectrum: path, date, time, ...
-    <base>_subIFGfiles.txt             which pairs form each delta
 ```
+
+**Out of scope**, decided 2026-09-02:
+
+| Excluded | Why |
+|---|---|
+| `*_PeakHeight.csv` (860), `*_PeakHeight_binned.csv` (35) | Inputs to a forecasting ML model, not experiment results. Three per experiment, which is why the count does not match the others. |
+| `<base>_README.md` (259) | Working notes. |
+| `<base>_subIFGfiles.txt` | Working notes — which spectra pair into each delta. |
+| `<base>_expParams.json` | Already loaded into the graph as nodes; no value as a blob. |
 
 The spectra are **plain text**, not OPUS binary — `3997.75357884,-0.00052956`.
 A browser can parse and plot them directly, so no conversion layer is needed.
@@ -522,26 +528,99 @@ Prefix by source root, then `base_name`, then the source filename verbatim.
 each spectrum's timestamp, parsed from `OpusReadParams/<base>.txt`. The dashboard
 fetches it first, to know what exists before requesting any spectra.
 
-### Graph additions
+### Graph additions — the schema
 
-Pointers only. Two new labels, both in the DATA scope:
+Pointers and descriptions. No file contents enter the graph.
+
+Two levels. Level 1 is the minimum that works and is needed regardless. Level 2
+is what makes the agent able to answer a question rather than hand back a list
+of files; it can follow later without changing Level 1.
+
+#### Level 1 — where the files are (data scope)
 
 ```
-(:RawFile {key, kind, base_name, bytes, source_mtime, content_type, uploaded_at})
-(:SpectrumSeries {base_name, prefix, index_key, count, first_at, last_at})
+(:Filename {base_name})
+    -[:HAS_RAW_FILE]-->  (:RawFile)
+                             key            S3 object key, the identity property
+                             kind           "CarbonylPeakArea" | "CarbonylFitResidual"
+                                            | "CarbonylPeakFitParams"
+                                            | "CarbonylFitBaseline" | "Params"
+                                            | "pressureLog"
+                             base_name      the experiment it belongs to
+                             bytes          file size, for the skip check
+                             source_mtime   last-modified on the share, for the skip check
+                             content_type   "text/csv"
+                             uploaded_at    when this run put it there
 
-(Filename)-[:HAS_RAW_FILE]->(RawFile)
-(Filename)-[:HAS_SPECTRA]->(SpectrumSeries)
+    -[:HAS_SPECTRA]-->   (:SpectrumSeries)
+                             base_name      identity property
+                             prefix         "spectra/<base_name>/"
+                             index_key      "spectra/<base_name>/index.json"
+                             count          number of spectra
+                             first_at       timestamp of the first spectrum
+                             last_at        timestamp of the last
+                             bytes          total across the series
 ```
 
-One `RawFile` per derived file — roughly 2,300 nodes. One `SpectrumSeries` per
-experiment rather than one node per spectrum: at 130 spectra × ~300 experiments
-that would be 39,000 nodes for no benefit, since nothing queries an individual
-spectrum on its own. About 2,600 new nodes in total, against Aura Free's 200,000
-limit and the 2,214 in use today.
+Roughly 1,400 `RawFile` nodes (five CSV kinds plus pressure logs across ~285
+experiments) and ~300 `SpectrumSeries`, so about 1,700 new nodes. Aura Free
+allows 200,000 and 2,214 are in use.
 
-`kind` is what makes the agent able to answer at all — it can see that a
-`CarbonylFitResidual` exists for an experiment without guessing filenames.
+**One node per spectrum *series*, not per spectrum.** 130 spectra x ~300
+experiments would be 39,000 nodes to describe files nothing queries
+individually — a spectrum is only ever fetched as part of a series. The series
+node points at the prefix; `index.json` in S3 carries the per-file detail.
+
+`kind` is doing real work here: it is what lets a query ask "which experiments
+have a residual file" without opening anything.
+
+#### Level 2 — what is inside the files (knowledge scope)
+
+```
+(:RawFile)-[:OF_TYPE]-->(:DataFileType)
+                            name         "CarbonylPeakArea"
+                            description  "Fitted uptake per peak, refit at each
+                                          time point as data accumulates"
+                            row_grain    "one row per (peak, time point)"
+
+(:DataFileType)-[:HAS_COLUMN]-->(:DataColumn)
+                                    name    "pfo-sec_k_a_s-1"
+                                    units   "s^-1"
+                                    role    "fitted" | "measured" | "index" | "provenance"
+
+(:DataColumn)-[:MEASURES]-->(:ModelParameter)      already exists, carries definitions
+```
+
+Six `DataFileType` nodes and perhaps sixty `DataColumn` nodes — they describe
+*formats*, so they do not multiply with experiments.
+
+This is what turns "plot the adsorption rate constant over time" into a named
+column in a named file. `ModelParameter` already holds the definition of `k_a`,
+so `MEASURES` connects the column a plot needs to the concept a question uses.
+Without it the agent is pattern-matching on column names.
+
+**Where each lives.** `RawFile` and `SpectrumSeries` are **data** — derived from
+what is on the share. `DataFileType` and `DataColumn` are **knowledge** —
+hand-authored units and meanings, sourced from a YAML file alongside
+`concepts.yaml`. That follows §2's provenance rule, and `OF_TYPE` crosses the
+boundary exactly as `INSTANCE_OF` already does, so the knowledge loader owns it.
+
+This is also the first real piece of the "context graph" (§2): the join between
+measured data and authored meaning.
+
+#### Identity and ownership
+
+| Label | Identity property | Scope |
+|---|---|---|
+| `RawFile` | `key` (the S3 object key — globally unique and stable) | DATA |
+| `SpectrumSeries` | `base_name` | DATA |
+| `DataFileType` | `name` | KNOWLEDGE |
+| `DataColumn` | `id` (`<file type>.<column name>`, since column names repeat across types) | KNOWLEDGE |
+
+New relationship types: `HAS_RAW_FILE` and `HAS_SPECTRA` in DATA; `OF_TYPE` and
+`HAS_COLUMN` and `MEASURES` in KNOWLEDGE. Both scopes' declarations in
+`common/ownership.py` need updating, and `ids.IDENTITY` gains four labels — the
+existing coverage test fails until they do, which is the intended behaviour.
 
 ### Knowing what is already uploaded
 
@@ -601,12 +680,11 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ### Open
 
-- Whether the `README.md` files and `subIFGfiles.txt` are data worth uploading,
-  or working notes that are not.
-- `PeakHeight.csv` has 860 files against 284 for the other kinds — roughly three
-  per experiment, suggesting a naming variant this design has not accounted for.
-- Where the Opus roots live on the share. They were inspected from a flash-drive
-  copy; their path under `X:\` is not yet known.
+- Whether `pressureLog.csv` deserves its own `DataFileType`, or whether pressure
+  is better read from the `Pretreatment` and `ExpConditions` nodes that already
+  carry it. The log has the full trace; the nodes have the setpoints.
+- Whether Level 2 is authored now, while the file formats are fresh, or when
+  the agent work starts. Level 1 does not depend on it.
 
 ## 6. Decisions made
 
