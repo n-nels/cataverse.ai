@@ -131,3 +131,30 @@ def test_spectra_get_a_readable_content_type():
     assert content_type_for(Path("a.csv")) == "text/csv"
     assert content_type_for(Path("a.json")) == "application/json"
     assert content_type_for(Path("a.txt")) == "text/plain"
+
+
+def test_excluded_files_are_attributed_to_a_directory(tmp_path):
+    """A bare count is not enough when exclusions outnumber uploads.
+
+    On the real share 36,742 files were skipped against 33,782 uploaded, and
+    the report gave no way to see which directories accounted for it.
+    """
+    share = make_share(tmp_path)
+    archive = share / "OpusConvert_lgRfl" / "archive"
+    archive.mkdir(parents=True)
+    (archive / "old.0000").write_text("a")
+    (archive / "older.0001").write_text("b")
+
+    plan = backup.build_plan(share, {})
+    assert plan.excluded == 3
+    assert plan.excluded_by_directory == {
+        "peakFit/.../_test": 1,
+        "OpusConvert_lgRfl/.../archive": 2,
+    }
+
+
+def test_the_report_names_the_excluded_directories(tmp_path):
+    plan = backup.build_plan(make_share(tmp_path), {})
+    text = backup.render(plan, tmp_path, "some-bucket")
+    assert "excluded, by the directory that matched" in text
+    assert "_test" in text
