@@ -1,8 +1,9 @@
 # graph-node — Project Spec
 
 Status: **live.** Both halves of the pipeline - data and knowledge - rebuild
-the production graph from source in one pass, verified 2026-09-02. The
-remaining gap is the trigger: a rebuild is still started by hand. Kept current
+the production graph from source in one pass, verified 2026-09-02. Running it
+on a schedule is designed and documented (§5f) but not yet deployed: the lab
+machine cannot reach Aura until its firewall allows outbound 7687. Kept current
 as work lands; this is the durable record across sessions.
 
 Related: `dashboard-node/spec.md` covers the website that reads this graph, and
@@ -66,7 +67,7 @@ The pipeline is complete except for its trigger.
 | Deterministic node ids | `common/ids.py` | **Done.** Carried over unchanged from the original pipeline, so a rebuild matches the nodes already stored rather than duplicating them. |
 | Dry run | `data/plan.py` | **Done.** Diffs the intended graph against the database, per scope, writing nothing. |
 | Writing to Neo4j | `common/writer.py`, `data/apply.py` | **Done 2026-09-02.** MERGE on the per-label identity property, stamp, then sweep. Replaced the manual Aura CSV import. |
-| **A trigger** | — | **Missing.** Nothing tells the loader an experiment finished; a rebuild is started by hand. This is the only remaining gap. |
+| Running it unattended | Windows Task Scheduler, `scripts/rebuild.ps1` | **Designed, not deployed.** No trigger and no change to `orchestration/` — see §5f. Blocked on the lab network allowing outbound 7687. |
 
 Source data root is `X:\peakFit\` (share drive), which is why this does not need
 to live in `orchestration/` — see §4.
@@ -84,17 +85,17 @@ means a format change and the loader that consumes it land in one commit.
 Not inside `orchestration/`: `orchestration/` runs on the lab PC beside the
 hardware. Putting Neo4j credentials and network egress there buys nothing, and it
 would make `orchestration/` implicitly depend on `ir-spectro-node`'s CSV format.
-Because the source data is on `X:\`, this package can run from any machine with
-that drive mounted. `orchestration/`'s only new responsibility is to signal that
-an experiment finished.
+Because the source data is on `X:\`, this package runs on any machine with that
+drive mounted *and* outbound access to Aura (§5f). `orchestration/` gains no new
+responsibility at all — it already writes everything the rebuild needs.
 
 ```
 experiment ends
   -> orchestration writes <base>_expParams.json        (exists)
   -> ir-spectro writes <base>_CarbonylPeakArea.csv     (exists)
-  -> orchestration signals "done"                      (new, small)
-       |
-  graph-node: read JSON + CSV -> write to Aura         (new)
+
+every six hours, independently
+  -> graph-node: read the share drive, rebuild, write to Aura
 ```
 
 ## 5. Rebuild with mark and sweep — DECIDED (2026-08-29)
@@ -396,6 +397,295 @@ no measurement to call an `adsorption_measurement`.
 Real coverage is 283/283. Worth writing down because the naive check - concepts
 per ExpConditions node - reads as a gap and is not one.
 
+## 5f. The trigger — a scheduled rebuild, and no change to `orchestration/`
+
+Decided 2026-09-02. Written up for the machine it runs on in
+[SCHEDULING.md](SCHEDULING.md).
+
+**There is no trigger.** A rebuild reads the share drive and works out what
+changed by comparing; it does not need telling that an experiment finished. So
+Windows Task Scheduler runs it every six hours and `orchestration/` is
+untouched. The lab PC's experiment code keeps knowing nothing about Neo4j, and
+no database problem can reach a running experiment.
+
+Nick's instinct was to trigger from `finalize()` in `orchestration/adsorption.py`
+— which is where the `_expParams.json` is copied to the share drive, so it is
+the right place if a signal were needed. The reason not to: the last spectrum
+fit can take up to six minutes after the run ends, so a trigger there has to be
+coordinated with a queue it cannot see. Under a rebuild it does not matter. A
+run that happens mid-fit loads the experiment without its AdsParams and the
+next run adds it — running early is self-correcting, which is the same property
+that made rebuild-over-append worth choosing in §5.
+
+### Network requirements, learned the hard way
+
+The first attempt on the lab PC failed three times, each further along:
+
+| Symptom | Cause |
+|---|---|
+| `Timed out ... 7687` | Outbound 7687 blocked by the lab firewall |
+| `certificate verify failed: self-signed certificate in chain` on :443 | The network terminates and re-signs TLS. Windows trusts the appliance's authority; Python ships its own CA bundle and does not |
+| `Cannot connect to Bolt service ... (looks like HTTP)` on :443 | **Aura does not serve Bolt on 443.** 443 is the browser console and Query API; Bolt is 7687 only |
+
+Two lasting consequences:
+
+- `common/tls.py` verifies TLS against the OS trust store, so a machine behind
+  an inspecting proxy still connects. Deliberately not `neo4j+ssc://`, which
+  accepts *any* certificate and would defeat the point of verifying.
+- **Outbound TCP 7687 is a hard requirement.** There is no alternative port, so
+  the host must be a machine with both share-drive access and that egress. As
+  of 2026-09-02 the lab PC has the first and not the second.
+
+## 5g. Raw data on S3 — design (2026-09-02, not built)
+
+### The decision
+
+**Bulk data goes to AWS S3. The graph holds pointers, never payloads.**
+
+The requirement is that a user can plot anything they choose, with the agent
+turning a question into the right data. That rules out curating a subset: every
+column has to be reachable. The volumes then make the store obvious:
+
+| Data | Size | Where |
+|---|---|---|
+| Derived CSVs (seven kinds per experiment, plus pressure logs) | ~92 MB for the peak areas alone; more across all kinds | S3 |
+| Raw spectra (`.dpt`, 89–180 per experiment) | **~7 GB** | S3 |
+| Pointers and metadata | kilobytes | Graph |
+
+An earlier plan also put a plottable time series in the graph. Dropped: it would
+mean the same numbers in two representations, and it does not scale to the
+spectra, which were never going in the graph. One store for bulk data, one for
+structure. The cost is an S3 round trip per plot — a few hundred milliseconds —
+which is a fair trade for not maintaining two truths.
+
+AWS specifically, rather than the cheaper Cloudflare R2, because Nick wants
+cloud experience that transfers. R2 is S3-compatible so the code would be nearly
+identical, but IAM, policies and presigned URLs are the skills worth having and
+they are AWS-native. At ~7 GB the cost is around $0.20/month.
+
+### What the sources actually look like
+
+Verified on the share, 2026-09-02. Counts exclude the `_test` folder.
+
+```
+X:\peakFit\<notebook folder>\
+    <base>_expParams.json              already in the graph, not uploaded
+    <base>_CarbonylPeakArea.csv        284    avg 332 KB, 92 MB total
+    <base>_CarbonylPeakFitParams.csv   285
+    <base>_CarbonylFitResidual.csv     284
+    <base>_CarbonylFitBaseline.csv     284
+    <base>_Params.csv                  240
+    <base>_pressureLog.csv
+
+X:\OpusConvert_lgRfl\
+    <base>.0000 .. <base>.0129         two-column text, 1660 points, ~44 KB each
+                                       89-180 per experiment, ~7 GB in total
+X:\OpusReadParams\
+    <base>.txt                         one line per spectrum: path, date, time, ...
+```
+
+**Out of scope**, decided 2026-09-02:
+
+| Excluded | Why |
+|---|---|
+| `*_PeakHeight.csv` (860), `*_PeakHeight_binned.csv` (35) | Inputs to a forecasting ML model, not experiment results. Three per experiment, which is why the count does not match the others. |
+| `<base>_README.md` (259) | Working notes. |
+| `<base>_subIFGfiles.txt` | Working notes — which spectra pair into each delta. |
+| `<base>_expParams.json` | Already loaded into the graph as nodes; no value as a blob. |
+
+The spectra are **plain text**, not OPUS binary — `3997.75357884,-0.00052956`.
+A browser can parse and plot them directly, so no conversion layer is needed.
+
+A finding worth recording: the fit-parameter columns in the peak-area CSV
+**vary per row** — `pfo-sec_k_a` has 83 distinct values across 147 rows. Each
+row is the fit as of that time point, so the file carries the fit converging,
+not a repeated final answer. `AdsParams` in the graph holds only the final row.
+That is why the whole file is worth keeping rather than a reduction of it.
+
+### Object key layout
+
+```
+peakfit/<base_name>/<original filename>
+spectra/<base_name>/<original filename>
+spectra/<base_name>/index.json          (generated, see below)
+```
+
+Prefix by source root, then `base_name`, then the source filename verbatim.
+
+- `base_name` is already the `Filename` identity key, so it is unique and
+  stable, and it sorts chronologically for browsing.
+- The **notebook folder is deliberately not in the key.** It is derivable from
+  the graph, and if a file were ever reorganised into a different folder the key
+  would change — producing both a re-upload and an orphan.
+- **Filenames are kept verbatim** rather than normalised to `PeakArea.csv`. No
+  mapping can then be wrong, and a downloaded file is self-describing. The
+  `base_name` repeating inside the prefix costs nothing.
+- The spectra have numeric extensions (`.0000`) and no MIME type, so
+  `Content-Type: text/plain` is set explicitly on upload; otherwise a browser
+  downloads them instead of reading them.
+
+`index.json` is the one generated artifact: the file list for an experiment with
+each spectrum's timestamp, parsed from `OpusReadParams/<base>.txt`. The dashboard
+fetches it first, to know what exists before requesting any spectra.
+
+### Graph additions — the schema
+
+Pointers and descriptions. No file contents enter the graph.
+
+Two levels. Level 1 is the minimum that works and is needed regardless. Level 2
+is what makes the agent able to answer a question rather than hand back a list
+of files; it can follow later without changing Level 1.
+
+#### Level 1 — where the files are (data scope)
+
+```
+(:Filename {base_name})
+    -[:HAS_RAW_FILE]-->  (:RawFile)
+                             key            S3 object key, the identity property
+                             kind           "CarbonylPeakArea" | "CarbonylFitResidual"
+                                            | "CarbonylPeakFitParams"
+                                            | "CarbonylFitBaseline" | "Params"
+                                            | "pressureLog"
+                             base_name      the experiment it belongs to
+                             bytes          file size, for the skip check
+                             source_mtime   last-modified on the share, for the skip check
+                             content_type   "text/csv"
+                             uploaded_at    when this run put it there
+
+    -[:HAS_SPECTRA]-->   (:SpectrumSeries)
+                             base_name      identity property
+                             prefix         "spectra/<base_name>/"
+                             index_key      "spectra/<base_name>/index.json"
+                             count          number of spectra
+                             first_at       timestamp of the first spectrum
+                             last_at        timestamp of the last
+                             bytes          total across the series
+```
+
+Roughly 1,400 `RawFile` nodes (five CSV kinds plus pressure logs across ~285
+experiments) and ~300 `SpectrumSeries`, so about 1,700 new nodes. Aura Free
+allows 200,000 and 2,214 are in use.
+
+**One node per spectrum *series*, not per spectrum.** 130 spectra x ~300
+experiments would be 39,000 nodes to describe files nothing queries
+individually — a spectrum is only ever fetched as part of a series. The series
+node points at the prefix; `index.json` in S3 carries the per-file detail.
+
+`kind` is doing real work here: it is what lets a query ask "which experiments
+have a residual file" without opening anything.
+
+#### Level 2 — what is inside the files (knowledge scope)
+
+```
+(:RawFile)-[:OF_TYPE]-->(:DataFileType)
+                            name         "CarbonylPeakArea"
+                            description  "Fitted uptake per peak, refit at each
+                                          time point as data accumulates"
+                            row_grain    "one row per (peak, time point)"
+
+(:DataFileType)-[:HAS_COLUMN]-->(:DataColumn)
+                                    name    "pfo-sec_k_a_s-1"
+                                    units   "s^-1"
+                                    role    "fitted" | "measured" | "index" | "provenance"
+
+(:DataColumn)-[:MEASURES]-->(:ModelParameter)      already exists, carries definitions
+```
+
+Six `DataFileType` nodes and perhaps sixty `DataColumn` nodes — they describe
+*formats*, so they do not multiply with experiments.
+
+This is what turns "plot the adsorption rate constant over time" into a named
+column in a named file. `ModelParameter` already holds the definition of `k_a`,
+so `MEASURES` connects the column a plot needs to the concept a question uses.
+Without it the agent is pattern-matching on column names.
+
+**Where each lives.** `RawFile` and `SpectrumSeries` are **data** — derived from
+what is on the share. `DataFileType` and `DataColumn` are **knowledge** —
+hand-authored units and meanings, sourced from a YAML file alongside
+`concepts.yaml`. That follows §2's provenance rule, and `OF_TYPE` crosses the
+boundary exactly as `INSTANCE_OF` already does, so the knowledge loader owns it.
+
+This is also the first real piece of the "context graph" (§2): the join between
+measured data and authored meaning.
+
+#### Identity and ownership
+
+| Label | Identity property | Scope |
+|---|---|---|
+| `RawFile` | `key` (the S3 object key — globally unique and stable) | DATA |
+| `SpectrumSeries` | `base_name` | DATA |
+| `DataFileType` | `name` | KNOWLEDGE |
+| `DataColumn` | `id` (`<file type>.<column name>`, since column names repeat across types) | KNOWLEDGE |
+
+New relationship types: `HAS_RAW_FILE` and `HAS_SPECTRA` in DATA; `OF_TYPE` and
+`HAS_COLUMN` and `MEASURES` in KNOWLEDGE. Both scopes' declarations in
+`common/ownership.py` need updating, and `ids.IDENTITY` gains four labels — the
+existing coverage test fails until they do, which is the intended behaviour.
+
+### Knowing what is already uploaded
+
+Re-reading 7 GB every six hours to work out what changed is not an option.
+
+The `RawFile` node stores `bytes` and `source_mtime`. The uploader stats each
+source file — cheap — and skips anything whose size and mtime match the node.
+Only a mismatch triggers a read and an upload. Raw spectra never change once
+written, so in steady state almost nothing is read.
+
+This is where the content-hash idea raised on 2026-08-29 finally earns its
+place. It was correctly deferred then, being orthogonal to the rebuild; here it
+is load-bearing. A hash is the tiebreaker when size and mtime are ambiguous, and
+it is what would catch a file rewritten to an identical size.
+
+Neither IAM user has `DeleteObject`. Nothing in this design deletes, and the
+sweep does not extend to S3 — a `RawFile` node can be swept while the object it
+pointed at stays. Orphaned objects are a later problem, and a cheap one.
+
+### Access is gated, via presigned URLs
+
+```
+graph-node (lab PC)  --PutObject-->  S3 bucket (private, no public access)
+                     --writes key + metadata into the graph
+
+browser --> cataverse.ai API route (behind Vercel Authentication)
+              --> generates a short-lived presigned URL
+        --> browser fetches the object directly from S3
+```
+
+The bucket is never public. The dashboard authorises the request and returns a
+URL that expires in minutes. Files stream from S3 rather than through Vercel, so
+there is no function timeout or bandwidth cost on a 130-file spectrum fetch.
+
+Two IAM identities, least privilege:
+
+| Identity | Permitted | Where its key lives |
+|---|---|---|
+| `cataverse-uploader` | `PutObject`, `ListBucket` | Lab PC, `graph-node/.env` |
+| `cataverse-reader` | `GetObject` | Vercel, dashboard environment |
+
+`ListBucket` on the uploader so it can verify what is present; `GetObject`
+withheld from it so a leaked lab-PC key cannot read the data back.
+
+Useful accident: **S3 is port 443, which the lab firewall already allows** (§5f).
+Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
+
+### Deferred
+
+- **gzip on upload.** The spectra are text and compress 3–4×, taking ~7 GB to
+  ~2 GB. `Content-Encoding: gzip` makes browsers decompress transparently. Not
+  in v1: it complicates hashing, and the storage saving is about ten cents a
+  month. Worth revisiting if transfer time becomes noticeable.
+- **Reconciling S3 against the graph.** The graph could claim a file is uploaded
+  when the object is missing. A periodic `ListBucket` comparison would catch it.
+  Not built until it happens.
+
+### Open
+
+- Whether `pressureLog.csv` deserves its own `DataFileType`, or whether pressure
+  is better read from the `Pretreatment` and `ExpConditions` nodes that already
+  carry it. The log has the full trace; the nodes have the setpoints.
+- Whether Level 2 is authored now, while the file formats are fresh, or when
+  the agent work starts. Level 1 does not depend on it.
+
 ## 6. Decisions made
 
 - **2026-08-29 — graph-node is its own package in the monorepo.** Reasoning in §4.
@@ -418,25 +708,19 @@ per ExpConditions node - reads as a gap and is not one.
 
 ## 7. Open questions
 
-Answered questions have been removed; the decisions they produced live in §5
-and §6.
-
-1. **The "done" signal.** End of `session.py`? A watcher on the share drive? A
-   scheduled sweep? Three days per experiment makes latency a non-issue, which
-   argues for whatever is simplest to reason about. Touches `orchestration/`,
-   which is why it is last.
-2. **Where this runs, and started by what.** Any machine with `X:\` mounted.
-   Note that `.env` is gitignored, so a fresh clone or a scheduled job needs
-   one; `.env.example` lists the four variables.
-3. **What happens when Aura is paused.** The free tier auto-pauses. An
-   experiment must never fail because the database is asleep — which argues for
-   the trigger enqueueing work rather than performing it inline.
-4. **AdsParams timing.** Fits are produced by post-processing, after the run.
-   Does a rebuild happen once when fits are ready, or twice?
-5. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
+1. **Getting the scheduled rebuild running.** Designed and documented (§5f,
+   SCHEDULING.md); blocked on the lab network allowing outbound 7687.
+2. **Noticing if the scheduled task stops.** A job that dies quietly looks
+   exactly like a graph with no new experiments. Every run logs, but nothing
+   watches the logs. No design yet.
+3. ~~Loading the raw data.~~ **Designed 2026-09-02 — see §5g.** Everything
+   bulk goes to AWS S3; the graph gains pointers only. Not built: waiting on the
+   AWS account and bucket.
+4. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
    worth having: storing a source hash on each node would let "is the graph
    consistent with its sources?" be answered without rebuilding. Computed in
-   `graph-node`, not `orchestration/`, which cannot see the fit CSVs.
+   `graph-node`, not `orchestration/`, which cannot see the fit CSVs. Deferred
+   by Nick, 2026-09-02.
 
 ## 8. Non-goals for now
 
