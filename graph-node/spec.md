@@ -727,12 +727,38 @@ series - 33,786, which is the listing exactly. A test pins the invariant on a
 miniature bucket, because a file that is silently neither is how the graph and
 the bucket drift apart unnoticed.
 
-**A gap this surfaced.** Sixteen objects are not named for any experiment:
-calibration curves under `CalibrationData/`, six per-sample `monomerMax.csv`,
-a `fit_results.csv`, plus a `.DS_Store` and an `.ipynb_checkpoints` file. Level 1
-hangs everything off `Filename`, which is per-experiment, so there is nowhere to
-put a per-*sample* file. The calibration curves in particular look like real
-data. Unresolved; they are reported, not dropped.
+**A gap this surfaced.** Sixteen objects are not named for any experiment, so
+Level 1 - which hangs everything off `Filename`, and `Filename` is per-experiment
+- has nowhere to put them. They are reported, not dropped. Recorded here and
+left alone for now:
+
+```
+peakFit/nn1120-2_pd_ceo2_000/CalibrationData/nn1120-2_pd_ceo2_000_calibrationCurve.csv
+peakFit/nn1120-2_pd_ceo2_000/CalibrationData/nn1120-2_pd_ceo2_000_calibrationCurve.xlsx
+peakFit/nn1120-2_pd_ceo2_000/CalibrationData/nn1120-2_pd_ceo2_000_calibrationCurve_original.xlsx
+peakFit/nn1120-3_pd_ceo2_000/CalibrationData/nn1120-3_pd_ceo2_000_calibrationCurve.csv
+peakFit/nn1120-3_pd_ceo2_000/CalibrationData/nn1120-3_pd_ceo2_000_calibrationCurve.xlsx
+peakFit/nn1120-3_pd_ceo2_000/CalibrationData/nn1120-3_pd_ceo2_000_calibrationCurve_no_intercept.csv
+
+peakFit/nn1120-2_pd_ceo2_000/nn1120-2_pd_ceo2_000_monomerMax.csv
+peakFit/nn1120-3_pd_ceo2_000/nn1120-3_pd_ceo2_000_monomerMax.csv
+peakFit/nn1120-3_pd_ceo2_001/nn1120-3_pd_ceo2_001_monomerMax.csv
+peakFit/nn1120-3_pd_ceo2_002/nn1120-3_pd_ceo2_002_monomerMax.csv
+peakFit/nn1120-3_pd_ceo2_003/nn1120-3_pd_ceo2_003_monomerMax.csv
+peakFit/nn1120-3_pd_ceo2_004/nn1120-3_pd_ceo2_004_monomerMax.csv
+peakFit/nn1120-4_pd_ceo2_000/nn1120-4_pd_ceo2_000_monomerMax.csv
+
+peakFit/nn1120-3_pd_ceo2_003/fit_results.csv
+
+peakFit/.DS_Store                                              (junk)
+peakFit/nn1120-2_pd_ceo2_000/.ipynb_checkpoints/eda-checkpoint.ipynb   (junk)
+```
+
+They are per-*sample*, not per-experiment, so if they are ever modelled they
+attach to `Material` rather than `Filename`. The calibration curves look like
+real data; the last two are editor droppings that the backup swept up because it
+does not curate.
+
 
 #### Level 2 — what is inside the files (knowledge scope)
 
