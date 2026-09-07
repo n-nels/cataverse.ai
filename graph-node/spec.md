@@ -582,25 +582,29 @@ the `base_name` convention that names it. That is why it is its own
 keeping in mind when reading the `kind` list on `RawFile`, where it currently
 sits beside five files that *are* peak-fit output.
 
-**Where the files are.** For the one sample on the `D:` copy:
+**Where the files are.** All of them under `pressureData/`. For the one sample
+on the `D:` copy:
 
 | | Count |
 |---|---|
 | Runs with spectra | 34 |
-| Logs in `pressureData/` | 30 |
-| Logs in `peakFit/` | 1 (run `004-024`) |
-| Runs with a log in **both** | **0** |
-| Runs with no log anywhere | 3 (`025`, `029`, `035`) |
+| Logs in `pressureData/` | 31 |
+| Logs anywhere else | 0 |
+| Runs with no log at all | 3 (`025`, `029`, `035`) |
 
-So there is no duplication to reconcile - 31 logs for 34 runs, each in exactly
-one place. Run `024` is a single file sitting under `peakFit/` where every other
-log is under `pressureData/`. The likeliest reading is that it is simply
-misfiled rather than that two locations are both legitimate.
+**Resolved 2026-09-07.** Run `004-024`'s log had been sitting under `peakFit/`,
+the only one of the 31 not with the others. It was misfiled rather than evidence
+that two locations are both legitimate, and Nick moved it on both `D:` and `X:`.
+So the loader reads `pressureData/` and nothing else. No dual-root lookup, which
+would have turned a one-off accident into permanent logic.
 
-**Recommended, not yet decided:** treat `pressureData/` as the only source of
-truth, and have the loader report a `pressureLog` found anywhere else instead of
-quietly ingesting it. Building dual-root lookup would make a one-file accident
-permanent, and the report would surface the next one. Moving `024` into
+**One consequence, and the first real instance of a cost this spec accepted.**
+Keys mirror the share, so moving the file changed its key. The next backup
+uploads it under `pressureData/`, and the object already at the old `peakFit/`
+key stays where it is - neither IAM user can delete. An 11 MB orphan is not
+worth acting on, but it is exactly what "moving a folder produces a re-upload
+and an orphan" means in practice, and anything that later points at this file
+must point at the new key.
 `pressureData/` on the share would close it entirely.
 
 ```
@@ -856,8 +860,6 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ### Open
 
-- Whether the loader should read `pressureLog` from `pressureData/` only and
-  report strays, or accept both roots. See "The pressure log, read" above.
 - Whether Level 2 is authored now, while the file formats are fresh, or when
   the agent work starts. Level 1 does not depend on it.
 
