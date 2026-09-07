@@ -570,6 +570,63 @@ each spectrum's timestamp, parsed from `OpusReadParams/<base>.txt`. The dashboar
 fetches it first, to know what exists before requesting any spectra. **Not built**
 - it belongs to the graph-pointer work below, not to the backup.
 
+### The pressure log, read 2026-09-07
+
+Opened at last, on the `D:` copy. It answers the question §5g had left open.
+
+**The two locations hold different experiments, not duplicates.** For the one
+sample present, `pressureData/nn1120-3_pd_ceo2_004/` has 30 logs and
+`peakFit/nn1120-3_pd_ceo2_004/` has exactly one - run `004-024`, which is absent
+from `pressureData`. Same filename convention, byte-identical header. So
+`pressureLog` is one file kind that can appear under either root, and anything
+reading it has to look in both. Keys mirror the share, so the graph must carry
+the full key rather than deriving it from `base_name`.
+
+```
+pressureData/<notebook folder>/<base_name>_pressureLog.csv
+peakFit/<notebook folder>/<base_name>_pressureLog.csv        (occasionally)
+```
+
+**One header across all 30 files**, so the format is stable:
+
+```
+timestamp, p_mfld, p_cell, relative_time_s,
+amount_adsorbed_umol/g, apparent_conversion, apparent_coverage
+```
+
+A representative file (`004-010`):
+
+| | |
+|---|---|
+| rows | 109,244 |
+| duration | 549,341 s = **6.36 days** |
+| cadence | 5.03 s between rows |
+
+That is the concrete form of "experiments run for days", and why a single
+starting pressure on `ExpConditions` cannot stand in for it.
+
+**The three derived columns are a deterministic function of `p_mfld`.**
+`amount_adsorbed_umol/g`, `apparent_conversion` and `apparent_coverage` change on
+exactly the same 20,129 rows that `p_mfld` changes on - not approximately, the
+same set. They are recomputed per row from the manifold pressure and constants,
+so they carry no information `p_mfld` does not.
+
+**`p_mfld` is coarser than it looks.** 65 distinct values across the run against
+`p_cell`'s 628, while both change on roughly the same number of rows (20,129 and
+20,717). That is gauge resolution, not dosing events - an earlier reading of this
+file assumed 65 doses and was wrong.
+
+Consequences worth recording:
+
+- Plotting the derived columns can downsample hard; plotting `p_cell` cannot,
+  since it is the finest-grained thing in the file.
+- Storing all three derived columns is redundant, but they are the physically
+  meaningful axes and recomputing them needs constants the file does not carry.
+  They stay.
+- Units are **not** recorded anywhere in the file. `p_mfld` and `p_cell` sit
+  around 0.85; whether that is bar, atm or something else has to come from Nick
+  before `DataColumn.units` can be authored honestly.
+
 ### Graph additions — the schema
 
 Pointers and descriptions. No file contents enter the graph.
@@ -596,8 +653,8 @@ of files; it can follow later without changing Level 1.
 
     -[:HAS_SPECTRA]-->   (:SpectrumSeries)
                              base_name      identity property
-                             prefix         "spectra/<base_name>/"
-                             index_key      "spectra/<base_name>/index.json"
+                             prefix         "OpusConvert_lgRfl/<folder>/<base_name>."
+                             index_key      "OpusConvert_lgRfl/<folder>/<base_name>.index.json"
                              count          number of spectra
                              first_at       timestamp of the first spectrum
                              last_at        timestamp of the last
@@ -607,6 +664,15 @@ of files; it can follow later without changing Level 1.
 Roughly 1,400 `RawFile` nodes (five CSV kinds plus pressure logs across ~285
 experiments) and ~300 `SpectrumSeries`, so about 1,700 new nodes. Aura Free
 allows 200,000 and 2,214 are in use.
+
+`prefix` is a *filename* prefix, not a folder. One notebook folder holds every
+experiment for that sample - 5,729 spectra across 35 `base_name`s in the one
+checked - so the spectra for a single run are selected by
+`ListObjectsV2 Prefix=OpusConvert_lgRfl/<folder>/<base_name>.` rather than by
+listing a directory. This is a direct cost of mirroring the share: the old
+`spectra/<base_name>/` scheme gave each run its own clean folder. S3 prefixes
+are plain string matches, so it works, but the graph must now store the notebook
+folder instead of deriving the key from `base_name`.
 
 **One node per spectrum *series*, not per spectrum.** 130 spectra x ~300
 experiments would be 39,000 nodes to describe files nothing queries
@@ -633,6 +699,37 @@ have a residual file" without opening anything.
 (:DataColumn)-[:MEASURES]-->(:ModelParameter)      already exists, carries definitions
 ```
 
+The `pressureLog` type can be authored now that a file has been read (see
+"The pressure log, read" above). It is the first concrete instance of this level:
+
+```
+(:DataFileType {name: "pressureLog"})
+    row_grain    "one row per 5-second instrument sample"
+    description  "Manifold and cell pressure through the whole run, with
+                  adsorption quantities recomputed at each sample"
+
+    -[:HAS_COLUMN]--> (:DataColumn)
+        id                          role        units      note
+        pressureLog.timestamp       index       -          absolute, microsecond
+        pressureLog.relative_time_s index       s          since run start
+        pressureLog.p_mfld          measured    UNKNOWN    manifold; 65 levels
+        pressureLog.p_cell          measured    UNKNOWN    cell; finest column
+        pressureLog.amount_adsorbed derived     umol/g     f(p_mfld)
+        pressureLog.apparent_conversion derived -          f(p_mfld)
+        pressureLog.apparent_coverage   derived -          f(p_mfld)
+```
+
+Two things this surfaces about the Level 2 design:
+
+- **`role` needs a fourth value, `derived`.** The vocabulary was
+  `"fitted" | "measured" | "index" | "provenance"`, and none of them fit a column
+  computed per row from another column in the same file. `fitted` would be wrong
+  in a way that matters: nothing here was fitted.
+- **`units` cannot be bluffed.** The file records none, and two of the seven
+  columns have no unit anyone has stated. Authoring `UNKNOWN` is the honest
+  placeholder; inventing `bar` would put a wrong number on every future plot
+  axis and nothing downstream would ever contradict it.
+
 Six `DataFileType` nodes and perhaps sixty `DataColumn` nodes — they describe
 *formats*, so they do not multiply with experiments.
 
@@ -653,10 +750,9 @@ That makes pressure the one quantity living in both stores without duplication:
 the setpoint in the graph, the trace in S3. It is the same split as `AdsParams`
 holding the final fit row while the CSV holds the fit converging.
 
-Its `DataColumn` entries have to wait. `pressureData/` was uploaded but never
-opened, and how it relates to `peakFit/<base>_pressureLog.csv` is unestablished -
-they may be the same series at different stages. Level 2 cannot be authored for
-pressure until a real file is read.
+Its columns are now read and its `DataFileType` is authored below. The two
+share roots that can hold a pressure log are a wrinkle for the loader, not a
+modelling question.
 
 **Where each lives.** `RawFile` and `SpectrumSeries` are **data** — derived from
 what is on the share. `DataFileType` and `DataColumn` are **knowledge** —
@@ -740,9 +836,8 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ### Open
 
-- What `pressureData/` actually contains, and how it relates to
-  `peakFit/<base>_pressureLog.csv`. Both are uploaded; neither has been opened.
-  Level 2's pressure columns are blocked on this.
+- The units of `p_mfld` and `p_cell`. The file records none and the values sit
+  around 0.85. Nick has to say; `DataColumn.units` is `UNKNOWN` until he does.
 - Whether Level 2 is authored now, while the file formats are fresh, or when
   the agent work starts. Level 1 does not depend on it.
 
