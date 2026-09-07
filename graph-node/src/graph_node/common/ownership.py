@@ -53,12 +53,6 @@ DATA = GraphScope(
             "ExpConditions",
             "AdsParams",
             "KineticChain",
-            # Pointers into S3. DATA because they describe files the instrument
-            # produced - the bucket is where they are, not what they mean. What
-            # is *inside* them is DataFileType/DataColumn, which is knowledge
-            # and hand-authored.
-            "RawFile",
-            "SpectrumSeries",
         }
     ),
     relationship_types=frozenset(
@@ -72,8 +66,6 @@ DATA = GraphScope(
             "NEXT_EXP",
             "DELTA_FROM",
             "RELATIVE_TO",
-            "HAS_RAW_FILE",
-            "HAS_SPECTRA",
         }
     ),
 )
@@ -112,7 +104,27 @@ KNOWLEDGE = GraphScope(
     ),
 )
 
-ALL_SCOPES = (DATA, KNOWLEDGE)
+#: Where the files are, derived from an S3 bucket listing.
+#:
+#: A third scope rather than part of DATA, and the reason is the sweep. These
+#: are loaded by a run that never touches the share drive, so if they shared
+#: DATA's scope that run would find every Material, Filename and Pretreatment
+#: unstamped and delete the entire experiment graph. Splitting them means each
+#: sweep can only reach what its own loader wrote.
+#:
+#: It is also the same provenance rule as everywhere else: DATA comes from the
+#: share, KNOWLEDGE from hand-authored YAML, POINTERS from the bucket listing.
+#:
+#: HAS_RAW_FILE and HAS_SPECTRA start on a Filename - a DATA node - and end
+#: here. This scope owns them because this loader creates them, exactly as
+#: KNOWLEDGE owns INSTANCE_OF and FIT_BY.
+POINTERS = GraphScope(
+    name="pointers",
+    labels=frozenset({"RawFile", "SpectrumSeries"}),
+    relationship_types=frozenset({"HAS_RAW_FILE", "HAS_SPECTRA"}),
+)
+
+ALL_SCOPES = (DATA, KNOWLEDGE, POINTERS)
 
 
 def check_disjoint() -> None:

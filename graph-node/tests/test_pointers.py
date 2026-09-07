@@ -158,3 +158,40 @@ def test_every_object_is_either_modelled_or_reported():
     spectra = sum(n.properties["count"] for n in g.nodes if n.label == "SpectrumSeries")
 
     assert reported + modelled_files + spectra == len(keys)
+
+
+def test_the_series_names_its_index_key():
+    """The generated file list sits beside the spectra, so it sorts with them
+    and needs no second naming convention."""
+    g = pointers.build(listing(f"OpusConvert_lgRfl/nb/{BASE}.0000"))
+    series = next(n for n in g.nodes if n.label == "SpectrumSeries")
+    assert series.properties["index_key"] == f"OpusConvert_lgRfl/nb/{BASE}.index.json"
+
+
+def test_pointers_are_their_own_scope():
+    """Not part of DATA, and this is the test that says why.
+
+    A pointer-only run writes no Material, Filename or Pretreatment. If those
+    labels were in its sweep scope it would find every one of them unstamped
+    and delete the entire experiment graph - 2,214 nodes - on the first run
+    from a machine without the share drive.
+    """
+    from graph_node.common.ownership import DATA, KNOWLEDGE, POINTERS, check_disjoint
+
+    check_disjoint()
+    assert POINTERS.labels == {"RawFile", "SpectrumSeries"}
+    for label in ("Material", "Filename", "Pretreatment", "ExpConditions", "AdsParams"):
+        assert not POINTERS.owns_label(label), f"POINTERS must not sweep {label}"
+    assert not (POINTERS.labels & DATA.labels)
+    assert not (POINTERS.labels & KNOWLEDGE.labels)
+
+
+def test_the_cross_scope_edges_belong_to_pointers():
+    """HAS_RAW_FILE starts on a Filename and ends on a RawFile. The loader that
+    creates an edge is the one that must be able to sweep it - same rule that
+    puts INSTANCE_OF in KNOWLEDGE."""
+    from graph_node.common.ownership import DATA, POINTERS
+
+    assert POINTERS.owns_relationship("HAS_RAW_FILE")
+    assert POINTERS.owns_relationship("HAS_SPECTRA")
+    assert not DATA.owns_relationship("HAS_RAW_FILE")

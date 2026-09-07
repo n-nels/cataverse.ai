@@ -170,6 +170,12 @@ def build(
                 label="SpectrumSeries",
                 properties={
                     "prefix": entry["prefix"],
+                    # Where the generated file list will live: alongside the
+                    # spectra, so it sorts with them and needs no second
+                    # convention. Not written yet - the node names the key
+                    # before anything puts an object there, which is fine
+                    # because the dashboard asks for it and handles a miss.
+                    "index_key": entry["prefix"] + "index.json",
                     "count": entry["count"],
                     "bytes": entry["bytes"],
                 },

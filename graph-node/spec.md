@@ -668,8 +668,6 @@ of files; it can follow later without changing Level 1.
                              prefix         "OpusConvert_lgRfl/<folder>/<base_name>."
                              index_key      "OpusConvert_lgRfl/<folder>/<base_name>.index.json"
                              count          number of spectra
-                             first_at       timestamp of the first spectrum
-                             last_at        timestamp of the last
                              bytes          total across the series
 ```
 
@@ -696,69 +694,55 @@ have a residual file" without opening anything.
 
 #### Built 2026-09-07 - `data/pointers.py`
 
-Level 1 node logic, from a bucket listing. Not yet wired into a rebuild and
-nothing has been written to Aura.
+Level 1 node logic, from a bucket listing. Run it with:
 
-| | Built | Spec estimated |
-|---|---|---|
-| `RawFile` | 1,370 | ~1,400 |
-| `SpectrumSeries` | 294 | ~300 |
+```
+uv run python -m graph_node.cli --pointers-only            # dry run
+uv run python -m graph_node.cli --pointers-only --apply
+```
+
+Against the live graph and the real bucket: **1,357 `RawFile`, 286
+`SpectrumSeries`**, applying cleanly with no deletions.
+
+**A third scope, `POINTERS`.** Not part of `DATA`, and the sweep is the reason.
+A pointer run writes no Material, Filename or Pretreatment, so if those labels
+were in its scope the first run from a machine without the share would find all
+2,214 of them unstamped and delete the lot. Splitting the scope means each sweep
+can only reach what its own loader wrote. It is also the same provenance rule as
+everywhere else: DATA from the share, KNOWLEDGE from YAML, POINTERS from the
+bucket listing. `HAS_RAW_FILE` and `HAS_SPECTRA` start on a `Filename` and end
+here; POINTERS owns them because POINTERS creates them, exactly as KNOWLEDGE
+owns `INSTANCE_OF`.
 
 **It needs `ListBucket` and nothing else.** No object is opened, so the
-write-only `cataverse-uploader` key is sufficient and the `GetObject` question
-does not arise until the rebuild itself reads from S3.
+`GetObject` question does not arise until the rebuild itself sources from S3.
 
-Three deviations from the schema above, all forced by the listing being the
-source:
+**`first_at` and `last_at` are dropped, `index_key` is kept.** Decided
+2026-09-07: build nothing the agent does not need. The two timestamps would have
+cost 289 file reads per run to store something no query asks for, and the
+argument for deriving the same information from the pressure log was wrong
+anyway - the log's duration is the logging window, not the spectra collection
+window, and the two are not the same measurement. `index_key` stays because the
+dashboard needs a file list before it can request anything.
 
-- **`uploaded_at` replaces `source_mtime`.** A listing knows when S3 accepted an
-  object, not when the instrument wrote it. The share mtime is unknowable from
-  here, and inventing it from `LastModified` would be a different fact under the
-  same name.
-- **`first_at`, `last_at` and `index_key` are not populated.** They come from
-  `OpusReadParams/<base>.txt`, which has to be read rather than listed. The 289
-  of those are recognised and reported as unmodelled rather than passed over.
-- **`RawFile` has no `id` property**, only `key`. It follows `Filename`, which
-  is keyed on `base_name` and carries no `id` either.
+**`uploaded_at` replaces `source_mtime`.** A listing knows when S3 accepted an
+object, not when the instrument wrote it. Recording `LastModified` under the
+name `source_mtime` would be a different fact wearing the same label.
 
-**Every object is either modelled or reported.** Against the real bucket:
-3,078 skipped with a named reason, 1,370 modelled, 29,338 spectra folded into
-series - 33,786, which is the listing exactly. A test pins the invariant on a
-miniature bucket, because a file that is silently neither is how the graph and
-the bucket drift apart unnoticed.
+**Every object is either modelled or reported.** On the real bucket that
+balances exactly: 3,078 skipped with a named reason + 1,370 modelled + 29,338
+spectra folded into series = 33,786, the listing. A test pins the invariant,
+because a file that is silently neither is how the two stores drift apart
+unnoticed.
 
-**A gap this surfaced.** Sixteen objects are not named for any experiment, so
-Level 1 - which hangs everything off `Filename`, and `Filename` is per-experiment
-- has nowhere to put them. They are reported, not dropped. Recorded here and
-left alone for now:
+**Eight base names in the bucket have no `Filename` node**, so their files are
+reported rather than modelled:
 
-```
-peakFit/nn1120-2_pd_ceo2_000/CalibrationData/nn1120-2_pd_ceo2_000_calibrationCurve.csv
-peakFit/nn1120-2_pd_ceo2_000/CalibrationData/nn1120-2_pd_ceo2_000_calibrationCurve.xlsx
-peakFit/nn1120-2_pd_ceo2_000/CalibrationData/nn1120-2_pd_ceo2_000_calibrationCurve_original.xlsx
-peakFit/nn1120-3_pd_ceo2_000/CalibrationData/nn1120-3_pd_ceo2_000_calibrationCurve.csv
-peakFit/nn1120-3_pd_ceo2_000/CalibrationData/nn1120-3_pd_ceo2_000_calibrationCurve.xlsx
-peakFit/nn1120-3_pd_ceo2_000/CalibrationData/nn1120-3_pd_ceo2_000_calibrationCurve_no_intercept.csv
-
-peakFit/nn1120-2_pd_ceo2_000/nn1120-2_pd_ceo2_000_monomerMax.csv
-peakFit/nn1120-3_pd_ceo2_000/nn1120-3_pd_ceo2_000_monomerMax.csv
-peakFit/nn1120-3_pd_ceo2_001/nn1120-3_pd_ceo2_001_monomerMax.csv
-peakFit/nn1120-3_pd_ceo2_002/nn1120-3_pd_ceo2_002_monomerMax.csv
-peakFit/nn1120-3_pd_ceo2_003/nn1120-3_pd_ceo2_003_monomerMax.csv
-peakFit/nn1120-3_pd_ceo2_004/nn1120-3_pd_ceo2_004_monomerMax.csv
-peakFit/nn1120-4_pd_ceo2_000/nn1120-4_pd_ceo2_000_monomerMax.csv
-
-peakFit/nn1120-3_pd_ceo2_003/fit_results.csv
-
-peakFit/.DS_Store                                              (junk)
-peakFit/nn1120-2_pd_ceo2_000/.ipynb_checkpoints/eda-checkpoint.ipynb   (junk)
-```
-
-They are per-*sample*, not per-experiment, so if they are ever modelled they
-attach to `Material` rather than `Filename`. The calibration curves look like
-real data; the last two are editor droppings that the backup swept up because it
-does not curate.
-
+| Base name | What is there | Reading |
+|---|---|---|
+| `..._000-029`, `..._000-030`, `..._000-032` | the full set of files | Experiments from 2026-08-30 to 09-03. The last rebuild was 09-02 and needs the share, so the graph simply has not caught up. |
+| `..._000-016a00`, `..._000-016b00`, `..._001-022`, `..._004-019` | spectra only | No `expParams`, so no experiment was ever loaded. Likely aborted runs. |
+| `test` | two spectra | `OpusConvert_lgRfl/nn1120-3_pd_ceo2_000/test.0000` and `.0001`. Test data that escaped the `_test` rule, which only examines directory names. |
 
 #### Level 2 — what is inside the files (knowledge scope)
 
