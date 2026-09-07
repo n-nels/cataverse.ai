@@ -53,6 +53,12 @@ DATA = GraphScope(
             "ExpConditions",
             "AdsParams",
             "KineticChain",
+            # Pointers into S3. DATA because they describe files the instrument
+            # produced - the bucket is where they are, not what they mean. What
+            # is *inside* them is DataFileType/DataColumn, which is knowledge
+            # and hand-authored.
+            "RawFile",
+            "SpectrumSeries",
         }
     ),
     relationship_types=frozenset(
@@ -66,6 +72,8 @@ DATA = GraphScope(
             "NEXT_EXP",
             "DELTA_FROM",
             "RELATIVE_TO",
+            "HAS_RAW_FILE",
+            "HAS_SPECTRA",
         }
     ),
 )

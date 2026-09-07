@@ -31,6 +31,12 @@ IDENTITY: dict[str, tuple[str, str]] = {
     "ExpConditions": ("id", ""),
     "AdsParams": ("id", ""),
     "KineticChain": ("chain_id", "kc_"),
+    # Pointers into S3. RawFile is keyed on the object key itself, which is
+    # globally unique and already stable, so there is nothing to prefix it
+    # with. SpectrumSeries shares `base_name` with Filename, so it needs its
+    # own prefix to keep the two labels' synthetic ids apart.
+    "RawFile": ("key", ""),
+    "SpectrumSeries": ("base_name", "ss_"),
     # Knowledge. Only ModelParameter carries an `id`; the rest are keyed on
     # their natural name, which is what the YAML authors them by.
     "ChemConcept": ("name", "cc_"),
@@ -98,6 +104,15 @@ def adsparams_id(base_name: str, peak_name: str = "monomer_sum") -> str:
 
 def chain_id(chain_hash_value: str) -> str:
     return f"kc_{chain_hash_value}"
+
+
+def raw_file_id(key: str) -> str:
+    """The S3 object key is the identity. No prefix, nothing derived."""
+    return key
+
+
+def spectrum_series_id(base_name: str) -> str:
+    return f"ss_{base_name}"
 
 
 def concept_id(name: str) -> str:

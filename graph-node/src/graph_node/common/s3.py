@@ -40,6 +40,9 @@ def content_type_for(path: Path) -> str:
 class StoredObject:
     key: str
     bytes: int
+    #: When S3 accepted the object. Optional because the backup's size-only
+    #: comparison never needed it, and its tests construct these by hand.
+    last_modified: str | None = None
 
 
 def client(region: str):
@@ -60,7 +63,12 @@ def list_objects(s3, bucket: str, prefix: str = "") -> dict[str, StoredObject]:
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for item in page.get("Contents", []):
-            stored[item["Key"]] = StoredObject(key=item["Key"], bytes=item["Size"])
+            modified = item.get("LastModified")
+            stored[item["Key"]] = StoredObject(
+                key=item["Key"],
+                bytes=item["Size"],
+                last_modified=modified.isoformat() if modified else None,
+            )
     logger.debug("bucket holds %d object(s) under %r", len(stored), prefix)
     return stored
 

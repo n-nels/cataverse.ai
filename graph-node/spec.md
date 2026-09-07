@@ -694,6 +694,46 @@ node points at the prefix; `index.json` in S3 carries the per-file detail.
 `kind` is doing real work here: it is what lets a query ask "which experiments
 have a residual file" without opening anything.
 
+#### Built 2026-09-07 - `data/pointers.py`
+
+Level 1 node logic, from a bucket listing. Not yet wired into a rebuild and
+nothing has been written to Aura.
+
+| | Built | Spec estimated |
+|---|---|---|
+| `RawFile` | 1,370 | ~1,400 |
+| `SpectrumSeries` | 294 | ~300 |
+
+**It needs `ListBucket` and nothing else.** No object is opened, so the
+write-only `cataverse-uploader` key is sufficient and the `GetObject` question
+does not arise until the rebuild itself reads from S3.
+
+Three deviations from the schema above, all forced by the listing being the
+source:
+
+- **`uploaded_at` replaces `source_mtime`.** A listing knows when S3 accepted an
+  object, not when the instrument wrote it. The share mtime is unknowable from
+  here, and inventing it from `LastModified` would be a different fact under the
+  same name.
+- **`first_at`, `last_at` and `index_key` are not populated.** They come from
+  `OpusReadParams/<base>.txt`, which has to be read rather than listed. The 289
+  of those are recognised and reported as unmodelled rather than passed over.
+- **`RawFile` has no `id` property**, only `key`. It follows `Filename`, which
+  is keyed on `base_name` and carries no `id` either.
+
+**Every object is either modelled or reported.** Against the real bucket:
+3,078 skipped with a named reason, 1,370 modelled, 29,338 spectra folded into
+series - 33,786, which is the listing exactly. A test pins the invariant on a
+miniature bucket, because a file that is silently neither is how the graph and
+the bucket drift apart unnoticed.
+
+**A gap this surfaced.** Sixteen objects are not named for any experiment:
+calibration curves under `CalibrationData/`, six per-sample `monomerMax.csv`,
+a `fit_results.csv`, plus a `.DS_Store` and an `.ipynb_checkpoints` file. Level 1
+hangs everything off `Filename`, which is per-experiment, so there is nowhere to
+put a per-*sample* file. The calibration curves in particular look like real
+data. Unresolved; they are reported, not dropped.
+
 #### Level 2 — what is inside the files (knowledge scope)
 
 ```
