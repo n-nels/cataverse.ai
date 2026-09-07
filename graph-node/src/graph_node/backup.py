@@ -83,6 +83,11 @@ class Plan:
     already_present: int = 0
     already_bytes: int = 0
     excluded: int = 0
+    #: Files skipped, counted by the directory that caused it. A bare total is
+    #: not enough: when more files are excluded than uploaded - 36,742 against
+    #: 33,782 on the real share - you need to see *which* directories account
+    #: for it before trusting the run.
+    excluded_by_directory: dict[str, int] = field(default_factory=dict)
     missing_roots: list[str] = field(default_factory=list)
 
     @property
@@ -117,8 +122,13 @@ def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
             if not path.is_file():
                 continue
             relative = path.relative_to(share_root)
-            if is_excluded(relative):
+            cause = is_excluded(relative)
+            if cause:
                 plan.excluded += 1
+                where = f"{relative.parts[0]}/.../{cause}"
+                plan.excluded_by_directory[where] = (
+                    plan.excluded_by_directory.get(where, 0) + 1
+                )
                 continue
 
             key = relative.as_posix()
@@ -160,6 +170,14 @@ def render(plan: Plan, share_root: Path, bucket: str) -> str:
         f"skipped (excluded)    : {plan.excluded} file(s)",
         f"to upload             : {len(plan.to_upload)} file(s), {_human(plan.upload_bytes)}",
     ]
+    if plan.excluded_by_directory:
+        lines.append("")
+        lines.append("excluded, by the directory that matched:")
+        for where, count in sorted(
+            plan.excluded_by_directory.items(), key=lambda kv: -kv[1]
+        ):
+            lines.append(f"    {where:<44}{count:>8}")
+
     if plan.missing_roots:
         lines += ["", f"roots not found under {share_root}:"]
         lines += [f"    {r}" for r in plan.missing_roots]
