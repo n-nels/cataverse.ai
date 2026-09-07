@@ -582,29 +582,16 @@ the `base_name` convention that names it. That is why it is its own
 keeping in mind when reading the `kind` list on `RawFile`, where it currently
 sits beside five files that *are* peak-fit output.
 
-**Where the files are.** All of them under `pressureData/`. For the one sample
-on the `D:` copy:
+**Where the files are.** All under `pressureData/`, one file per run. For the
+one sample on the `D:` copy:
 
 | | Count |
 |---|---|
 | Runs with spectra | 34 |
 | Logs in `pressureData/` | 31 |
-| Logs anywhere else | 0 |
 | Runs with no log at all | 3 (`025`, `029`, `035`) |
 
-**Resolved 2026-09-07.** Run `004-024`'s log had been sitting under `peakFit/`,
-the only one of the 31 not with the others. It was misfiled rather than evidence
-that two locations are both legitimate, and Nick moved it on both `D:` and `X:`.
-So the loader reads `pressureData/` and nothing else. No dual-root lookup, which
-would have turned a one-off accident into permanent logic.
-
-**One consequence, and the first real instance of a cost this spec accepted.**
-Keys mirror the share, so moving the file changed its key. The next backup
-uploads it under `pressureData/`, and the object already at the old `peakFit/`
-key stays where it is - neither IAM user can delete. An 11 MB orphan is not
-worth acting on, but it is exactly what "moving a folder produces a re-upload
-and an orphan" means in practice, and anything that later points at this file
-must point at the new key.
+The loader reads `pressureData/` and nowhere else.
 `pressureData/` on the share would close it entirely.
 
 ```
@@ -846,6 +833,13 @@ withheld from it so a leaked lab-PC key cannot read the data back.
 
 Useful accident: **S3 is port 443, which the lab firewall already allows** (§5f).
 Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
+
+### Housekeeping
+
+- One orphaned object to delete by hand in the S3 console:
+  `peakFit/nn1120-3_pd_ceo2_004/20260522_210041_pd_ceo2_004-024_pressureLog.csv`.
+  The file moved on the share, so the backup re-uploaded it under its new key
+  and neither IAM user can remove the old one.
 
 ### Deferred
 
