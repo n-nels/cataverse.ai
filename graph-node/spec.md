@@ -436,7 +436,7 @@ Two lasting consequences:
   the host must be a machine with both share-drive access and that egress. As
   of 2026-09-02 the lab PC has the first and not the second.
 
-## 5g. Raw data on S3 — design (2026-09-02, not built)
+## 5g. Raw data on S3 (design 2026-09-02; backup built and run 2026-09-05)
 
 ### The decision
 
@@ -448,8 +448,9 @@ column has to be reachable. The volumes then make the store obvious:
 
 | Data | Size | Where |
 |---|---|---|
-| Derived CSVs (seven kinds per experiment, plus pressure logs) | ~92 MB for the peak areas alone; more across all kinds | S3 |
-| Raw spectra (`.dpt`, 89–180 per experiment) | **~7 GB** | S3 |
+| Derived CSVs (seven kinds per experiment) | 519 MB measured | S3 |
+| Pressure time series (`pressureData/`) | 644 MB measured | S3 |
+| Raw spectra (`.0000`, 89-180 per experiment) | 1.2 GB measured - the pre-upload estimate of ~7 GB counted archived runs | S3 |
 | Pointers and metadata | kilobytes | Graph |
 
 An earlier plan also put a plottable time series in the graph. Dropped: it would
@@ -462,6 +463,35 @@ AWS specifically, rather than the cheaper Cloudflare R2, because Nick wants
 cloud experience that transfers. R2 is S3-compatible so the code would be nearly
 identical, but IAM, policies and presigned URLs are the skills worth having and
 they are AWS-native. At ~7 GB the cost is around $0.20/month.
+
+### Built and run - 2026-09-05
+
+`graph_node.backup` copied the share to the bucket. It needs no database: what
+to upload is decided by comparing the share against a `ListBucket` listing, so
+it ran from the lab PC while Bolt on 7687 was still blocked (§5f).
+
+| Root | Files | Size |
+|---|---|---|
+| `OpusConvert_lgRfl` | 29,731 | 1.2 GB |
+| `peakFit` | 2,857 | 519 MB |
+| `pressureData` | 224 | 644 MB |
+| `OpusReadParams` | 970 | 21 MB |
+| **Total uploaded** | **33,782** | **2.4 GB** |
+| Skipped - `_test` and `archive` directories | 36,742 | - |
+
+**More files were excluded than uploaded.** That is the whole reason the total
+came to 2.4 GB against an expected ~50 GB: the archived runs are the bulk of the
+share. A bare count could not show that, so the plan now attributes every skipped
+file to the directory that caused it and prints the largest first. Without it,
+"36,742 skipped" is indistinguishable from a bug in the exclusion rule - the same
+silence this project keeps designing against.
+
+**The backup's scope is deliberately wider than the graph's.** Everything under
+the four roots goes up, including the files the "Out of scope" table below keeps
+out of *plotting*. The two scopes answer different questions: a backup you have
+to curate is a backup you will regret, and modelling more of it later then needs
+no re-upload. Only `_test` and `archive` directories are skipped, and only
+because Nick asked for them to be.
 
 ### What the sources actually look like
 
@@ -484,7 +514,9 @@ X:\OpusReadParams\
     <base>.txt                         one line per spectrum: path, date, time, ...
 ```
 
-**Out of scope**, decided 2026-09-02:
+**Out of scope for the graph and for plotting**, decided 2026-09-02. All of
+these are still backed up to S3 - the table is about what gets modelled, not
+what gets stored:
 
 | Excluded | Why |
 |---|---|
@@ -504,29 +536,39 @@ That is why the whole file is worth keeping rather than a reduction of it.
 
 ### Object key layout
 
+**Keys mirror the share.** An object's key is its path relative to the share
+root:
+
 ```
-peakfit/<base_name>/<original filename>
-spectra/<base_name>/<original filename>
-spectra/<base_name>/index.json          (generated, see below)
+X:\peakFit\nn1120-3_pd_ceo2_004\x.csv  ->  peakFit/nn1120-3_pd_ceo2_004/x.csv
+X:\OpusConvert_lgRfl\<folder>\a.0000   ->  OpusConvert_lgRfl/<folder>/a.0000
 ```
 
-Prefix by source root, then `base_name`, then the source filename verbatim.
+This replaces the original `peakfit/<base_name>/<filename>` scheme. The reasoning
+changed with the scope rather than being overturned: that scheme deliberately
+left the notebook folder out of the key so that reorganising a folder would not
+change it. But that argument was about *pointers to files the graph models*.
+Once this became a backup of the whole share, a backup should look like the thing
+it backs up - and mirroring gives the files belonging to no single experiment
+somewhere to live, which a `base_name` scheme has nowhere to put.
 
-- `base_name` is already the `Filename` identity key, so it is unique and
-  stable, and it sorts chronologically for browsing.
-- The **notebook folder is deliberately not in the key.** It is derivable from
-  the graph, and if a file were ever reorganised into a different folder the key
-  would change — producing both a re-upload and an orphan.
+The cost is real and accepted: moving a folder on the share does produce a
+re-upload and an orphan. Nothing deletes, so an orphan is wasted pennies, and
+`base_name` stays the graph's join key regardless of where the object sits.
+
 - **Filenames are kept verbatim** rather than normalised to `PeakArea.csv`. No
-  mapping can then be wrong, and a downloaded file is self-describing. The
-  `base_name` repeating inside the prefix costs nothing.
-- The spectra have numeric extensions (`.0000`) and no MIME type, so
+  mapping can then be wrong, and a downloaded file is self-describing.
+- The spectra have numeric extensions (`.0000`) that no MIME table knows, so
   `Content-Type: text/plain` is set explicitly on upload; otherwise a browser
-  downloads them instead of reading them.
+  downloads them instead of displaying them and nothing can plot them.
+- **Size is the only comparison** for deciding what to re-upload. Every file is
+  written once by an instrument and never edited, so a same-size file is the same
+  file; hashing would mean reading gigabytes each run to learn nothing.
 
 `index.json` is the one generated artifact: the file list for an experiment with
 each spectrum's timestamp, parsed from `OpusReadParams/<base>.txt`. The dashboard
-fetches it first, to know what exists before requesting any spectra.
+fetches it first, to know what exists before requesting any spectra. **Not built**
+- it belongs to the graph-pointer work below, not to the backup.
 
 ### Graph additions — the schema
 
@@ -599,6 +641,23 @@ column in a named file. `ModelParameter` already holds the definition of `k_a`,
 so `MEASURES` connects the column a plot needs to the concept a question uses.
 Without it the agent is pattern-matching on column names.
 
+**`pressureLog` is its own `DataFileType` - decided 2026-09-05.** The open
+question was whether pressure should instead be read from the `Pretreatment` and
+`ExpConditions` nodes, which already carry it. It should not. Those nodes hold
+the value from `_expParams.json`, which is the pressure *at the start*, and the
+experiments run for days. The log is a time series; the nodes are a single
+setpoint. They are not two representations of one thing, and a question like
+"did pressure drift during the run" is unanswerable from the nodes alone.
+
+That makes pressure the one quantity living in both stores without duplication:
+the setpoint in the graph, the trace in S3. It is the same split as `AdsParams`
+holding the final fit row while the CSV holds the fit converging.
+
+Its `DataColumn` entries have to wait. `pressureData/` was uploaded but never
+opened, and how it relates to `peakFit/<base>_pressureLog.csv` is unestablished -
+they may be the same series at different stages. Level 2 cannot be authored for
+pressure until a real file is read.
+
 **Where each lives.** `RawFile` and `SpectrumSeries` are **data** — derived from
 what is on the share. `DataFileType` and `DataColumn` are **knowledge** —
 hand-authored units and meanings, sourced from a YAML file alongside
@@ -670,8 +729,9 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ### Deferred
 
-- **gzip on upload.** The spectra are text and compress 3–4×, taking ~7 GB to
-  ~2 GB. `Content-Encoding: gzip` makes browsers decompress transparently. Not
+- **gzip on upload.** The spectra are text and compress 3-4x, taking the
+  measured 1.2 GB to roughly 350 MB. `Content-Encoding: gzip` makes browsers
+  decompress transparently. Not
   in v1: it complicates hashing, and the storage saving is about ten cents a
   month. Worth revisiting if transfer time becomes noticeable.
 - **Reconciling S3 against the graph.** The graph could claim a file is uploaded
@@ -680,9 +740,9 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ### Open
 
-- Whether `pressureLog.csv` deserves its own `DataFileType`, or whether pressure
-  is better read from the `Pretreatment` and `ExpConditions` nodes that already
-  carry it. The log has the full trace; the nodes have the setpoints.
+- What `pressureData/` actually contains, and how it relates to
+  `peakFit/<base>_pressureLog.csv`. Both are uploaded; neither has been opened.
+  Level 2's pressure columns are blocked on this.
 - Whether Level 2 is authored now, while the file formats are fresh, or when
   the agent work starts. Level 1 does not depend on it.
 
@@ -695,6 +755,12 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
   of `load_knowledge.py`. They are arithmetic on measurements. §2.
 - **2026-08-29 — `original/` is vendored unmodified** rather than refactored in
   place, so there is a known-good reference to check the rewrite against.
+- **2026-09-05 — S3 object keys mirror the share drive.** The
+  `base_name` scheme was right for pointers and wrong for a backup. §5g.
+- **2026-09-05 — The backup's scope is the whole share,** wider than
+  what the graph models. Curating a backup is how you regret it later. §5g.
+- **2026-09-05 — `pressureLog` gets its own `DataFileType`.** The graph
+  holds the starting setpoint; the log holds the trace across days. §5g.
 - **Inherited, from `original/data_graph_instructions.txt` §9** — these were
   resolved during the original build and are not reopened here:
   - Pressure tuples become two flat properties, `pressure_meas_g1` /
