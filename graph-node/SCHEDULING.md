@@ -1,7 +1,16 @@
-# Running the rebuild on a schedule
+# Running graph-node on a schedule
 
-How to set `graph-node` up to rebuild the graph automatically. Written to be
-followed on the machine itself, without reference to anything else.
+How to set `graph-node` up to run automatically. There are **two independent
+tasks**, and they do not depend on each other:
+
+| Task | What it does | Needs | Section |
+|---|---|---|---|
+| CataVerse graph rebuild | Rebuilds the graph from the share | Bolt on 7687 | §6 |
+| CataVerse S3 backup | Copies the share to S3 | HTTPS on 443 | §6b |
+
+The backup can be scheduled before the rebuild can, because port 443 is already
+open on the lab network and 7687 is not. Written to be followed on the machine
+itself, without reference to anything else.
 
 Windows Task Scheduler, not cron — the target is a Windows box.
 
@@ -194,9 +203,86 @@ schtasks /Run /TN "CataVerse graph rebuild"
 
 ---
 
+## 6b. The second task: the S3 backup
+
+Separate from the rebuild, and **not blocked by the firewall.** The backup talks
+only to S3 on port 443, which the lab network already allows; the rebuild needs
+Bolt on 7687, which it does not. So this one can be scheduled today even while
+the rebuild is still waiting on IT.
+
+### First, add the share root to `.env`
+
+The backup mirrors the whole drive, not just `peakFit`, so it needs its own
+setting alongside `SOURCE_ROOT`:
+
+```
+SHARE_ROOT=X:\
+```
+
+Without it the script stops with "Share root not found". You can pass
+`-ShareRoot` instead, but a trailing backslash inside a Task Scheduler command
+string is its own kind of misery. Put it in `.env`.
+
+### Dry run
+
+```powershell
+.\scripts\backup.ps1 -DryRun
+```
+
+Two things to read:
+
+- The `to upload` count. On a share that is already backed up this should say
+  `Nothing to upload.` Anything else is genuinely new since the last run.
+- The `excluded, by the directory that matched:` block. Every entry should be a
+  `_test` or `archive` folder you recognise. The rule matches any directory
+  whose name *contains* those words, so this is where you would notice it
+  quietly catching something you wanted kept.
+
+### Create the task
+
+```powershell
+$Script = "C:\Users\<you>\Documents\cataverse.ai\graph-node\scripts\backup.ps1"
+
+schtasks /Create `
+  /TN "CataVerse S3 backup" `
+  /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$Script`"" `
+  /SC HOURLY /MO 6 `
+  /ST 03:00 `
+  /RL LIMITED `
+  /F
+```
+
+`/ST 03:00` fires it at 03:00, 09:00, 15:00 and 21:00. **Offset it from the
+rebuild** rather than letting both start on the hour together - they both walk
+the whole share, and there is no reason to make them compete for the drive.
+
+### Two things the script handles
+
+**Overlapping runs.** A large upload can outlast the six-hour interval. The
+script takes a lock at `logs\.backup.lock` and exits with code 3 if a previous
+run is still going, rather than starting a second walk of the share. A lock left
+behind by a run that was killed is detected and taken over, so a crash does not
+wedge the schedule permanently.
+
+**Re-runs are free.** Uploading is additive - anything already in the bucket at
+the same size is skipped. An interrupted run costs time, never correctness, so
+there is never anything to repair after a reboot or a dropped connection.
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| 0 | Uploaded, or dry run with nothing wrong |
+| 1 | One or more files failed - read the log |
+| 2 | `S3_BUCKET` unset, or the share is not reachable |
+| 3 | A previous run was still going; this one did nothing |
+
+---
+
 ## 7. Checking on it
 
-Every run writes a timestamped log to `graph-node\logs\`. The most recent:
+Every run of either task writes a timestamped log to `graph-node\logs\`,
+named `rebuild_*.log` or `backup_*.log`. The most recent rebuild:
 
 ```powershell
 cd graph-node
@@ -263,10 +349,16 @@ schtasks /Change /TN "CataVerse graph rebuild" /RI 720
 
 # stop it entirely
 schtasks /Delete /TN "CataVerse graph rebuild" /F
+
+# the backup task - same commands, its own name
+schtasks /Change /TN "CataVerse S3 backup" /RI 720
+schtasks /Delete /TN "CataVerse S3 backup" /F
 ```
 
-Deleting the task has no effect on the graph — it just stops updating. Rebuilds
-can always be run by hand with `.\scripts\rebuild.ps1`.
+Deleting either task is safe. Removing the rebuild just stops the graph
+updating; rebuilds can still be run by hand with `.\scripts\rebuild.ps1`.
+Removing the backup stops new files reaching S3; nothing already uploaded is
+affected, since neither IAM user can delete.
 
 ---
 
