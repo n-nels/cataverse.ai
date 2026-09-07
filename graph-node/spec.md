@@ -574,13 +574,34 @@ fetches it first, to know what exists before requesting any spectra. **Not built
 
 Opened at last, on the `D:` copy. It answers the question §5g had left open.
 
-**The two locations hold different experiments, not duplicates.** For the one
-sample present, `pressureData/nn1120-3_pd_ceo2_004/` has 30 logs and
-`peakFit/nn1120-3_pd_ceo2_004/` has exactly one - run `004-024`, which is absent
-from `pressureData`. Same filename convention, byte-identical header. So
-`pressureLog` is one file kind that can appear under either root, and anything
-reading it has to look in both. Keys mirror the share, so the graph must carry
-the full key rather than deriving it from `base_name`.
+**It is its own instrument stream.** The pressure transducers log continuously
+and independently; nothing about this file comes from the IR pipeline that
+produces the `Carbonyl*` CSVs. It shares only the experiment it belongs to and
+the `base_name` convention that names it. That is why it is its own
+`DataFileType` rather than another product of the peak fit, and it is worth
+keeping in mind when reading the `kind` list on `RawFile`, where it currently
+sits beside five files that *are* peak-fit output.
+
+**Where the files are.** For the one sample on the `D:` copy:
+
+| | Count |
+|---|---|
+| Runs with spectra | 34 |
+| Logs in `pressureData/` | 30 |
+| Logs in `peakFit/` | 1 (run `004-024`) |
+| Runs with a log in **both** | **0** |
+| Runs with no log anywhere | 3 (`025`, `029`, `035`) |
+
+So there is no duplication to reconcile - 31 logs for 34 runs, each in exactly
+one place. Run `024` is a single file sitting under `peakFit/` where every other
+log is under `pressureData/`. The likeliest reading is that it is simply
+misfiled rather than that two locations are both legitimate.
+
+**Recommended, not yet decided:** treat `pressureData/` as the only source of
+truth, and have the loader report a `pressureLog` found anywhere else instead of
+quietly ingesting it. Building dual-root lookup would make a one-file accident
+permanent, and the report would surface the next one. Moving `024` into
+`pressureData/` on the share would close it entirely.
 
 ```
 pressureData/<notebook folder>/<base_name>_pressureLog.csv
@@ -623,10 +644,10 @@ Consequences worth recording:
 - Storing all three derived columns is redundant, but they are the physically
   meaningful axes and recomputing them needs constants the file does not carry.
   They stay.
-- Units are **not** recorded anywhere in the file. `p_mfld` and `p_cell` sit
-  around 0.85; whether that is bar, atm or something else has to come from Nick
-  before `DataColumn.units` can be authored honestly.
-
+- Units are **not** recorded anywhere in the file. Nick confirmed 2026-09-07:
+  `p_mfld` and `p_cell` are both **Torr**. Values around 0.85 Torr put the
+  experiment well under vacuum, which is worth knowing before anyone reads the
+  numbers as bar.
 ### Graph additions — the schema
 
 Pointers and descriptions. No file contents enter the graph.
@@ -712,8 +733,8 @@ The `pressureLog` type can be authored now that a file has been read (see
         id                          role        units      note
         pressureLog.timestamp       index       -          absolute, microsecond
         pressureLog.relative_time_s index       s          since run start
-        pressureLog.p_mfld          measured    UNKNOWN    manifold; 65 levels
-        pressureLog.p_cell          measured    UNKNOWN    cell; finest column
+        pressureLog.p_mfld          measured    Torr       manifold; 65 levels
+        pressureLog.p_cell          measured    Torr       cell; finest column
         pressureLog.amount_adsorbed derived     umol/g     f(p_mfld)
         pressureLog.apparent_conversion derived -          f(p_mfld)
         pressureLog.apparent_coverage   derived -          f(p_mfld)
@@ -725,11 +746,10 @@ Two things this surfaces about the Level 2 design:
   `"fitted" | "measured" | "index" | "provenance"`, and none of them fit a column
   computed per row from another column in the same file. `fitted` would be wrong
   in a way that matters: nothing here was fitted.
-- **`units` cannot be bluffed.** The file records none, and two of the seven
-  columns have no unit anyone has stated. Authoring `UNKNOWN` is the honest
-  placeholder; inventing `bar` would put a wrong number on every future plot
-  axis and nothing downstream would ever contradict it.
-
+- **`units` cannot be bluffed.** The file records none, and the two pressure
+  columns only carry `Torr` because Nick said so. Inventing `bar` would have put
+  a wrong number on every future plot axis, and nothing downstream would ever
+  have contradicted it.
 Six `DataFileType` nodes and perhaps sixty `DataColumn` nodes — they describe
 *formats*, so they do not multiply with experiments.
 
@@ -836,8 +856,8 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ### Open
 
-- The units of `p_mfld` and `p_cell`. The file records none and the values sit
-  around 0.85. Nick has to say; `DataColumn.units` is `UNKNOWN` until he does.
+- Whether the loader should read `pressureLog` from `pressureData/` only and
+  report strays, or accept both roots. See "The pressure log, read" above.
 - Whether Level 2 is authored now, while the file formats are fresh, or when
   the agent work starts. Level 1 does not depend on it.
 

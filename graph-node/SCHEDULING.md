@@ -279,6 +279,44 @@ Exit codes:
 
 ---
 
+## 6c. Doing it in the GUI instead
+
+The `schtasks` commands above and the GUI create the same thing. Use whichever
+you prefer; this is also where you go to *look* at a task later, whichever way
+you made it.
+
+**Opening it:** Start menu, type `Task Scheduler`, open it. Your tasks live in
+`Task Scheduler Library` in the left pane - the top-level folder, not one of the
+Microsoft subfolders.
+
+**Create Task**, in the right-hand Actions pane. Not *Create Basic Task* - the
+basic wizard cannot express "every 6 hours".
+
+| Tab | What to set |
+|---|---|
+| **General** | Name: `CataVerse S3 backup`. Leave **Run only when user is logged on** selected - this is what lets the task see the mapped `X:` drive (see §8). Leave "Run with highest privileges" unchecked; neither task needs admin. |
+| **Triggers** | **New...** → Begin the task: `On a schedule`, `Daily`, Start `03:00`. Tick **Repeat task every:** and type `6 hours` into the box - the dropdown only offers 5/10/15/30/60 minutes and 1 hour, but the field accepts typing. Set **for a duration of:** `Indefinitely`. |
+| **Actions** | **New...** → Action: `Start a program`. Program/script: `powershell.exe`. Add arguments: `-NoProfile -ExecutionPolicy Bypass -File "C:\...\graph-node\scripts\backup.ps1"` - keep the quotes around the path. |
+| **Conditions** | Untick **Stop if the computer switches to battery power** if this is a laptop. Nothing else matters. |
+| **Settings** | Set **If the task is already running, then the following rule applies:** to `Do not start a new instance`. This is the same protection the script's lock file gives, one layer up. |
+
+Click OK. The task appears in the library list.
+
+**Looking at it afterwards.** Select the task; the bottom pane has the detail.
+
+- **Last Run Time** and **Last Run Result** are columns in the top list. `0x0`
+  means success; the exit codes in §6b and §7 map to the others.
+- The **History** tab shows every fire. If it says history is disabled, click
+  **Enable All Tasks History** in the right pane - it is off by default and is
+  worth turning on.
+- **Run** in the right pane fires it immediately, which is the quickest way to
+  confirm a new task actually works rather than waiting for 03:00.
+
+The same steps make the rebuild task; change the name and point the `-File`
+argument at `rebuild.ps1`.
+
+---
+
 ## 7. Checking on it
 
 Every run of either task writes a timestamped log to `graph-node\logs\`,
