@@ -843,9 +843,11 @@ existing coverage test fails until they do, which is the intended behaviour.
 The rebuild reads experiments from the bucket, not the share. `--from-share`
 still works, for when S3 is unreachable or to compare the two.
 
-This removes the last thing the lab firewall was blocking: a rebuild now needs
-S3 on 443 and Aura on 7687, and no share drive at all, so it can run from any
-machine rather than only the one with `X:` mapped.
+This does **not** unblock the lab PC. The firewall blocks 7687, which is Aura,
+and the rebuild still has to write to Aura. What changed is the *share*
+dependency: a rebuild now needs 443 and 7687 and no mapped drive, so it can run
+on any machine that can reach both - which today means the home PC. The firewall
+request goes from blocking to merely desirable.
 
 **How a deletion reaches the graph.** No new mechanism - mark and sweep did not
 care where the sources came from:
