@@ -158,3 +158,56 @@ def test_the_report_names_the_excluded_directories(tmp_path):
     text = backup.render(plan, tmp_path, "some-bucket")
     assert "excluded, by the directory that matched" in text
     assert "_test" in text
+
+
+def test_a_key_with_no_file_on_the_share_is_reported_as_orphaned(tmp_path):
+    """Files deleted upstream leave their objects behind, by design.
+
+    Neither IAM user has DeleteObject, so the bucket keeps what the share loses.
+    That is the point - it is what made three deleted experiments recoverable -
+    but it is only useful if the run says which objects those are.
+    """
+    share = make_share(tmp_path)
+    stored = {
+        "peakFit/nn1120-3_pd_ceo2_004/a_CarbonylPeakArea.csv": StoredObject(
+            key="peakFit/nn1120-3_pd_ceo2_004/a_CarbonylPeakArea.csv", bytes=100
+        ),
+        "peakFit/nn1120-3_pd_ceo2_004/deleted_upstream.csv": StoredObject(
+            key="peakFit/nn1120-3_pd_ceo2_004/deleted_upstream.csv", bytes=4242
+        ),
+    }
+    plan = backup.build_plan(share, stored)
+    assert plan.orphaned == ["peakFit/nn1120-3_pd_ceo2_004/deleted_upstream.csv"]
+    assert plan.orphan_bytes == 4242
+
+
+def test_an_excluded_file_is_not_an_orphan(tmp_path):
+    """It is still on the share; it just is not uploaded. Calling it orphaned
+    would invite deleting a file that exists."""
+    share = make_share(tmp_path)
+    key = "peakFit/_test/ignore_me.csv"
+    plan = backup.build_plan(share, {key: StoredObject(key=key, bytes=50)})
+    assert plan.orphaned == []
+
+
+def test_an_unmounted_root_never_reports_orphans(tmp_path):
+    """The dangerous false positive. If X: is half-mounted, every object under
+    the missing root would otherwise look deleted."""
+    share = make_share(tmp_path)  # has peakFit and OpusConvert_lgRfl only
+    stored = {
+        "pressureData/nb/x_pressureLog.csv": StoredObject(
+            key="pressureData/nb/x_pressureLog.csv", bytes=10
+        )
+    }
+    plan = backup.build_plan(share, stored)
+    assert "pressureData" in plan.missing_roots
+    assert plan.orphaned == []
+
+
+def test_the_report_names_the_orphans_and_says_nothing_is_deleted(tmp_path):
+    share = make_share(tmp_path)
+    key = "peakFit/nn1120-3_pd_ceo2_004/gone.csv"
+    plan = backup.build_plan(share, {key: StoredObject(key=key, bytes=7)})
+    text = backup.render(plan, tmp_path, "some-bucket")
+    assert "no longer on the share" in text
+    assert "Nothing is deleted" in text

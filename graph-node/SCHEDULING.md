@@ -237,6 +237,11 @@ Two things to read:
   `_test` or `archive` folder you recognise. The rule matches any directory
   whose name *contains* those words, so this is where you would notice it
   quietly catching something you wanted kept.
+- The `in the bucket but no longer on the share` block, if there is one. Those
+  are objects whose file has been deleted upstream. Nothing removes them - no
+  key here has `DeleteObject` - so they sit there until you delete them in the
+  S3 console. That is deliberate: it is what makes an accidental deletion
+  recoverable, and it has already been needed once.
 
 ### Create the task
 
