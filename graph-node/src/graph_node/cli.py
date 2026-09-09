@@ -107,7 +107,8 @@ def run_pointers(args, settings: Settings) -> int:
         return 2
 
     print(f"Listing s3://{settings.s3_bucket} ...")
-    stored = s3mod.list_objects(s3mod.client(settings.aws_region), settings.s3_bucket)
+    client = s3mod.client(settings.aws_region, settings.builder_credentials)
+    stored = s3mod.list_objects(client, settings.s3_bucket)
     print(f"  {len(stored)} object(s)")
     print()
 
@@ -196,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     else:
         print(f"Listing s3://{settings.s3_bucket} ...")
-        client = s3mod.client(settings.aws_region)
+        client = s3mod.client(settings.aws_region, settings.builder_credentials)
         listing = s3mod.list_objects(client, settings.s3_bucket)
         store = S3Store(client, settings.s3_bucket, listing)
         print(f"  {len(listing)} object(s)")

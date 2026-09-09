@@ -144,3 +144,49 @@ def test_wholesale_read_failure_refuses_the_rebuild():
     assert message is not None
     assert "299 of 299" in message
     assert systemic_read_failure(100, 299) is not None
+
+
+def _settings(monkeypatch, **env):
+    from graph_node.common.config import Settings
+
+    for name in (
+        "UPLOADER_AWS_ACCESS_KEY_ID", "UPLOADER_AWS_SECRET_ACCESS_KEY",
+        "BUILDER_AWS_ACCESS_KEY_ID", "BUILDER_AWS_SECRET_ACCESS_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("NEO4J_URI", "neo4j+s://x")
+    monkeypatch.setenv("NEO4J_USERNAME", "neo4j")
+    monkeypatch.setenv("NEO4J_PASSWORD", "p")
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    return Settings.from_env(False)
+
+
+def test_one_identity_per_machine_needs_no_named_keys(monkeypatch):
+    """The normal case: a machine that does one job uses the plain pair."""
+    s = _settings(monkeypatch)
+    assert s.uploader_credentials is None
+    assert s.builder_credentials is None
+
+
+def test_a_machine_running_both_jobs_can_hold_both_identities(monkeypatch):
+    """The lab PC, eventually. boto3 reads only one AWS_ACCESS_KEY_ID, so
+    without this the second job would silently borrow the first job's key and
+    fail with AccessDenied on an operation it is entitled to perform."""
+    s = _settings(
+        monkeypatch,
+        UPLOADER_AWS_ACCESS_KEY_ID="AKIAUPLOAD",
+        UPLOADER_AWS_SECRET_ACCESS_KEY="upsecret",
+        BUILDER_AWS_ACCESS_KEY_ID="AKIABUILD",
+        BUILDER_AWS_SECRET_ACCESS_KEY="buildsecret",
+    )
+    assert s.uploader_credentials["aws_access_key_id"] == "AKIAUPLOAD"
+    assert s.builder_credentials["aws_access_key_id"] == "AKIABUILD"
+    assert s.uploader_credentials != s.builder_credentials
+
+
+def test_half_a_named_pair_is_ignored(monkeypatch):
+    """A key with no secret is a typo, not a configuration. Falling back to the
+    plain pair beats constructing a client that cannot authenticate."""
+    s = _settings(monkeypatch, UPLOADER_AWS_ACCESS_KEY_ID="AKIAUPLOAD")
+    assert s.uploader_credentials is None

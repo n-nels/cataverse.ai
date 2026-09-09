@@ -274,7 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    s3 = s3mod.client(settings.aws_region)
+    s3 = s3mod.client(settings.aws_region, settings.uploader_credentials)
     print(f"Listing s3://{settings.s3_bucket} ...")
     stored = s3mod.list_objects(s3, settings.s3_bucket)
     print(f"  {len(stored)} object(s) already there\n")

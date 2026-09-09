@@ -45,11 +45,21 @@ class StoredObject:
     last_modified: str | None = None
 
 
-def client(region: str):
-    """A boto3 S3 client. Credentials come from the environment, not from here."""
+def client(region: str, credentials: dict[str, str] | None = None):
+    """A boto3 S3 client.
+
+    `credentials` is passed explicitly when one machine holds more than one
+    identity. Without it boto3 reads AWS_ACCESS_KEY_ID from the environment,
+    which is right for a machine that does one job.
+
+    boto3 is imported here rather than at module scope on purpose: the TLS
+    trust store has to be installed before botocore builds its SSL context, and
+    importing it at the top of the module would beat `use_system_trust_store()`
+    to it.
+    """
     import boto3
 
-    return boto3.client("s3", region_name=region)
+    return boto3.client("s3", region_name=region, **(credentials or {}))
 
 
 def list_objects(s3, bucket: str, prefix: str = "") -> dict[str, StoredObject]:
