@@ -1,0 +1,124 @@
+# DRAFT - Level 2 of spec.md 5g. Nothing loads this yet.
+#
+# RawFile says where a file is. This says what its columns mean, so a question
+# about a concept can find the column holding it.
+#
+# Columns are read from real objects in the bucket (experiment 004-010,
+# 2026-09-08). Meanings and units are NOT - they need Nick. Every TODO below is
+# a real gap left visible on purpose: a guessed unit ends up on a plot axis and
+# nothing downstream ever contradicts it.
+#
+# `measures` names a ModelParameter already in the graph - one of the six of the
+# pfo_secondary model: k_a, k_p, k_s, q_0, q_e, q_inf.
+#
+# role vocabulary: index | measured | fitted | derived | provenance
+#   `derived` is new. Nothing in the existing set fits a column computed per row
+#   from another column in the same file, and `fitted` would be actively wrong.
+
+file_types:
+
+  # ---------------------------------------------------------------- long files
+  # One row per observation, fixed and known column set.
+
+  - name: CarbonylPeakArea
+    layout: long
+    row_grain: "one row per (spectrum, peak)"
+    description: "Fitted uptake per peak, refit at each time point as data
+                  accumulates. Carries the fit converging, not a final answer."
+    observed: "5,460 rows, 20 peaks, 273 spectra, 6 delta groups"
+    columns:
+      - {name: "File", role: provenance, units: null, definition: "Spectrum this row was fitted from, e.g. delta10.0012."}
+      - {name: "Delta_Group", role: index, units: null, definition: "TODO - what defines a delta group?"}
+      - {name: "Peak_Name", role: index, units: null, definition: "Peak identity: Peak_1975 and friends, plus monomer_sum and cluster_sum."}
+      - {name: "Peak_Center", role: measured, units: "cm-1", definition: "Fitted peak centre."}
+      - {name: "Time (s)", role: index, units: "s", definition: "Elapsed time of this spectrum."}
+      - {name: "Cumulative_Peak_Area", role: measured, units: "a.u.", definition: "TODO"}
+      - {name: "Cumulative_Integral", role: measured, units: "a.u.", definition: "TODO"}
+      - {name: "classification", role: provenance, units: null, definition: "TODO - the only non-empty value seen is continuous."}
+      - {name: "growth_onset_s", role: measured, units: "s", definition: "TODO - empty in every row of the sampled file."}
+      - {name: "pfo-sec_r^2", role: fitted, units: null, definition: "Coefficient of determination for the fit."}
+      - {name: "pfo-sec_rmse", role: fitted, units: "a.u.", definition: "Root mean square error of the fit."}
+      - {name: "pfo-sec_k_a_s-1", role: fitted, units: "s^-1", measures: k_a}
+      - {name: "pfo-sec_k_a_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_a. Empty throughout the sampled file."}
+      - {name: "pfo-sec_q_e_au", role: fitted, units: "a.u.", measures: q_e}
+      - {name: "pfo-sec_q_e_stderr", role: fitted, units: "a.u.", definition: "Standard error on q_e. Empty throughout the sampled file."}
+      - {name: "pfo-sec_k_s_s-1", role: fitted, units: "s^-1", measures: k_s}
+      - {name: "pfo-sec_k_s_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_s. Empty throughout the sampled file."}
+      - {name: "pfo-sec_k_p_s-1", role: fitted, units: "s^-1", measures: k_p}
+      - {name: "pfo-sec_k_p_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_p. Empty throughout the sampled file."}
+      - {name: "pfo-sec_q_inf_au", role: fitted, units: "a.u.", measures: q_inf}
+      - {name: "pfo-sec_q_inf_stderr", role: fitted, units: "a.u.", definition: "Standard error on q_inf. Empty throughout the sampled file."}
+      - {name: "pfo-sec_q0_au", role: fitted, units: "a.u.", measures: q_0}
+
+  - name: CarbonylPeakFitParams
+    layout: long
+    row_grain: "one row per (spectrum, peak)"
+    description: "The peak-shape fit itself - position, width, amplitude -
+                  rather than the kinetics fitted on top of it."
+    observed: "4,950 rows, 18 peaks, 275 spectra"
+    columns:
+      - {name: "File", role: provenance, units: null, definition: "Spectrum this row was fitted from."}
+      - {name: "Delta_Group", role: index, units: null, definition: "TODO - as above."}
+      - {name: "Peak_Name", role: index, units: null, definition: "Peak identity."}
+      - {name: "Peak_Value", role: index, units: "cm-1", definition: "Nominal wavenumber of the peak, e.g. 1975."}
+      - {name: "Data_Integral", role: measured, units: "a.u.", definition: "TODO"}
+      - {name: "Time_Delta (s)", role: index, units: "s", definition: "TODO - elapsed time, or interval since the previous spectrum?"}
+      - {name: "Peak_Area", role: fitted, units: "a.u.", definition: "Area under the fitted peak."}
+      - {name: "Center", role: fitted, units: "cm-1", definition: "Fitted centre position."}
+      - {name: "Amplitude", role: fitted, units: "a.u.", definition: "Fitted peak height."}
+      - {name: "Sigma", role: fitted, units: "cm-1", definition: "Gaussian width of the pseudo-Voigt."}
+      - {name: "Gamma", role: fitted, units: "cm-1", definition: "Lorentzian width of the pseudo-Voigt."}
+      - {name: "Y0", role: fitted, units: "a.u.", definition: "Baseline offset. 0.0 throughout the sampled file."}
+      - {name: "fwhm", role: fitted, units: "cm-1", definition: "Full width at half maximum."}
+
+  - name: pressureLog
+    layout: long
+    row_grain: "one row per 5-second instrument sample"
+    description: "Manifold and cell pressure across the whole run, with
+                  adsorption quantities recomputed at each sample. Its own
+                  instrument stream - nothing here comes from the IR pipeline."
+    observed: "109,244 rows over 6.36 days at 5.03 s"
+    columns:
+      - {name: "timestamp", role: index, units: null, definition: "Absolute wall clock, microsecond precision."}
+      - {name: "relative_time_s", role: index, units: "s", definition: "Seconds since the run started."}
+      - {name: "p_mfld", role: measured, units: "Torr", definition: "Manifold pressure. The gauge resolves about 65 levels across a run."}
+      - {name: "p_cell", role: measured, units: "Torr", definition: "Cell pressure. Finest-grained column in the file."}
+      - {name: "amount_adsorbed_umol/g", role: derived, units: "umol/g", definition: "Recomputed from p_mfld on every row."}
+      - {name: "apparent_conversion", role: derived, units: null, definition: "Recomputed from p_mfld on every row."}
+      - {name: "apparent_coverage", role: derived, units: null, definition: "Recomputed from p_mfld on every row."}
+
+  # -------------------------------------------------------------- matrix files
+  # One row per wavenumber, one column per spectrum. The column SET varies by
+  # experiment - 94, 141 and 276 columns seen in three different files - so
+  # these cannot be a fixed list. The repeating columns get a pattern instead.
+
+  - name: CarbonylFitBaseline
+    layout: matrix
+    row_grain: "one row per wavenumber"
+    description: "Fitted baseline under each spectrum, as a wavenumber by
+                  spectrum matrix."
+    observed: "259 rows; 276 columns for 004-010, 94 for 000-004"
+    columns:
+      - {name: "Wavenumber (cm-1)", role: index, units: "cm-1", definition: "The row axis."}
+    column_patterns:
+      - pattern: "delta<group>.<index>"
+        matches: "^delta[0-9]+[.][0-9]+$"
+        role: fitted
+        units: "a.u."
+        definition: "Fitted baseline for one spectrum, named for the spectrum it
+                     came from. One column per spectrum in the run."
+
+  - name: CarbonylFitResidual
+    layout: matrix
+    row_grain: "one row per wavenumber"
+    description: "Fit residual for each spectrum - observed minus fitted - as a
+                  wavenumber by spectrum matrix."
+    observed: "259 rows; 276 columns for 004-010, 94 for 000-004"
+    columns:
+      - {name: "Wavenumber (cm-1)", role: index, units: "cm-1", definition: "The row axis."}
+    column_patterns:
+      - pattern: "delta<group>.<index>"
+        matches: "^delta[0-9]+[.][0-9]+$"
+        role: fitted
+        units: "a.u."
+        definition: "Residual for one spectrum. One column per spectrum."
