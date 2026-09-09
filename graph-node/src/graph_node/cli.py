@@ -90,6 +90,14 @@ def _parser() -> argparse.ArgumentParser:
             "X: mounted."
         ),
     )
+    parser.add_argument(
+        "--no-pointers",
+        action="store_true",
+        help=(
+            "Skip the S3 pointer phase. The rebuild writes RawFile and "
+            "SpectrumSeries by default whenever the source is the bucket."
+        ),
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
 
@@ -172,6 +180,13 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s %(message)s",
     )
+    # The planner asks each label for its stored ids, and Neo4j warns at length
+    # about labels that do not exist yet. That is expected on the run that
+    # introduces one - RawFile printed four paragraphs of it - and it buries the
+    # plan the run exists to show. Kept at DEBUG rather than dropped, since a
+    # genuine typo would show up the same way.
+    if not args.verbose:
+        logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
     # Before any connection: on a network that inspects TLS, Python's bundled
     # certificate authorities do not include the one doing the inspecting.
@@ -182,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.pointers_only:
         return run_pointers(args, settings)
 
+    # Held so the pointer phase reuses it instead of listing the bucket twice.
+    listing = None
     use_share = args.from_share or args.source_root or not settings.s3_bucket
     if use_share:
         root = args.source_root or settings.source_root
@@ -246,14 +263,34 @@ def main(argv: list[str] | None = None) -> int:
 
     knowledge = kbuild.build(ksource.load(args.knowledge_root), intended)
 
+    # A third phase of the same rebuild rather than a separate command.
+    # Pointers attach to Filename nodes, so they must run after the data
+    # phase, and they reuse the listing this run already fetched. Kept apart,
+    # a scheduled rebuild that forgot the second command would leave RawFile
+    # permanently empty with nothing to say so.
+    pointer_graph = None
+    if listing is not None and not args.no_pointers:
+        pointer_graph = pointers.build(
+            listing, known_base_names={e.base_name for e in experiments}
+        )
+        for warning in pointer_graph.warnings:
+            print(f"  {warning}")
+        print()
+
     with driver_session(settings) as session:
         result = plan.plan(session, intended, DATA)
         print(plan.render(result, intended, DATA))
         print()
         knowledge_result = plan.plan(session, knowledge, KNOWLEDGE)
         print(plan.render(knowledge_result, knowledge, KNOWLEDGE))
+        if pointer_graph is not None:
+            print()
+            pointer_result = plan.plan(session, pointer_graph, POINTERS)
+            print(plan.render(pointer_result, pointer_graph, POINTERS))
 
     safe = result.is_safe_to_apply and knowledge_result.is_safe_to_apply
+    if pointer_graph is not None:
+        safe = safe and pointer_result.is_safe_to_apply
 
     if not args.apply:
         print("\nDry run. Nothing was written. Pass --apply to write.")
@@ -288,12 +325,28 @@ def main(argv: list[str] | None = None) -> int:
             )
             print("\nApplied: knowledge")
             print(knowledge_outcome.summary())
+
+            if pointer_graph is not None:
+                pointer_outcome = apply_module.apply(
+                    session,
+                    pointer_graph,
+                    POINTERS,
+                    run_id=run_id,
+                    allow_mass_deletion=args.allow_mass_deletion,
+                    extra_node_labels={n.id: n.label for n in intended.nodes},
+                )
+                print("")
+                print("Applied: pointers")
+                print(pointer_outcome.summary())
     except apply_module.RefusedError as exc:
         print(f"\nRefused: {exc}")
         return 1
 
+    outcomes = [data_outcome, knowledge_outcome]
+    if pointer_graph is not None:
+        outcomes.append(pointer_outcome)
     aborted = [
-        o for o in (data_outcome, knowledge_outcome) if o.sweep and o.sweep.aborted
+        o for o in outcomes if o.sweep and o.sweep.aborted
     ]
     return 1 if aborted else 0
 
