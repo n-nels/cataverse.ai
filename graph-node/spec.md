@@ -791,8 +791,60 @@ Two things this surfaces about the Level 2 design:
   columns only carry `Torr` because Nick said so. Inventing `bar` would have put
   a wrong number on every future plot axis, and nothing downstream would ever
   have contradicted it.
-Six `DataFileType` nodes and perhaps sixty `DataColumn` nodes — they describe
-*formats*, so they do not multiply with experiments.
+**Inventoried against real files, 2026-09-08.** Five `DataFileType` nodes, 46
+`DataColumn` nodes and 6 `MEASURES` edges - they describe *formats*, so they do
+not multiply with experiments. The draft is
+`knowledge/data_file_types.draft.yaml`.
+
+| Type | Layout | Columns | Rows |
+|---|---|---|---|
+| `CarbonylPeakArea` | long | 22 | 5,460 |
+| `CarbonylPeakFitParams` | long | 13 | 4,950 |
+| `pressureLog` | long | 7 | 109,244 |
+| `CarbonylFitBaseline` | **matrix** | 1 + N | 259 |
+| `CarbonylFitResidual` | **matrix** | 1 + N | 259 |
+
+**Two of the five are matrices, which the design above could not express.**
+`CarbonylFitBaseline` and `CarbonylFitResidual` are one row per wavenumber and
+one *column per spectrum*, named `delta<group>.<index>`. The column set is not
+fixed: 276 columns for experiment 004-010, 141 for 000-003, 94 for 000-004.
+`HAS_COLUMN` to an enumerated list cannot describe that, and enumerating them
+would put thousands of per-experiment `DataColumn` nodes into what is supposed
+to be a description of formats.
+
+So `DataFileType` gains `layout` (`long` | `matrix`), and a matrix type
+describes its repeating columns with a pattern rather than a name:
+
+```
+(:DataFileType {name: "CarbonylFitResidual", layout: "matrix"})
+    -[:HAS_COLUMN]-->  (:DataColumn {name: "Wavenumber (cm-1)", role: "index"})
+    -[:HAS_COLUMN]-->  (:DataColumn {pattern: "delta<group>.<index>",
+                                     matches: "^delta[0-9]+[.][0-9]+$",
+                                     role: "fitted"})
+```
+
+One `DataColumn` either names a column or matches a family of them. Same label,
+because both answer the same question - what is in this file - and a reader
+asking that should not have to know which kind it is getting.
+
+**`role` gains a fourth value, `derived`.** The vocabulary was `fitted |
+measured | index | provenance`, and none of them fit a column computed per row
+from another column in the same file. The three derived columns in `pressureLog`
+are the case; calling them `fitted` would be wrong in a way that matters,
+because nothing was fitted.
+
+**Eight columns have no meaning recorded** and are marked TODO in the draft:
+`Delta_Group` (in two file types), `Cumulative_Peak_Area`,
+`Cumulative_Integral`, `classification`, `growth_onset_s`, `Data_Integral` and
+`Time_Delta (s)`. Guessing them is the one thing not worth doing here - a wrong
+unit reaches a plot axis and nothing downstream ever contradicts it, which is
+exactly how `p_mfld` would have shipped as bar rather than Torr.
+
+A related observation, not yet a decision: every `*_stderr` column in the
+sampled `CarbonylPeakArea` is empty across all 5,460 rows, as is
+`growth_onset_s`. If that holds across files the graph should say so - an agent
+that offers to plot an error bar which is never populated is worse than one
+that knows it cannot.
 
 This is what turns "plot the adsorption rate constant over time" into a named
 column in a named file. `ModelParameter` already holds the definition of `k_a`,
