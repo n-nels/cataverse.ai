@@ -838,6 +838,47 @@ New relationship types: `HAS_RAW_FILE` and `HAS_SPECTRA` in DATA; `OF_TYPE` and
 `common/ownership.py` need updating, and `ids.IDENTITY` gains four labels — the
 existing coverage test fails until they do, which is the intended behaviour.
 
+### S3 is the source of truth - 2026-09-08
+
+The rebuild reads experiments from the bucket, not the share. `--from-share`
+still works, for when S3 is unreachable or to compare the two.
+
+This removes the last thing the lab firewall was blocking: a rebuild now needs
+S3 on 443 and Aura on 7687, and no share drive at all, so it can run from any
+machine rather than only the one with `X:` mapped.
+
+**How a deletion reaches the graph.** No new mechanism - mark and sweep did not
+care where the sources came from:
+
+1. Delete the objects in the S3 console.
+2. The next rebuild lists the bucket, does not see them, does not stamp them.
+3. The sweep deletes exactly what is not stamped.
+
+`_expParams.json` is the object that creates a `Filename` node, so that is the
+one whose removal retires an experiment; `DETACH DELETE` takes its
+`Pretreatment`, `ExpConditions`, `AdsParams` and `RawFile` nodes with it.
+Removing a file from `X:` on its own does nothing - the next backup simply does
+not re-upload it and the object stays. That is one deliberate action instead of
+two, and it keeps `DeleteObject` off every programmatic key.
+
+**`data/store.py`** holds the two implementations. Both return the same
+`relative` path shape, so the exclusion rules do not know which they are
+looking at - and a test asserts the two enumerate identically, because a
+difference between them would surface as a sweep rather than as an error.
+
+**A guard the first run earned.** Pointed at S3 with the write-only uploader
+key, all 299 sources failed `GetObject`. Nothing was built, so the plan offered
+to **delete all 2,179 nodes** - and called itself applyable. The sweep's own
+20% threshold would have aborted it, but the dry run had already printed a plan
+worth applying, and that is the failure: a guard behind another guard is not the
+same as one guard.
+
+So `UNREADABLE_SOURCE_THRESHOLD` sits beside `MASS_DELETION_THRESHOLD`. A few
+unreadable files stay a warning - a corrupt file is real and its experiment
+should leave the graph. More than 20% is not a few bad files; it is the source
+itself, and the rebuild refuses rather than treating unread data as deleted
+data.
+
 ### Knowing what is already uploaded
 
 Re-reading 7 GB every six hours to work out what changed is not an option.

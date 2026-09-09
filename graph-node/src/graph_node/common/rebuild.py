@@ -50,6 +50,38 @@ RUN_PROPERTY = "_run"
 MASS_DELETION_THRESHOLD = 0.20
 
 
+#: Refuse the rebuild if more than this fraction of discovered sources cannot
+#: be read. Sibling of MASS_DELETION_THRESHOLD, and learned the same way.
+#:
+#: A single unreadable file is a warning: the file really is corrupt and its
+#: experiment really should leave the graph. Hundreds at once is not that - it
+#: is credentials, a network, a permission. The distinction matters because an
+#: unreadable source produces no nodes, and no nodes is indistinguishable from
+#: deleted data by the time the sweep runs.
+#:
+#: Observed 2026-09-08: pointed at S3 with a write-only key, all 299 sources
+#: failed GetObject and the plan offered to delete all 2,179 nodes. The sweep
+#: threshold would have caught it, but the dry run had already reported a plan
+#: worth applying. One guard behind another is not the same as one guard.
+UNREADABLE_SOURCE_THRESHOLD = 0.20
+
+
+def systemic_read_failure(unreadable: int, discovered: int) -> str | None:
+    """Why the rebuild should refuse, or None if the failures look isolated."""
+    if not discovered or not unreadable:
+        return None
+    share = unreadable / discovered
+    if share <= UNREADABLE_SOURCE_THRESHOLD:
+        return None
+    return (
+        f"{unreadable} of {discovered} source files could not be read "
+        f"({share:.0%}). That is not a few bad files, it is the source itself - "
+        "credentials, a permission, or the wrong location. Refusing to build a "
+        "graph from what did read, because every experiment that failed would "
+        "be swept as though its data had been deleted."
+    )
+
+
 def new_run_id() -> str:
     """A stamp for one rebuild. Sorts chronologically and reads as a date."""
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

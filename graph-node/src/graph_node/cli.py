@@ -18,10 +18,11 @@ from .common.config import Settings
 from .common import ids
 from .common import s3 as s3mod
 from .common.ownership import DATA, KNOWLEDGE, POINTERS
-from .common.rebuild import new_run_id
+from .common.rebuild import new_run_id, systemic_read_failure
 from .common.tls import use_system_trust_store
 from .data import apply as apply_module
 from .data import build, fits, plan, pointers, source
+from .data.store import LocalStore, S3Store
 from .knowledge import build as kbuild
 from .knowledge import source as ksource
 
@@ -69,6 +70,15 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "Permit the sweep to delete more than 20%% of the data graph. Use "
             "only when the dry run's delete column is what you intend."
+        ),
+    )
+    parser.add_argument(
+        "--from-share",
+        action="store_true",
+        help=(
+            "Read experiments from the share drive instead of S3. S3 is the "
+            "source of truth; use this when the bucket is unreachable, or to "
+            "compare the two."
         ),
     )
     parser.add_argument(
@@ -171,27 +181,45 @@ def main(argv: list[str] | None = None) -> int:
     if args.pointers_only:
         return run_pointers(args, settings)
 
-    root = args.source_root or settings.source_root
+    use_share = args.from_share or args.source_root or not settings.s3_bucket
+    if use_share:
+        root = args.source_root or settings.source_root
+        store = LocalStore(root)
+        if not store.exists():
+            print(
+                f"Source root does not exist: {root}. Point --source-root at "
+                "a directory of *_expParams.json files, or set SOURCE_ROOT in "
+                ".env. On a machine without the share drive mounted, the "
+                "peakFit folder will not be there.",
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        print(f"Listing s3://{settings.s3_bucket} ...")
+        client = s3mod.client(settings.aws_region)
+        listing = s3mod.list_objects(client, settings.s3_bucket)
+        store = S3Store(client, settings.s3_bucket, listing)
+        print(f"  {len(listing)} object(s)")
+        if not store.exists():
+            # A rebuild deletes whatever its source does not account for, so
+            # an empty listing would sweep the entire graph. Far likelier to
+            # be a credentials or region problem than an empty bucket.
+            print(
+                "The bucket listing came back empty. Refusing to rebuild "
+                "from it - that would sweep the whole graph.",
+                file=sys.stderr,
+            )
+            return 2
 
-    if not root.exists():
-        print(
-            f"Source root does not exist: {root}\n"
-            "Point --source-root at a directory of *_expParams.json files, or "
-            "set SOURCE_ROOT in .env. On a machine without the share drive "
-            "mounted, X:\\peakFit will not be there.",
-            file=sys.stderr,
-        )
-        return 2
-
-    found = source.discover(root)
+    found = source.discover(store)
     paths = found.included
-    print(f"Found {len(paths)} experiment file(s) under {root}")
+    print(f"Found {len(paths)} experiment file(s) in {store.describe()}")
     if found.excluded:
         # Reported, not silent: an excluded file is a node the sweep will
         # delete, so it has to be visible before --apply, not after.
         print(f"Excluded {len(found.excluded)}:")
-        for path, reason in found.excluded[:10]:
-            print(f"    {path.name} - {reason}")
+        for ref, reason in found.excluded[:10]:
+            print(f"    {ref.name} - {reason}")
         if len(found.excluded) > 10:
             print(f"    ... and {len(found.excluded) - 10} more")
     print()
@@ -200,17 +228,20 @@ def main(argv: list[str] | None = None) -> int:
 
     experiments = []
     unreadable: list[str] = []
-    for path in paths:
+    for ref in paths:
         try:
-            experiments.append(source.load(path))
+            experiments.append(source.load(ref, store))
         except source.SourceError as exc:
             unreadable.append(str(exc))
 
-    adsparams = fits.load_all([e.base_name for e in experiments], root)
+    adsparams = fits.load_all([e.base_name for e in experiments], store)
     print(f"Found fit CSVs for {len(adsparams)} of {len(experiments)} experiment(s)\n")
 
     intended = build.build(experiments, adsparams=adsparams)
     intended.warnings.extend(f"unreadable: {u}" for u in unreadable)
+    systemic = systemic_read_failure(len(unreadable), len(paths))
+    if systemic:
+        intended.errors.append(systemic)
 
     knowledge = kbuild.build(ksource.load(args.knowledge_root), intended)
 
