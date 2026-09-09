@@ -121,6 +121,12 @@ SOURCE_ROOT=X:\peakFit
 The same values the dashboard and the agent use. If you have `agent-node\.env`
 on that machine already, the first four are identical.
 
+This machine runs the backup, so its S3 key is the **`cataverse-uploader`**
+one - `PutObject` and `ListBucket`, no read, no delete. The rebuild uses a
+different identity (`cataverse-graph-builder`, read-only), so if you ever run
+both on this machine you will need to decide which key lives here; today they
+are on different machines and each holds only what it needs.
+
 ---
 
 ## 4. Install dependencies and check it works
