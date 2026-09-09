@@ -5,54 +5,56 @@ it is read out of the live database, so anything typed here is lost on the
 next run and wrong in the meantime.
 
 - instance: `f06d430d...` 
-- generated: 2026-09-07 18:39 UTC
-- nodes: 2,214
+- generated: 2026-09-09 05:04 UTC
+- nodes: 3,902
 
 ## Labels
 
 | Label | Nodes | Identity property | Owned by |
 |---|---:|---|---|
-| `AdsParams` | 283 | `id` | data |
+| `AdsParams` | 286 | `id` | data |
 | `ChemConcept` | 15 | `name` | knowledge |
 | `ChemSpecies` | 8 | `formula` | knowledge |
-| `ExpConditions` | 294 | `id` | data |
-| `Filename` | 295 | `base_name` | data |
+| `ExpConditions` | 297 | `id` | data |
+| `Filename` | 299 | `base_name` | data |
 | `KineticChain` | 7 | `chain_id` | data |
 | `KineticModel` | 1 | `name` | knowledge |
 | `Material` | 3 | `id` | data |
 | `ModelParameter` | 6 | `id` | knowledge |
-| `Pretreatment` | 1,297 | `id` | data |
+| `Pretreatment` | 1,313 | `id` | data |
 | `PyFunction` | 5 | `name` | knowledge |
-| `RawFile` | 0 | `key` | data |
-| `SpectrumSeries` | 0 | `base_name` | data |
+| `RawFile` | 1,373 | `key` | pointers |
+| `SpectrumSeries` | 289 | `base_name` | pointers |
 
 ## Relationships
 
 | Pattern | Count |
 |---|---:|
-| `(:Filename)-[:CONDUCTED_UNDER]->(:ExpConditions)` | 294 |
-| `(:AdsParams)-[:DELTA_FROM]->(:AdsParams)` | 268 |
-| `(:AdsParams)-[:FIT_BY]->(:KineticModel)` | 283 |
-| `(:Material)-[:HAS_EXPERIMENT]->(:Filename)` | 295 |
-| `(:Filename)-[:HAS_STEP]->(:Pretreatment)` | 1,297 |
+| `(:Filename)-[:CONDUCTED_UNDER]->(:ExpConditions)` | 297 |
+| `(:AdsParams)-[:DELTA_FROM]->(:AdsParams)` | 271 |
+| `(:AdsParams)-[:FIT_BY]->(:KineticModel)` | 286 |
+| `(:Material)-[:HAS_EXPERIMENT]->(:Filename)` | 299 |
+| `(:Filename)-[:HAS_RAW_FILE]->(:RawFile)` | 1,373 |
+| `(:Filename)-[:HAS_SPECTRA]->(:SpectrumSeries)` | 289 |
+| `(:Filename)-[:HAS_STEP]->(:Pretreatment)` | 1,313 |
 | `(:PyFunction)-[:IMPLEMENTS]->(:ChemConcept)` | 12 |
-| `(:AdsParams)-[:INSTANCE_OF]->(:ChemConcept)` | 138 |
-| `(:ExpConditions)-[:INSTANCE_OF]->(:ChemConcept)` | 283 |
-| `(:Filename)-[:INSTANCE_OF]->(:ChemConcept)` | 141 |
-| `(:Pretreatment)-[:INSTANCE_OF]->(:ChemConcept)` | 2,601 |
-| `(:Filename)-[:IN_CHAIN]->(:KineticChain)` | 295 |
-| `(:Filename)-[:NEXT_EXP]->(:Filename)` | 288 |
-| `(:Pretreatment)-[:NEXT_STEP]->(:ExpConditions)` | 292 |
-| `(:Pretreatment)-[:NEXT_STEP]->(:Pretreatment)` | 1,004 |
+| `(:AdsParams)-[:INSTANCE_OF]->(:ChemConcept)` | 139 |
+| `(:ExpConditions)-[:INSTANCE_OF]->(:ChemConcept)` | 286 |
+| `(:Filename)-[:INSTANCE_OF]->(:ChemConcept)` | 142 |
+| `(:Pretreatment)-[:INSTANCE_OF]->(:ChemConcept)` | 2,633 |
+| `(:Filename)-[:IN_CHAIN]->(:KineticChain)` | 299 |
+| `(:Filename)-[:NEXT_EXP]->(:Filename)` | 292 |
+| `(:Pretreatment)-[:NEXT_STEP]->(:ExpConditions)` | 295 |
+| `(:Pretreatment)-[:NEXT_STEP]->(:Pretreatment)` | 1,016 |
 | `(:ModelParameter)-[:PARAMETER_OF]->(:KineticModel)` | 6 |
-| `(:Filename)-[:RELATIVE_TO]->(:Filename)` | 276 |
+| `(:Filename)-[:RELATIVE_TO]->(:Filename)` | 280 |
 | `(:ChemConcept)-[:SUBTYPE_OF]->(:ChemConcept)` | 8 |
 | `(:ChemConcept)-[:USES_SPECIES]->(:ChemSpecies)` | 12 |
-| `(:ExpConditions)-[:YIELDS]->(:AdsParams)` | 283 |
+| `(:ExpConditions)-[:YIELDS]->(:AdsParams)` | 286 |
 
 ## Properties
 
-### AdsParams  (283 nodes)
+### AdsParams  (286 nodes)
 
 | Property | Type | |
 |---|---|---|
@@ -87,7 +89,7 @@ next run and wrong in the meantime.
 | `formula` | STRING NOT NULL | identity - MERGE matches on this |
 | `role` | LIST<STRING NOT NULL> NOT NULL |  |
 
-### ExpConditions  (294 nodes)
+### ExpConditions  (297 nodes)
 
 | Property | Type | |
 |---|---|---|
@@ -100,7 +102,7 @@ next run and wrong in the meantime.
 | `pressure_meas_mfld` | FLOAT NOT NULL |  |
 | `temp` | FLOAT NOT NULL |  |
 
-### Filename  (295 nodes)
+### Filename  (299 nodes)
 
 | Property | Type | |
 |---|---|---|
@@ -160,7 +162,7 @@ next run and wrong in the meantime.
 | `quantity_kind` | STRING NOT NULL |  |
 | `units` | STRING NOT NULL |  |
 
-### Pretreatment  (1,297 nodes)
+### Pretreatment  (1,313 nodes)
 
 | Property | Type | |
 |---|---|---|
@@ -186,10 +188,26 @@ next run and wrong in the meantime.
 | `parameters_json` | STRING NOT NULL |  |
 | `signature` | STRING NOT NULL |  |
 
-## Declared but empty
+### RawFile  (1,373 nodes)
 
-Labels the loaders know about that have no nodes yet - a schema addition that has not been written.
+| Property | Type | |
+|---|---|---|
+| `_run` | STRING NOT NULL | rebuild stamp; anything unstamped is swept |
+| `base_name` | STRING NOT NULL |  |
+| `bytes` | INTEGER NOT NULL |  |
+| `content_type` | STRING NOT NULL |  |
+| `key` | STRING NOT NULL | identity - MERGE matches on this |
+| `kind` | STRING NOT NULL |  |
+| `uploaded_at` | STRING NOT NULL |  |
 
-- `RawFile` (data)
-- `SpectrumSeries` (data)
+### SpectrumSeries  (289 nodes)
+
+| Property | Type | |
+|---|---|---|
+| `_run` | STRING NOT NULL | rebuild stamp; anything unstamped is swept |
+| `base_name` | STRING NOT NULL | identity - MERGE matches on this |
+| `bytes` | INTEGER NOT NULL |  |
+| `count` | INTEGER NOT NULL |  |
+| `index_key` | STRING NOT NULL |  |
+| `prefix` | STRING NOT NULL |  |
 
