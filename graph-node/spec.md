@@ -293,7 +293,7 @@ which is what allowed the ported scripts to be deleted.
 ### The exclusions are prospective, not cleanup
 
 Built 2026-09-02. Nothing out of scope is in the graph today - zero `iso`
-experiments, zero `_test` files, all 295 Filenames are `exp_type: adsorption`.
+experiments, zero `_test` files, every Filename is `exp_type: adsorption`.
 That is not because the rules were enforced; it is because `md_to_json.py` only
 ever produced JSON for in-scope experiments, so the scope was implicit in which
 files existed.
@@ -316,43 +316,30 @@ earlier in `dashboard-node/spec.md` as a probable mislabel and never resolved.
 It is now a checkable invariant rather than an observation, and the rebuild
 should assert it. *Owner: Nick — decide whether the flag or the edge is wrong.*
 
-## 5d. First live rebuild — 2026-09-02
+## 5d. Standing procedure for a rebuild
 
-Ran twice. Both runs wrote every data node and deleted nothing.
+The first live rebuild ran 2026-09-02 and took the data graph from 1,840 nodes
+to 2,179, deleting nothing. Current counts are in §3; the before/after is not
+worth keeping.
 
-| | Before | After |
-|---|---|---|
-| Pretreatment | 1,107 | 1,297 |
-| Filename | 249 | 295 |
-| ExpConditions | 238 | 294 |
-| AdsParams | 238 | 283 |
-| KineticChain | 6 | 7 |
-| Material | 2 | 3 |
-| **Total data nodes** | 1,840 | **2,179** |
+**One lesson from it is.** It ran twice, because the first run had a bug:
+`_as_float` coerced `step_index` to `1.0`, which disagreed with the `order`
+property on its own `HAS_STEP` edge and made the dashboard render "step 1.0".
+The fix was one line in `source.py` and a re-run - the database was never edited
+by hand. That is the argument for rebuild over append, exercised on day one, and
+it is why `INTEGER_FIELDS` exists.
 
-Everything §5a and §5b predicted happened: `pressure_meas_g1`/`g2` gone and
-`mfld`/`cell` in their place, the hollow Pretreatment filled in, `is_reference`
-corrected, four months of missing experiments loaded, the third material
-appearing, and six uniqueness constraints created. Knowledge nodes were
-untouched — 35 before, 35 after — so the ownership boundary held under a real
-write.
+The procedure, which has not changed:
 
-**The second run existed because the first had a bug**, and that is the part
-worth remembering. `_as_float` coerced `step_index` to `1.0`, leaving it
-disagreeing with the `order` property on its own `HAS_STEP` edge and making the
-dashboard render "step 1.0". Nothing broke functionally; Cypher compares across
-numeric types. The fix was a one-line change in `source.py` plus a re-run — the
-database was never edited by hand. That is the whole argument for rebuild over
-append, exercised for real on the first day.
-
-### Standing procedure
-
-1. Dry run first, every time. Read the delete column.
-2. `--source-root` must cover the whole of `X:\peakFit`. A subset means the
-   sweep deletes everything the subset does not account for. The 20% guard is a
-   backstop for that mistake, not a substitute for reading the plan.
-3. Verify after. The single most useful check is that `_run` has exactly one
-   distinct value covering every data node - two values means a partial write.
+1. **Dry run first, every time.** Read the delete column.
+2. **The source must be complete.** A partial source means the sweep deletes
+   everything it does not account for. Reading from the bucket makes this
+   harder to get wrong than a `--source-root` subset did, and two guards back
+   it up - the 20% mass-deletion threshold and the unreadable-source threshold
+   (§5g) - but neither is a substitute for reading the plan.
+3. **Verify after.** The single most useful check is that `_run` has exactly one
+   distinct value across every node in a scope. Two values means a partial
+   write.
 
 ## 5e. Knowledge graph port — 2026-09-02
 
@@ -381,7 +368,7 @@ id. Knowledge edges attach to data nodes, so the nodes must exist first.
 
 | | |
 |---|---|
-| Run stamps | One value across 2,179 data and 35 knowledge nodes |
+| Run stamps | One value across every node in a scope |
 | Vocabulary | Reproduces the stored graph exactly: 15/8/5/1/6 nodes, SUBTYPE_OF 8, PARAMETER_OF 6, IMPLEMENTS 12, USES_SPECIES 12 |
 | Pretreatment concepts | 1,297 / 1,297 — the 190-node gap closed |
 | AdsParams `FIT_BY` | 283 / 283 |
@@ -445,7 +432,7 @@ Two lasting consequences:
   the host must be a machine with both share-drive access and that egress. As
   of 2026-09-02 the lab PC has the first and not the second.
 
-## 5g. Raw data on S3 (design 2026-09-02; backup built and run 2026-09-05)
+## 5g. Raw data on S3
 
 ### The decision
 
@@ -640,7 +627,7 @@ of files; it can follow later without changing Level 1.
 
 Roughly 1,400 `RawFile` nodes (five CSV kinds plus pressure logs across ~285
 experiments) and ~300 `SpectrumSeries`, so about 1,700 new nodes. Aura Free
-allows 200,000 and 2,214 are in use.
+allows 200,000, which is far more headroom than this will use.
 
 `prefix` is a *filename* prefix, not a folder. One notebook folder holds every
 experiment for that sample - 5,729 spectra across 35 `base_name`s in the one
@@ -659,57 +646,37 @@ node points at the prefix; `index.json` in S3 carries the per-file detail.
 `kind` is doing real work here: it is what lets a query ask "which experiments
 have a residual file" without opening anything.
 
-#### Built 2026-09-07 - `data/pointers.py`
+#### Level 1, built - `data/pointers.py`
 
-Level 1 node logic, from a bucket listing. Run it with:
+Built from a bucket listing, not from the share, so a pointer cannot promise a
+file that was never uploaded - which is also why reconciling S3 against the
+graph is not a job that needs doing. It opens no object, so `ListBucket` is
+enough.
 
-```
-uv run python -m graph_node.cli --pointers-only            # dry run
-uv run python -m graph_node.cli --pointers-only --apply
-```
-
-Against the live graph and the real bucket: **1,357 `RawFile`, 286
-`SpectrumSeries`**, applying cleanly with no deletions.
-
-**A third scope, `POINTERS`.** Not part of `DATA`, and the sweep is the reason.
-A pointer run writes no Material, Filename or Pretreatment, so if those labels
-were in its scope the first run from a machine without the share would find all
-2,214 of them unstamped and delete the lot. Splitting the scope means each sweep
-can only reach what its own loader wrote. It is also the same provenance rule as
-everywhere else: DATA from the share, KNOWLEDGE from YAML, POINTERS from the
-bucket listing. `HAS_RAW_FILE` and `HAS_SPECTRA` start on a `Filename` and end
-here; POINTERS owns them because POINTERS creates them, exactly as KNOWLEDGE
-owns `INSTANCE_OF`.
-
-**It needs `ListBucket` and nothing else.** No object is opened, so the
-`GetObject` question does not arise until the rebuild itself sources from S3.
-
-**`first_at` and `last_at` are dropped, `index_key` is kept.** Decided
-2026-09-07: build nothing the agent does not need. The two timestamps would have
-cost 289 file reads per run to store something no query asks for, and the
-argument for deriving the same information from the pressure log was wrong
-anyway - the log's duration is the logging window, not the spectra collection
-window, and the two are not the same measurement. `index_key` stays because the
-dashboard needs a file list before it can request anything.
+**A third scope, `POINTERS`, and the sweep is the reason.** A pointer run writes
+no Material, Filename or Pretreatment, so if those labels were in its scope the
+first run from a machine without the share would find every one of them
+unstamped and delete the lot. Splitting the scope means each sweep can only
+reach what its own loader wrote. It is the same provenance rule as everywhere
+else: DATA from the share, KNOWLEDGE from YAML, POINTERS from the listing.
+`HAS_RAW_FILE` and `HAS_SPECTRA` start on a `Filename` and end here; POINTERS
+owns them because POINTERS creates them, exactly as KNOWLEDGE owns
+`INSTANCE_OF`.
 
 **`uploaded_at` replaces `source_mtime`.** A listing knows when S3 accepted an
 object, not when the instrument wrote it. Recording `LastModified` under the
 name `source_mtime` would be a different fact wearing the same label.
 
-**Every object is either modelled or reported.** On the real bucket that
-balances exactly: 3,078 skipped with a named reason + 1,370 modelled + 29,338
-spectra folded into series = 33,786, the listing. A test pins the invariant,
-because a file that is silently neither is how the two stores drift apart
-unnoticed.
+**`first_at` and `last_at` were dropped, `index_key` kept.** Build nothing the
+agent does not need: the two timestamps would have cost 289 file reads a run to
+store what no query asks for. `index_key` stays because a dashboard needs a file
+list before it can request anything - it is still unbuilt, §7.4.
 
-**Eight base names in the bucket have no `Filename` node**, so their files are
-reported rather than modelled:
-
-| Base name | What is there | Reading |
-|---|---|---|
-| `..._000-029`, `..._000-030`, `..._000-032` | the full set of files | Experiments from 2026-08-30 to 09-03. The last rebuild was 09-02 and needs the share, so the graph simply has not caught up. |
-| `..._000-016a00`, `..._000-016b00`, `..._001-022`, `..._004-019` | spectra only | No `expParams`, so no experiment was ever loaded. Likely aborted runs. |
-| `test` | two spectra | `OpusConvert_lgRfl/nn1120-3_pd_ceo2_000/test.0000` and `.0001`. Test data that escaped the `_test` rule, which only examines directory names. |
+**Every object is either modelled or reported**, and a test pins it. A file that
+is silently neither is how the two stores drift apart unnoticed. The report also
+names what it skipped, which is how `OpusConvert_lgRfl/.../test.0000` surfaced:
+test data that escaped the `_test` rule, because that rule only examines
+directory names.
 
 #### Level 2 — what is inside the files (knowledge scope)
 
@@ -758,29 +725,23 @@ Two things this surfaces about the Level 2 design:
   columns only carry `Torr` because Nick said so. Inventing `bar` would have put
   a wrong number on every future plot axis, and nothing downstream would ever
   have contradicted it.
-**Inventoried against real files, 2026-09-08.** Five `DataFileType` nodes, 46
-`DataColumn` nodes and 6 `MEASURES` edges - they describe *formats*, so they do
-not multiply with experiments. The draft is
-`knowledge/data_file_types.draft.yaml`.
+**Authored against every file, not a sample.** `knowledge/data_file_types.yaml`
+is the source; it holds the columns, units, roles and definitions and is not
+repeated here. Two findings from building it shaped the schema above.
 
-| Type | Layout | Columns | Rows |
-|---|---|---|---|
-| `CarbonylPeakArea` | long | 22 | 5,460 |
-| `CarbonylPeakFitParams` | long | 13 | 4,950 |
-| `pressureLog` | long | 7 | 109,244 |
-| `CarbonylFitBaseline` | **matrix** | 1 + N | 259 |
-| `CarbonylFitResidual` | **matrix** | 1 + N | 259 |
+**The column set is not fixed, even for the `long` files.** Reading the header
+of all 287 `CarbonylPeakArea` objects found seven distinct shapes, from 22 to 45
+columns: 21 columns appear in every file and 26 do not. So a `DataColumn`
+carries `optional` and `present_in`. An agent that does not know a column may be
+absent writes a plot that works for one experiment and fails on the next.
 
-**Two of the five are matrices, which the design above could not express.**
-`CarbonylFitBaseline` and `CarbonylFitResidual` are one row per wavenumber and
-one *column per spectrum*, named `delta<group>.<index>`. The column set is not
-fixed: 276 columns for experiment 004-010, 141 for 000-003, 94 for 000-004.
-`HAS_COLUMN` to an enumerated list cannot describe that, and enumerating them
-would put thousands of per-experiment `DataColumn` nodes into what is supposed
-to be a description of formats.
-
-So `DataFileType` gains `layout` (`long` | `matrix`), and a matrix type
-describes its repeating columns with a pattern rather than a name:
+**Two of the five file types are matrices**, which `HAS_COLUMN` to an enumerated
+list could not express. `CarbonylFitBaseline` and `CarbonylFitResidual` are one
+row per wavenumber and one *column per spectrum*, named `delta<group>.<index>`,
+and the set differs by experiment - 94, 141 and 276 columns seen. Enumerating
+them would put thousands of per-experiment nodes into something meant to
+describe formats. So `DataFileType` carries a `layout`, and a matrix type
+describes its repeating columns by pattern:
 
 ```
 (:DataFileType {name: "CarbonylFitResidual", layout: "matrix"})
@@ -792,47 +753,11 @@ describes its repeating columns with a pattern rather than a name:
 
 One `DataColumn` either names a column or matches a family of them. Same label,
 because both answer the same question - what is in this file - and a reader
-asking that should not have to know which kind it is getting.
+should not have to know which kind it is getting.
 
-**`role` gains a fourth value, `derived`.** The vocabulary was `fitted |
-measured | index | provenance`, and none of them fit a column computed per row
-from another column in the same file. The three derived columns in `pressureLog`
-are the case; calling them `fitted` would be wrong in a way that matters,
-because nothing was fitted.
-
-**Eight columns have no meaning recorded** and are marked TODO in the draft:
-`Delta_Group` (in two file types), `Cumulative_Peak_Area`,
-`Cumulative_Integral`, `classification`, `growth_onset_s`, `Data_Integral` and
-`Time_Delta (s)`. Guessing them is the one thing not worth doing here - a wrong
-unit reaches a plot axis and nothing downstream ever contradicts it, which is
-exactly how `p_mfld` would have shipped as bar rather than Torr.
-
-A related observation, not yet a decision: every `*_stderr` column in the
-sampled `CarbonylPeakArea` is empty across all 5,460 rows, as is
-`growth_onset_s`. If that holds across files the graph should say so - an agent
-that offers to plot an error bar which is never populated is worse than one
-that knows it cannot.
-
-This is what turns "plot the adsorption rate constant over time" into a named
-column in a named file. `ModelParameter` already holds the definition of `k_a`,
-so `MEASURES` connects the column a plot needs to the concept a question uses.
-Without it the agent is pattern-matching on column names.
-
-**`pressureLog` is its own `DataFileType` - decided 2026-09-05.** The open
-question was whether pressure should instead be read from the `Pretreatment` and
-`ExpConditions` nodes, which already carry it. It should not. Those nodes hold
-the value from `_expParams.json`, which is the pressure *at the start*, and the
-experiments run for days. The log is a time series; the nodes are a single
-setpoint. They are not two representations of one thing, and a question like
-"did pressure drift during the run" is unanswerable from the nodes alone.
-
-That makes pressure the one quantity living in both stores without duplication:
-the setpoint in the graph, the trace in S3. It is the same split as `AdsParams`
-holding the final fit row while the CSV holds the fit converging.
-
-Its columns are now read and its `DataFileType` is authored below. The two
-share roots that can hold a pressure log are a wrinkle for the loader, not a
-modelling question.
+**`role` gained a fourth value, `derived`:** a column computed per row from
+another column in the same file. `pressureLog` has three. `fitted` would be
+wrong in a way that matters, because nothing was fitted.
 
 **Where each lives.** `RawFile` and `SpectrumSeries` are **data** — derived from
 what is on the share. `DataFileType` and `DataColumn` are **knowledge** —
