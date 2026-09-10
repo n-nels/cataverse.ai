@@ -1030,15 +1030,23 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ## 7. Open questions
 
-1. **Getting the scheduled rebuild running.** Designed and documented (§5f,
-   SCHEDULING.md); blocked on the lab network allowing outbound 7687.
+1. **Scheduling the rebuild.** The backup runs every 6 hours on the lab PC.
+   The rebuild does not run on a schedule anywhere: on the lab PC it still
+   needs outbound 7687, which IT has not opened, and elsewhere it needs a
+   machine that is reliably on. Run by hand from the home PC today.
 2. **Noticing if the scheduled task stops.** A job that dies quietly looks
    exactly like a graph with no new experiments. Every run logs, but nothing
    watches the logs. No design yet.
-3. ~~Loading the raw data.~~ **Designed 2026-09-02 — see §5g.** Everything
-   bulk goes to AWS S3; the graph gains pointers only. Not built: waiting on the
-   AWS account and bucket.
-4. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
+3. ~~Loading the raw data.~~ **Done.** 33,782 objects in S3, and the graph
+   holds 1,373 RawFile and 289 SpectrumSeries pointing at them. The rebuild
+   itself now reads from the bucket rather than the share (§5g).
+4. **Level 2.** Drafted against every file in the bucket
+   (`knowledge/data_file_types.draft.yaml`): 5 DataFileType, 63 columns, 2
+   column patterns, the monomer/cluster peak groups and the 13CO/12CO shift.
+   Not loaded - it needs a loader, ownership and ids entries, and two more
+   KineticModels (`pfo`, `pfo_pre_post`) before `measures` can resolve for
+   anything outside pfo_secondary.
+5. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
    worth having: storing a source hash on each node would let "is the graph
    consistent with its sources?" be answered without rebuilding. Computed in
    `graph-node`, not `orchestration/`, which cannot see the fit CSVs. Deferred
