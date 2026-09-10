@@ -670,7 +670,7 @@ name `source_mtime` would be a different fact wearing the same label.
 **`first_at` and `last_at` were dropped, `index_key` kept.** Build nothing the
 agent does not need: the two timestamps would have cost 289 file reads a run to
 store what no query asks for. `index_key` stays because a dashboard needs a file
-list before it can request anything - it is still unbuilt, §7.4.
+list before it can request anything - it is still unbuilt, §7.5.
 
 **Every object is either modelled or reported**, and a test pins it. A file that
 is silently neither is how the two stores drift apart unnoticed. The report also
@@ -1005,7 +1005,49 @@ accept the drift.
 nobody is looking, and it fails silently - a month-old graph looks exactly like
 a graph with no new experiments. See 7.3.
 
-### 7.3 Noticing when the scheduled task stops
+### 7.3 Keeping S3 in step with the share
+
+**The backup is additive and compares only file size.** That was justified when
+every file was written once by an instrument and never touched again. It no
+longer is - files have been edited by hand since - so the gap is worth stating
+plainly:
+
+| Change on the share | Reaches S3? |
+|---|---|
+| New file | Yes |
+| File edited, size changed | Yes - re-uploaded, overwriting the key |
+| **File edited, size unchanged** | **No. Silently missed.** |
+| File deleted | No. The object stays and is reported as orphaned. |
+| File moved | Uploaded at the new key; the old one stays as an orphan. |
+
+The third row is the one with no signal at all. Deletions and moves at least
+produce an orphan report; a same-size edit produces nothing, and S3 keeps
+serving the old contents. Since the rebuild now reads from the bucket, that
+means the graph would keep serving them too.
+
+**How likely is a same-size edit?** For CSVs of floats, not very - almost any
+real change alters the byte count. But it is not impossible, and "unlikely" is a
+weaker guarantee than the current comment implies.
+
+**Two ways to close it**, in increasing cost:
+
+- **Compare mtime against `LastModified`.** The listing already returns the
+  latter, and `StoredObject` already carries it - the backup just does not look
+  at it. A local file modified after its object was uploaded gets re-uploaded.
+  Costs one `stat` per file, which the walk already does. Catches same-size
+  edits. Its failure mode is spurious re-uploads when a copy resets mtime,
+  which wastes bandwidth and nothing else.
+- **Compare content hashes.** The listing returns an `ETag`, which is an MD5
+  for single-part uploads, so the remote side is free. The local side means
+  reading every file - gigabytes per run. Exact, and the same mechanism as the
+  deferred `verify` capability in §7.6.
+
+Deletion is the other half and is deliberately manual: no IAM identity here can
+delete, so an accidental removal upstream stays recoverable. Closing that would
+mean granting `DeleteObject` to something, which trades a real safety property
+for tidiness - see the orphan reporting in §5g.
+
+### 7.4 Noticing when the scheduled task stops
 
 **Missing, no design.** Every run writes a timestamped log to `graph-node\logs\`
 and Task Scheduler records a Last Run Result. Nothing reads either. A job that
@@ -1015,7 +1057,7 @@ Only matters once 7.2 exists. The cheap version is a habit rather than code:
 when cataverse.ai does not show an experiment you know finished, read the newest
 file in `logs\` before suspecting anything else.
 
-### 7.4 `index.json` for spectrum series
+### 7.5 `index.json` for spectrum series
 
 **Missing.** `SpectrumSeries.index_key` names an object that does not exist. It
 would hold the per-spectrum timestamps parsed from `OpusReadParams/<base>.txt`,
@@ -1027,14 +1069,14 @@ extra phase in the rebuild. An hour or two.
 **Workable substitute meanwhile:** `ListObjectsV2` with the series prefix
 returns the file list, just without timestamps.
 
-### 7.5 Hashing, as a `verify` capability
+### 7.6 Hashing, as a `verify` capability
 
 Deferred by Nick 2026-09-02 and still sensible. Storing a source hash on each
 node would answer "is the graph consistent with its sources?" without
 rebuilding. Cheaper now than it was: the bucket listing returns an `ETag`, which
 is an MD5 for single-part uploads, so the hash no longer has to be computed.
 
-### 7.6 Small and genuinely optional
+### 7.7 Small and genuinely optional
 
 - **One orphaned S3 object** to delete by hand in the console:
   `peakFit/nn1120-3_pd_ceo2_004/20260522_210041_pd_ceo2_004-024_pressureLog.csv`.

@@ -114,9 +114,15 @@ class Plan:
 def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
     """Compare the share against the bucket. Reads no file contents.
 
-    Size is the only comparison. Every file here is written once by an
-    instrument and never edited, so a same-size file is the same file. Hashing
-    would mean reading ~5 GB on every run to learn nothing.
+    Size is the only comparison, which has one known hole: a file edited in
+    place without changing its byte count is not noticed, and S3 keeps serving
+    the old contents. The original justification - written once by an
+    instrument, never edited - stopped being true once files were edited by
+    hand. See spec.md 7.3 for the two ways to close it; the listing already
+    returns both `LastModified` and an `ETag`, so the remote half costs nothing.
+
+    Hashing the local half would mean reading gigabytes each run, which is why
+    it is not the default.
     """
     plan = Plan()
     #: Every path found on the share, excluded or not. An excluded file still
