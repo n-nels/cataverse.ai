@@ -115,22 +115,12 @@ file_types:
       - {name: "post_pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "26/287", definition: "PFO initial capacity after growth onset."}
       - {name: "post_r2", role: fitted, units: null, optional: true, present_in: "26/287", definition: "Coefficient of determination for the post-onset fit."}
 
-      # --- a SECOND model fitted alongside the one above, not a rename of it.
-      # Checked 2026-09-10 in a file carrying both: the values differ in all 67
-      # rows, k = 1.12e-05 against ka = 3.89e-04, and kd has no counterpart in
-      # the k family at all. One rate constant versus an adsorption/desorption
-      # pair with an equilibrium constant.
+      # --- ka/kd/Keq: deliberately NOT modelled, per Nick 2026-09-10.
       #
-      # Confined to sample 003 and to Jan-Feb 2026: 14 files carry both, 2
-      # carry only this one, and nothing after 2026-02-23 has it.
-      - {name: "pre_pfo_ka_s-1", role: fitted, units: "s^-1", optional: true, present_in: "16/287", definition: "Adsorption rate constant, pre-onset. Part of the ka/kd model, not the k model."}
-      - {name: "pre_pfo_kd_s-1", role: fitted, units: "s^-1", optional: true, present_in: "16/287", definition: "Desorption rate constant, pre-onset. No counterpart in the k family."}
-      - {name: "pre_pfo_Keq_au", role: fitted, units: "a.u.", optional: true, present_in: "16/287", definition: "Equilibrium constant, pre-onset. TODO - units. ka/kd would be dimensionless."}
-      - {name: "pre_pfo_qe_au", role: fitted, units: "a.u.", optional: true, present_in: "16/287", definition: "Equilibrium capacity, pre-onset, of the ka/kd model. Differs in value from pre_pfo_q_e_au - a different fit, not a different spelling."}
-      - {name: "post_pfo_ka_s-1", role: fitted, units: "s^-1", optional: true, present_in: "16/287", definition: "Adsorption rate constant, post-onset."}
-      - {name: "post_pfo_kd_s-1", role: fitted, units: "s^-1", optional: true, present_in: "16/287", definition: "Desorption rate constant, post-onset."}
-      - {name: "post_pfo_Keq_au", role: fitted, units: "a.u.", optional: true, present_in: "16/287", definition: "Equilibrium constant, post-onset. TODO - units."}
-      - {name: "post_pfo_qe_au", role: fitted, units: "a.u.", optional: true, present_in: "16/287", definition: "Equilibrium capacity, post-onset, of the ka/kd model."}
+      # Recorded rather than deleted because 16 files in the bucket still
+      # carry these columns. An agent meeting an undescribed column cannot
+      # tell 'nobody got round to it' from 'this was looked at and dismissed'.
+      # Listed under ignored_columns at the bottom.
 
       # --- absolute quantification, only in a minority of files.
       - {name: "Cumulative_PdCO_mol", role: derived, units: "mol", optional: true, present_in: "29/287", definition: "Cumulative CO on Pd in moles. Derived from isotopic exchange calibration curve, but with large error bars."}
@@ -233,15 +223,18 @@ models_to_add:
     columns: ["pre_pfo_k_s-1", "pre_pfo_q_e_au", "pre_pfo_q0_au", "pre_r2",
               "post_pfo_k_s-1", "post_pfo_q_e_au", "post_pfo_q0_au", "post_r2"]
 
-  - name: pfo_pre_post_ka_kd
-    status: TODO
-    description: "A separate adsorption/desorption model, fitted either side of
-                  growth onset - NOT a rename of pfo_pre_post. In the 14 files
-                  carrying both, the values differ in every row, and kd has no
-                  counterpart in the other family. Confined to sample 003 and to
-                  Jan-Feb 2026; discontinued after 2026-02-23. Whether it is
-                  worth modelling at all is Nick's call - it may simply be an
-                  experiment that was tried and dropped."
-    columns: ["pre_pfo_ka_s-1", "pre_pfo_kd_s-1", "pre_pfo_Keq_au",
+
+# --------------------------------------------------------- ignored columns
+# Present in the data, deliberately not modelled. Not the same as absent:
+# these are decisions, and a decision that leaves no trace gets re-made.
+
+ignored_columns:
+  - columns: ["pre_pfo_ka_s-1", "pre_pfo_kd_s-1", "pre_pfo_Keq_au",
               "pre_pfo_qe_au", "post_pfo_ka_s-1", "post_pfo_kd_s-1",
               "post_pfo_Keq_au", "post_pfo_qe_au"]
+    file_type: CarbonylPeakArea
+    decided: 2026-09-10
+    reason: "A separate adsorption/desorption fit, tried on sample 003 over
+             Jan-Feb 2026 and dropped. Nick removed the columns from 003-113
+             and 003-115 at source; 14 other files still carry them until
+             those are cleaned or the files are left as they are."
