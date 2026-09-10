@@ -6,6 +6,7 @@ rule never fired during development. These tests are the only thing standing
 between a working exclusion and quietly publishing test data.
 """
 
+from datetime import datetime
 from pathlib import Path
 
 from graph_node import backup
@@ -211,3 +212,58 @@ def test_the_report_names_the_orphans_and_says_nothing_is_deleted(tmp_path):
     text = backup.render(plan, tmp_path, "some-bucket")
     assert "no longer on the share" in text
     assert "Nothing is deleted" in text
+
+
+def test_a_same_size_edit_is_re_uploaded(tmp_path):
+    """The hole size alone cannot see, and the reason this comparison exists.
+
+    An edit that preserves the byte count leaves no other trace: no orphan, no
+    error, and S3 goes on serving the old contents to a rebuild that now reads
+    from the bucket.
+    """
+    import os
+
+    share = make_share(tmp_path)
+    key = "peakFit/nn1120-3_pd_ceo2_004/a_CarbonylPeakArea.csv"
+    path = share / "peakFit" / "nn1120-3_pd_ceo2_004" / "a_CarbonylPeakArea.csv"
+    path.write_text("z" * 100)          # same 100 bytes, different content
+    os.utime(path, (1_800_000_000, 1_800_000_000))   # well after the upload
+
+    stored = {key: StoredObject(key=key, bytes=100,
+                                last_modified="2026-09-05T01:00:00+00:00")}
+    plan = backup.build_plan(share, stored)
+    candidate = next(c for c in plan.to_upload if c.key == key)
+    assert candidate.reason == "modified since upload"
+
+
+def test_an_untouched_file_is_not_re_uploaded(tmp_path):
+    """The case that must stay cheap. A file written before its upload is
+    unchanged, and re-sending 2.4 GB nightly would be the obvious way to get
+    this wrong."""
+    import os
+
+    share = make_share(tmp_path)
+    key = "peakFit/nn1120-3_pd_ceo2_004/a_CarbonylPeakArea.csv"
+    path = share / "peakFit" / "nn1120-3_pd_ceo2_004" / "a_CarbonylPeakArea.csv"
+    os.utime(path, (1_600_000_000, 1_600_000_000))   # long before the upload
+
+    stored = {key: StoredObject(key=key, bytes=100,
+                                last_modified="2026-09-05T01:00:00+00:00")}
+    plan = backup.build_plan(share, stored)
+    assert plan.already_present == 1
+    assert not [c for c in plan.to_upload if c.key == key]
+
+
+def test_clock_skew_does_not_re_upload_the_share():
+    """A machine running slightly fast must not re-send everything, for ever."""
+    uploaded = "2026-09-05T01:00:00+00:00"
+    just_after = datetime.fromisoformat(uploaded).timestamp() + 30
+    assert not backup.modified_since_upload(just_after, uploaded)
+    well_after = datetime.fromisoformat(uploaded).timestamp() + 3600
+    assert backup.modified_since_upload(well_after, uploaded)
+
+
+def test_an_unknown_upload_time_is_not_treated_as_a_change():
+    """Absence of evidence. Guessing here would re-upload the whole share."""
+    assert not backup.modified_since_upload(1_800_000_000, None)
+    assert not backup.modified_since_upload(1_800_000_000, "not a timestamp")

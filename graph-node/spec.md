@@ -1005,47 +1005,43 @@ accept the drift.
 nobody is looking, and it fails silently - a month-old graph looks exactly like
 a graph with no new experiments. See 7.3.
 
-### 7.3 Keeping S3 in step with the share
+### 7.3 Keeping S3 in step with the share - half closed
 
-**The backup is additive and compares only file size.** That was justified when
-every file was written once by an instrument and never touched again. It no
-longer is - files have been edited by hand since - so the gap is worth stating
-plainly:
+**Edits now propagate. Deletions still do not, on purpose.**
 
 | Change on the share | Reaches S3? |
 |---|---|
 | New file | Yes |
-| File edited, size changed | Yes - re-uploaded, overwriting the key |
-| **File edited, size unchanged** | **No. Silently missed.** |
-| File deleted | No. The object stays and is reported as orphaned. |
+| Edited, size changed | Yes |
+| Edited, size unchanged | **Yes, since 2026-09-11** - `modified since upload` |
+| Deleted | No. The object stays and is reported as orphaned. |
 | File moved | Uploaded at the new key; the old one stays as an orphan. |
 
-The third row is the one with no signal at all. Deletions and moves at least
-produce an orphan report; a same-size edit produces nothing, and S3 keeps
-serving the old contents. Since the rebuild now reads from the bucket, that
-means the graph would keep serving them too.
+**What changed.** The backup compares modification time as well as size. A file
+is always written before it is uploaded, so in the normal case its mtime is
+earlier than the object's `LastModified` and nothing happens. A file touched
+afterwards is re-uploaded. Both sides were already free: `stat` is called for
+the size anyway, and the listing already returns `LastModified`.
 
-**How likely is a same-size edit?** For CSVs of floats, not very - almost any
-real change alters the byte count. But it is not impossible, and "unlikely" is a
-weaker guarantee than the current comment implies.
+`UPLOAD_CLOCK_TOLERANCE_S` is 60 seconds, and it is the part worth
+understanding. Without it a machine running a minute fast would find every file
+newer than its upload and re-send the entire share, every night, for ever. A
+minute is far more skew than a domain-joined machine should have and far less
+than the gap between an upload and any real later edit.
 
-**Two ways to close it**, in increasing cost:
+An unknown or unparseable upload time is treated as *no change*. Absence of
+evidence is not evidence, and guessing the other way re-uploads everything.
 
-- **Compare mtime against `LastModified`.** The listing already returns the
-  latter, and `StoredObject` already carries it - the backup just does not look
-  at it. A local file modified after its object was uploaded gets re-uploaded.
-  Costs one `stat` per file, which the walk already does. Catches same-size
-  edits. Its failure mode is spurious re-uploads when a copy resets mtime,
-  which wastes bandwidth and nothing else.
-- **Compare content hashes.** The listing returns an `ETag`, which is an MD5
-  for single-part uploads, so the remote side is free. The local side means
-  reading every file - gigabytes per run. Exact, and the same mechanism as the
-  deferred `verify` capability in §7.6.
+**Still open: deletion**, and deliberately. Closing it means granting
+`DeleteObject` to something, which trades away the property that makes an
+accidental removal upstream recoverable - the case that has already come up
+once. The orphan report names the candidates; removing them is a console
+action, taken on purpose.
 
-Deletion is the other half and is deliberately manual: no IAM identity here can
-delete, so an accidental removal upstream stays recoverable. Closing that would
-mean granting `DeleteObject` to something, which trades a real safety property
-for tidiness - see the orphan reporting in §5g.
+**Not closed: content hashing.** mtime catches a file that was written to. It
+does not catch a file whose contents differ with mtime intact, which a restore
+from backup or a careless copy can produce. That needs the hash comparison in
+§7.6.
 
 ### 7.4 Noticing when the scheduled task stops
 
