@@ -1,12 +1,12 @@
 """Write out the schema the database actually has.
 
-Read-only. Generated rather than hand-written, because a hand-written schema
-document is wrong the first time anyone adds a property and nothing ever says
-so. Anything that needs to describe the graph - an agent prompt, a dashboard
-query, a person trying to remember what `pfo_sec_q_inf` is - should start here.
+Read-only, and deliberately not committed anywhere: a file describing the graph
+is stale the moment the graph changes, and the Neo4j browser shows the live
+version. This exists to produce that description on demand - most usefully as
+context for an agent prompt, where a live query is not available.
 
     uv run python -m graph_node.schema            # to stdout
-    uv run python -m graph_node.schema -o SCHEMA.md
+    uv run python -m graph_node.schema -o out.md  # or to a file
 
 What it reports, per label: the identity property that MERGE matches on, which
 loader owns it, how many nodes exist, and every property with its stored type.

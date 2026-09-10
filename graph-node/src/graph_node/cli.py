@@ -314,48 +314,47 @@ def main(argv: list[str] | None = None) -> int:
     if pointer_graph is not None:
         written_labels.update({n.id: n.label for n in pointer_graph.nodes})
     run_id = new_run_id()
+
+    def phase(label, graph, scope, extra=None):
+        """Write one scope and report it.
+
+        A function per phase rather than three inline blocks: the inline
+        version let a print get separated from the assignment it read, which
+        crashed a live apply after the data phase had already been written.
+        Nothing here can use an outcome it did not produce.
+        """
+        outcome = apply_module.apply(
+            session,
+            graph,
+            scope,
+            run_id=run_id,
+            allow_mass_deletion=args.allow_mass_deletion,
+            **({} if extra is None else {'extra_node_labels': extra}),
+        )
+        print()
+        print(f"Applied: {label}")
+        print(outcome.summary())
+        return outcome
+
     try:
         with driver_session(settings) as session:
-            data_outcome = apply_module.apply(
-                session,
-                intended,
-                DATA,
-                run_id=run_id,
-                allow_mass_deletion=args.allow_mass_deletion,
-            )
-            print("\nApplied: data")
-            print(data_outcome.summary())
-
-            print(knowledge_outcome.summary())
-
+            # Order matters. Pointers attach to Filename nodes, and knowledge
+            # attaches to both - OF_TYPE starts on a RawFile - so knowledge
+            # goes last.
+            outcomes = [phase("data", intended, DATA)]
             if pointer_graph is not None:
-                pointer_outcome = apply_module.apply(
-                    session,
-                    pointer_graph,
-                    POINTERS,
-                    run_id=run_id,
-                    allow_mass_deletion=args.allow_mass_deletion,
-                    extra_node_labels={n.id: n.label for n in intended.nodes},
+                outcomes.append(
+                    phase("pointers", pointer_graph, POINTERS,
+                          {n.id: n.label for n in intended.nodes})
                 )
-                print("")
-                print("Applied: pointers")
-                print(pointer_outcome.summary())
-            knowledge_outcome = apply_module.apply(
-                session,
-                knowledge,
-                KNOWLEDGE,
-                run_id=run_id,
-                allow_mass_deletion=args.allow_mass_deletion,
-                extra_node_labels=written_labels,
+            outcomes.append(
+                phase("knowledge", knowledge, KNOWLEDGE, written_labels)
             )
-            print("\nApplied: knowledge")
     except apply_module.RefusedError as exc:
-        print(f"\nRefused: {exc}")
+        print()
+        print(f"Refused: {exc}")
         return 1
 
-    outcomes = [data_outcome, knowledge_outcome]
-    if pointer_graph is not None:
-        outcomes.append(pointer_outcome)
     aborted = [
         o for o in outcomes if o.sweep and o.sweep.aborted
     ]

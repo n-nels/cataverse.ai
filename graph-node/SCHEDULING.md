@@ -173,10 +173,11 @@ Once the dry run looks right, do one real run by hand and check it:
 
 ## 6. Create the scheduled task
 
-Six hours is a reasonable interval: comfortably longer than the fit queue,
-frequent enough that the graph is never far behind, and infrequent enough that
-the logs stay readable. Experiments take three days, so there is no case for
-running it often.
+**Not currently scheduled anywhere** - on the lab PC it needs outbound 7687,
+which is still closed. The interval below is a starting point rather than a
+measured choice: comfortably longer than the fit queue, frequent enough that the
+graph is never far behind. Experiments take three days, so daily is defensible
+too, and the backup settled on daily for the same reason.
 
 Run this in an **Administrator** PowerShell, editing the path:
 
@@ -257,15 +258,18 @@ $Script = "C:\Users\<you>\Documents\cataverse.ai\graph-node\scripts\backup.ps1"
 schtasks /Create `
   /TN "CataVerse S3 backup" `
   /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$Script`"" `
-  /SC HOURLY /MO 6 `
+  /SC DAILY `
   /ST 03:00 `
   /RL LIMITED `
   /F
 ```
 
-`/ST 03:00` fires it at 03:00, 09:00, 15:00 and 21:00. **Offset it from the
-rebuild** rather than letting both start on the hour together - they both walk
-the whole share, and there is no reason to make them compete for the drive.
+`/SC DAILY /ST 03:00` fires it once a night. That is what is actually running
+on the lab PC. Six-hourly was the first guess; daily turned out to be plenty,
+because in steady state almost every file is already in the bucket and the run
+is a walk of the share plus a handful of uploads. **Offset whatever interval you
+pick from the rebuild** - both walk the whole share and there is no reason to
+make them compete for the drive.
 
 ### Two things the script handles
 
@@ -301,12 +305,12 @@ you made it.
 Microsoft subfolders.
 
 **Create Task**, in the right-hand Actions pane. Not *Create Basic Task* - the
-basic wizard cannot express "every 6 hours".
+basic wizard cannot express a sub-daily repeat.
 
 | Tab | What to set |
 |---|---|
 | **General** | Name: `CataVerse S3 backup`. Leave **Run only when user is logged on** selected - this is what lets the task see the mapped `X:` drive (see §8). Leave "Run with highest privileges" unchecked; neither task needs admin. |
-| **Triggers** | **New...** → Begin the task: `On a schedule`, `Daily`, Start `03:00`. Tick **Repeat task every:** and type `6 hours` into the box - the dropdown only offers 5/10/15/30/60 minutes and 1 hour, but the field accepts typing. Set **for a duration of:** `Indefinitely`. |
+| **Triggers** | **New...** → Begin the task: `On a schedule`, `Daily`, Start `03:00`. That is all the backup needs. For a sub-daily interval, tick **Repeat task every:** and type e.g. `6 hours` into the box - the dropdown only offers 5/10/15/30/60 minutes and 1 hour, but the field accepts typing - with **for a duration of:** `Indefinitely`. |
 | **Actions** | **New...** → Action: `Start a program`. Program/script: `powershell.exe`. Add arguments: `-NoProfile -ExecutionPolicy Bypass -File "C:\...\graph-node\scripts\backup.ps1"` - keep the quotes around the path. |
 | **Conditions** | Untick **Stop if the computer switches to battery power** if this is a laptop. Nothing else matters. |
 | **Settings** | Set **If the task is already running, then the following rule applies:** to `Do not start a new instance`. This is the same protection the script's lock file gives, one layer up. |
