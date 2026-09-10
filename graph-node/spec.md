@@ -38,10 +38,11 @@ measured fact.
 
 `DELTA_FROM` is the worked example. It is arithmetic on AdsParams properties
 (`delta_ka = source.pfo_sec_k_a - target.pfo_sec_k_a`, and the same for q_e, k_s,
-k_p, q_inf, q0, time_s) with no knowledge-graph input at all. It currently ships
-in `knowledge.cypher` because that is where it happened to get written, not
-because it belongs there. **Moving it to the data side is the first concrete act
-of separation.** `RELATIVE_TO` comes from the same routine and moves with it.
+k_p, q_inf, q0, time_s) with no knowledge-graph input at all. It shipped in
+`knowledge.cypher` because that is where it happened to get written, not because
+it belonged there; it and `RELATIVE_TO` are owned by DATA now. That was the
+first concrete act of separation, and the reason the boundary is enforced by a
+test rather than by intent.
 
 ### Keeping the line from blurring
 
@@ -53,24 +54,26 @@ So: each loader declares the labels and relationship types it owns, and a test
 fails if it writes anything outside that set. Cheap, and it would have caught
 `DELTA_FROM` on the day it was written.
 
-## 3. Current state (as of 2026-09-02)
+## 3. Current state
 
-The pipeline is complete except for its trigger.
+Complete and applied. 3,979 nodes in Aura as of 2026-09-10, rebuilt from S3 by
+one command. What remains is in §7, and only two items there block anything.
 
 | Piece | Where | State |
 |---|---|---|
-| Per-experiment JSON (`material`, `filename_flags`, `pretreatments`, `exp_conditions`) | `orchestration/src/experiments/session.py` | **Done**, and unchanged by this work. `build_exp_params_payload()` assembles it; `_persist_exp_params_json()` writes it beside the experiment. It is the schema of record — see §5a. |
-| Fit results CSV (`*_CarbonylPeakArea.csv`) | `ir-spectro-node`, analysis + file I/O | **Done**, unchanged. Source of every AdsParams property. |
-| Reading both | `data/source.py`, `data/fits.py` | **Done.** Tested against real files from both ends of the dataset. |
-| Assembling the data graph | `data/build.py`, `data/drift.py` | **Done.** Nodes, edges, kinetic chains, and the §11 reference-drift layer. |
-| Assembling the knowledge graph | `knowledge/source.py`, `knowledge/build.py` | **Done 2026-09-02.** Vocabulary from YAML plus the attachment to data — see §5e. |
-| Deterministic node ids | `common/ids.py` | **Done.** Carried over unchanged from the original pipeline, so a rebuild matches the nodes already stored rather than duplicating them. |
-| Dry run | `data/plan.py` | **Done.** Diffs the intended graph against the database, per scope, writing nothing. |
-| Writing to Neo4j | `common/writer.py`, `data/apply.py` | **Done 2026-09-02.** MERGE on the per-label identity property, stamp, then sweep. Replaced the manual Aura CSV import. |
-| Running it unattended | Windows Task Scheduler, `scripts/rebuild.ps1` | **Designed, not deployed.** No trigger and no change to `orchestration/` — see §5f. Blocked on the lab network allowing outbound 7687. |
+| Per-experiment JSON | `orchestration/src/experiments/session.py` | Unchanged by this work, and the schema of record - see §5a. |
+| Fit results CSV | `ir-spectro-node` | Unchanged. Source of every AdsParams property. |
+| Reading the sources | `data/source.py`, `data/fits.py`, `data/store.py` | From the **bucket**, not the share. `--from-share` remains as a fallback. |
+| The data graph | `data/build.py`, `data/drift.py` | Nodes, edges, kinetic chains, reference drift. |
+| The knowledge graph | `knowledge/source.py`, `knowledge/build.py` | Vocabulary, attachment to data, and Level 2 - see §5e and §5g. |
+| Pointers into S3 | `data/pointers.py` | RawFile and SpectrumSeries, their own sweep scope. |
+| Dry run | `data/plan.py` | Per scope, writing nothing. Always run first. |
+| Writing | `common/writer.py`, `data/apply.py` | MERGE on identity, stamp, sweep. |
+| Backing up the share | `backup.py`, `scripts/backup.ps1` | Nightly on the lab PC. |
+| Running the rebuild unattended | `scripts/rebuild.ps1` | **Not scheduled anywhere.** §7.2. |
 
-Source data root is `X:\peakFit\` (share drive), which is why this does not need
-to live in `orchestration/` — see §4.
+The rebuild needs S3 on 443 and Aura on 7687, and no share drive - so it runs
+wherever both are reachable. The lab PC still cannot reach 7687.
 
 ## 4. Placement
 
@@ -402,11 +405,17 @@ per ExpConditions node - reads as a gap and is not one.
 Decided 2026-09-02. Written up for the machine it runs on in
 [SCHEDULING.md](SCHEDULING.md).
 
-**There is no trigger.** A rebuild reads the share drive and works out what
-changed by comparing; it does not need telling that an experiment finished. So
-Windows Task Scheduler runs it every six hours and `orchestration/` is
-untouched. The lab PC's experiment code keeps knowing nothing about Neo4j, and
-no database problem can reach a running experiment.
+**There is no trigger.** A rebuild enumerates its sources and works out what
+changed by comparing; it does not need telling that an experiment finished. So a
+scheduled run suffices and `orchestration/` is untouched. The lab PC's
+experiment code keeps knowing nothing about Neo4j, and no database problem can
+reach a running experiment.
+
+Two things have changed since this was decided and neither undoes it. The
+sources are now the S3 bucket rather than the share (§5g), so the rebuild no
+longer needs a mapped drive. And **it is still not scheduled anywhere** - see
+§7.2. The argument for scheduling over triggering stands; the scheduling has not
+happened.
 
 Nick's instinct was to trigger from `finalize()` in `orchestration/adsorption.py`
 — which is where the `_expParams.json` is copied to the share drive, so it is
@@ -570,75 +579,33 @@ each spectrum's timestamp, parsed from `OpusReadParams/<base>.txt`. The dashboar
 fetches it first, to know what exists before requesting any spectra. **Not built**
 - it belongs to the graph-pointer work below, not to the backup.
 
-### The pressure log, read 2026-09-07
+### The pressure log
 
-Opened at last, on the `D:` copy. It answers the question §5g had left open.
+**It is its own instrument stream.** The transducers log continuously and
+independently; nothing in this file comes from the IR pipeline that produces the
+`Carbonyl*` CSVs. It shares only the experiment it belongs to and the
+`base_name` convention that names it. That is why it is its own `DataFileType`
+rather than another product of the peak fit - worth remembering when reading the
+`kind` list on `RawFile`, where it sits beside five files that *are* peak-fit
+output.
 
-**It is its own instrument stream.** The pressure transducers log continuously
-and independently; nothing about this file comes from the IR pipeline that
-produces the `Carbonyl*` CSVs. It shares only the experiment it belongs to and
-the `base_name` convention that names it. That is why it is its own
-`DataFileType` rather than another product of the peak fit, and it is worth
-keeping in mind when reading the `kind` list on `RawFile`, where it currently
-sits beside five files that *are* peak-fit output.
+All logs live under `pressureData/`, one per run, and the loader reads nowhere
+else. Not every run has one: of 34 runs with spectra on the sample checked, 31
+had a log.
 
-**Where the files are.** All under `pressureData/`, one file per run. For the
-one sample on the `D:` copy:
+**Runs last days, and the graph holds only the start.** `ExpConditions` carries
+the pressure from `_expParams.json`, which is the value at the beginning; the
+log is a multi-day trace sampled about every 5 seconds. A setpoint and a trace
+are not two representations of one thing, which is the whole reason this is
+modelled separately.
 
-| | Count |
-|---|---|
-| Runs with spectra | 34 |
-| Logs in `pressureData/` | 31 |
-| Runs with no log at all | 3 (`025`, `029`, `035`) |
+**One consequence for plotting.** The three derived columns are recomputed from
+`p_mfld` on every row, so they carry nothing it does not and can be downsampled
+hard. `p_cell` cannot - it is the finest-grained column in the file.
 
-The loader reads `pressureData/` and nowhere else.
-`pressureData/` on the share would close it entirely.
+Columns, units and roles are in `knowledge/data_file_types.yaml`, which is what
+the graph is built from. They are not repeated here.
 
-```
-pressureData/<notebook folder>/<base_name>_pressureLog.csv
-peakFit/<notebook folder>/<base_name>_pressureLog.csv        (occasionally)
-```
-
-**One header across all 30 files**, so the format is stable:
-
-```
-timestamp, p_mfld, p_cell, relative_time_s,
-amount_adsorbed_umol/g, apparent_conversion, apparent_coverage
-```
-
-A representative file (`004-010`):
-
-| | |
-|---|---|
-| rows | 109,244 |
-| duration | 549,341 s = **6.36 days** |
-| cadence | 5.03 s between rows |
-
-That is the concrete form of "experiments run for days", and why a single
-starting pressure on `ExpConditions` cannot stand in for it.
-
-**The three derived columns are a deterministic function of `p_mfld`.**
-`amount_adsorbed_umol/g`, `apparent_conversion` and `apparent_coverage` change on
-exactly the same 20,129 rows that `p_mfld` changes on - not approximately, the
-same set. They are recomputed per row from the manifold pressure and constants,
-so they carry no information `p_mfld` does not.
-
-**`p_mfld` is coarser than it looks.** 65 distinct values across the run against
-`p_cell`'s 628, while both change on roughly the same number of rows (20,129 and
-20,717). That is gauge resolution, not dosing events - an earlier reading of this
-file assumed 65 doses and was wrong.
-
-Consequences worth recording:
-
-- Plotting the derived columns can downsample hard; plotting `p_cell` cannot,
-  since it is the finest-grained thing in the file.
-- Storing all three derived columns is redundant, but they are the physically
-  meaningful axes and recomputing them needs constants the file does not carry.
-  They stay.
-- Units are **not** recorded anywhere in the file. Nick confirmed 2026-09-07:
-  `p_mfld` and `p_cell` are both **Torr**. Values around 0.85 Torr put the
-  experiment well under vacuum, which is worth knowing before anyone reads the
-  numbers as bar.
 ### Graph additions — the schema
 
 Pointers and descriptions. No file contents enter the graph.
