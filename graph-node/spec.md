@@ -1078,27 +1078,82 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ## 7. Open questions
 
-1. **Scheduling the rebuild.** The backup runs every 6 hours on the lab PC.
-   The rebuild does not run on a schedule anywhere: on the lab PC it still
-   needs outbound 7687, which IT has not opened, and elsewhere it needs a
-   machine that is reliably on. Run by hand from the home PC today.
-2. **Noticing if the scheduled task stops.** A job that dies quietly looks
-   exactly like a graph with no new experiments. Every run logs, but nothing
-   watches the logs. No design yet.
-3. ~~Loading the raw data.~~ **Done.** 33,782 objects in S3, and the graph
-   holds 1,373 RawFile and 289 SpectrumSeries pointing at them. The rebuild
-   itself now reads from the bucket rather than the share (§5g).
-4. **Level 2.** Drafted against every file in the bucket
-   (`knowledge/data_file_types.draft.yaml`): 5 DataFileType, 63 columns, 2
-   column patterns, the monomer/cluster peak groups and the 13CO/12CO shift.
-   Not loaded - it needs a loader, ownership and ids entries, and two more
-   KineticModels (`pfo`, `pfo_pre_post`) before `measures` can resolve for
-   anything outside pfo_secondary.
-5. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
-   worth having: storing a source hash on each node would let "is the graph
-   consistent with its sources?" be answered without rebuilding. Computed in
-   `graph-node`, not `orchestration/`, which cannot see the fit CSVs. Deferred
-   by Nick, 2026-09-02.
+Ordered by what actually blocks something. Each says what is missing, what it
+would take, and when it stops being deferrable - so the choice to leave it is a
+choice rather than an oversight.
+
+### 7.1 Presigned URLs - the only item that blocks work
+
+**Missing.** The bucket is private with no public access, deliberately (§5g).
+Nothing outside AWS can read an object. The graph can resolve a question all the
+way to `peakFit/.../x_CarbonylPeakArea.csv` and column `pfo-sec_k_a_s-1`, and
+then nothing can open the file.
+
+**What it takes.** An API route that takes a key, checks the caller is
+authorised, and returns a short-lived signed URL - `generate_presigned_url`,
+minutes not hours. The `cataverse-reader` identity already exists for exactly
+this. An hour or so, most of it deciding where the route lives (`dashboard-node`
+serves the browser; the agent may want its own path).
+
+**When it stops being deferrable.** The moment anything needs a number rather
+than a name. An agent answering "which experiments have a residual file" needs
+nothing; one answering "plot k_a over time" needs this first.
+
+### 7.2 Scheduling the rebuild - degrades quietly
+
+**Missing.** The backup runs nightly on the lab PC. The rebuild runs nowhere on
+a schedule: the lab PC still needs outbound 7687, and the home PC is not
+reliably on. So the graph is a snapshot from whenever it was last run by hand.
+
+**Three ways out**, none blocked on code: get 7687 opened; schedule it on a
+machine that is always on and can reach Aura; or keep running it by hand and
+accept the drift.
+
+**Why this one is worth a reminder.** It is the only item that gets worse while
+nobody is looking, and it fails silently - a month-old graph looks exactly like
+a graph with no new experiments. See 7.3.
+
+### 7.3 Noticing when the scheduled task stops
+
+**Missing, no design.** Every run writes a timestamped log to `graph-node\logs\`
+and Task Scheduler records a Last Run Result. Nothing reads either. A job that
+dies is indistinguishable from a quiet week.
+
+Only matters once 7.2 exists. The cheap version is a habit rather than code:
+when cataverse.ai does not show an experiment you know finished, read the newest
+file in `logs\` before suspecting anything else.
+
+### 7.4 `index.json` for spectrum series
+
+**Missing.** `SpectrumSeries.index_key` names an object that does not exist. It
+would hold the per-spectrum timestamps parsed from `OpusReadParams/<base>.txt`,
+so a browser can know what a series contains before fetching 130 spectra.
+
+**What it takes.** Parse 289 `.txt` files, write 289 small JSON objects, one
+extra phase in the rebuild. An hour or two.
+
+**Workable substitute meanwhile:** `ListObjectsV2` with the series prefix
+returns the file list, just without timestamps.
+
+### 7.5 Hashing, as a `verify` capability
+
+Deferred by Nick 2026-09-02 and still sensible. Storing a source hash on each
+node would answer "is the graph consistent with its sources?" without
+rebuilding. Cheaper now than it was: the bucket listing returns an `ETag`, which
+is an MD5 for single-part uploads, so the hash no longer has to be computed.
+
+### 7.6 Small and genuinely optional
+
+- **One orphaned S3 object** to delete by hand in the console:
+  `peakFit/nn1120-3_pd_ceo2_004/20260522_210041_pd_ceo2_004-024_pressureLog.csv`.
+  Its file moved on the share, and no IAM identity here can delete.
+- **`pfo`'s `q_0`** is marked `fitted: false` by analogy with `pfo_secondary`.
+  Unconfirmed.
+- **`ka`/`kd`/`Keq` columns** still exist in 14 files. Recorded under
+  `ignored_columns` in `data_file_types.yaml`; nothing needs doing unless the
+  files are cleaned.
+- **`Cumulative_PdCO_mol`** is calibrated from isotopic exchange "with large
+  error bars" - worth knowing before anyone plots it as absolute truth.
 
 ## 8. Non-goals for now
 
