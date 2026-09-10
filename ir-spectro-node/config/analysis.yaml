@@ -25,7 +25,7 @@ voigt_fit:
     - 2038
     - 2025
   monomer_peaks_base: # 12CO
-    - 2175
+    - 2175 # remove
     - 2163
     - 2153
     - 2143
@@ -36,15 +36,16 @@ voigt_fit:
     - 2090
     - 2080
     - 2065
-    - 2050
-    - 2038
-    - 2025
-  unknown_peaks_base: # 12CO
+    - 2050 # 1997?
+    - 2038 # 1984?
+    - 2025 # 1971?
+  unknown_peaks_base: # 12CO particle integrate 1948-1878
     - 2246
     - 2226
     - 2206
     - 2196
     - 2186
+   # - 2175 # add
   find_peaks:
     subifg:
       prominence: 0.0003
