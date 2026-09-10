@@ -670,7 +670,7 @@ name `source_mtime` would be a different fact wearing the same label.
 **`first_at` and `last_at` were dropped, `index_key` kept.** Build nothing the
 agent does not need: the two timestamps would have cost 289 file reads a run to
 store what no query asks for. `index_key` stays because a dashboard needs a file
-list before it can request anything - it is still unbuilt, §7.4.
+list before it can request anything - it is still unbuilt, §7.5.
 
 **Every object is either modelled or reported**, and a test pins it. A file that
 is silently neither is how the two stores drift apart unnoticed. The report also
@@ -1005,7 +1005,45 @@ accept the drift.
 nobody is looking, and it fails silently - a month-old graph looks exactly like
 a graph with no new experiments. See 7.3.
 
-### 7.3 Noticing when the scheduled task stops
+### 7.3 Keeping S3 in step with the share - half closed
+
+**Edits now propagate. Deletions still do not, on purpose.**
+
+| Change on the share | Reaches S3? |
+|---|---|
+| New file | Yes |
+| Edited, size changed | Yes |
+| Edited, size unchanged | **Yes, since 2026-09-11** - `modified since upload` |
+| Deleted | No. The object stays and is reported as orphaned. |
+| File moved | Uploaded at the new key; the old one stays as an orphan. |
+
+**What changed.** The backup compares modification time as well as size. A file
+is always written before it is uploaded, so in the normal case its mtime is
+earlier than the object's `LastModified` and nothing happens. A file touched
+afterwards is re-uploaded. Both sides were already free: `stat` is called for
+the size anyway, and the listing already returns `LastModified`.
+
+`UPLOAD_CLOCK_TOLERANCE_S` is 60 seconds, and it is the part worth
+understanding. Without it a machine running a minute fast would find every file
+newer than its upload and re-send the entire share, every night, for ever. A
+minute is far more skew than a domain-joined machine should have and far less
+than the gap between an upload and any real later edit.
+
+An unknown or unparseable upload time is treated as *no change*. Absence of
+evidence is not evidence, and guessing the other way re-uploads everything.
+
+**Still open: deletion**, and deliberately. Closing it means granting
+`DeleteObject` to something, which trades away the property that makes an
+accidental removal upstream recoverable - the case that has already come up
+once. The orphan report names the candidates; removing them is a console
+action, taken on purpose.
+
+**Not closed: content hashing.** mtime catches a file that was written to. It
+does not catch a file whose contents differ with mtime intact, which a restore
+from backup or a careless copy can produce. That needs the hash comparison in
+§7.6.
+
+### 7.4 Noticing when the scheduled task stops
 
 **Missing, no design.** Every run writes a timestamped log to `graph-node\logs\`
 and Task Scheduler records a Last Run Result. Nothing reads either. A job that
@@ -1015,7 +1053,7 @@ Only matters once 7.2 exists. The cheap version is a habit rather than code:
 when cataverse.ai does not show an experiment you know finished, read the newest
 file in `logs\` before suspecting anything else.
 
-### 7.4 `index.json` for spectrum series
+### 7.5 `index.json` for spectrum series
 
 **Missing.** `SpectrumSeries.index_key` names an object that does not exist. It
 would hold the per-spectrum timestamps parsed from `OpusReadParams/<base>.txt`,
@@ -1027,14 +1065,14 @@ extra phase in the rebuild. An hour or two.
 **Workable substitute meanwhile:** `ListObjectsV2` with the series prefix
 returns the file list, just without timestamps.
 
-### 7.5 Hashing, as a `verify` capability
+### 7.6 Hashing, as a `verify` capability
 
 Deferred by Nick 2026-09-02 and still sensible. Storing a source hash on each
 node would answer "is the graph consistent with its sources?" without
 rebuilding. Cheaper now than it was: the bucket listing returns an `ETag`, which
 is an MD5 for single-part uploads, so the hash no longer has to be computed.
 
-### 7.6 Small and genuinely optional
+### 7.7 Small and genuinely optional
 
 - **One orphaned S3 object** to delete by hand in the console:
   `peakFit/nn1120-3_pd_ceo2_004/20260522_210041_pd_ceo2_004-024_pressureLog.csv`.

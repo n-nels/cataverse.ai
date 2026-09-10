@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -43,6 +44,17 @@ UPLOAD_ROOTS = (
     "OpusReadParams",
     "pressureData",
 )
+
+#: How far a local mtime may exceed an object's upload time before the file is
+#: treated as edited.
+#:
+#: A file is always written before it is uploaded, so in the normal case mtime
+#: is comfortably earlier than LastModified. The tolerance exists for clock
+#: skew between the machine running this and S3: without it, a lab PC running a
+#: minute fast would re-upload the entire share every night, for ever. A minute
+#: is far more skew than a domain-joined machine should have, and far less than
+#: the gap between an upload and any real subsequent edit.
+UPLOAD_CLOCK_TOLERANCE_S = 60.0
 
 #: A directory whose name *contains* one of these is skipped, along with
 #: everything beneath it. `_test` is not real data; `archive` is superseded
@@ -69,12 +81,32 @@ def is_excluded(relative: Path) -> str | None:
     return None
 
 
+def modified_since_upload(mtime: float, uploaded_at: str | None) -> bool:
+    """Whether a local file has been touched since its object was written.
+
+    Size alone cannot see an edit that preserves the byte count, and that edit
+    leaves no other trace: no orphan, no error, and S3 keeps serving the old
+    contents to a rebuild that now reads from the bucket.
+
+    Returns False when the upload time is unknown rather than guessing - an
+    unknown timestamp is not evidence of a change, and treating it as one would
+    re-upload the share.
+    """
+    if not uploaded_at:
+        return False
+    try:
+        uploaded = datetime.fromisoformat(uploaded_at).timestamp()
+    except ValueError:
+        return False
+    return mtime > uploaded + UPLOAD_CLOCK_TOLERANCE_S
+
+
 @dataclass
 class Candidate:
     path: Path
     key: str
     bytes: int
-    reason: str  # "new" | "size differs"
+    reason: str  # "new" | "size differs" | "modified since upload"
 
 
 @dataclass
@@ -114,9 +146,18 @@ class Plan:
 def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
     """Compare the share against the bucket. Reads no file contents.
 
-    Size is the only comparison. Every file here is written once by an
-    instrument and never edited, so a same-size file is the same file. Hashing
-    would mean reading ~5 GB on every run to learn nothing.
+    Two comparisons, neither of which opens a file. Size catches most changes.
+    Modification time catches the rest: an edit that preserves the byte count is
+    invisible to size, and leaves no other trace either - no orphan, no error,
+    and S3 goes on serving the old contents to a rebuild that now reads from the
+    bucket.
+
+    Both sides are free. `stat` is already being called for the size, and the
+    bucket listing already returns `LastModified`.
+
+    Content hashing would be exact - the listing returns an `ETag`, an MD5 for
+    single-part uploads - but the local half means reading gigabytes on every
+    run. Deferred; see spec.md 7.6.
     """
     plan = Plan()
     #: Every path found on the share, excluded or not. An excluded file still
@@ -146,13 +187,18 @@ def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
                 continue
 
             key = relative.as_posix()
-            size = path.stat().st_size
+            stat = path.stat()
+            size = stat.st_size
             existing = stored.get(key)
 
             if existing is None:
                 plan.to_upload.append(Candidate(path, key, size, "new"))
             elif existing.bytes != size:
                 plan.to_upload.append(Candidate(path, key, size, "size differs"))
+            elif modified_since_upload(stat.st_mtime, existing.last_modified):
+                plan.to_upload.append(
+                    Candidate(path, key, size, "modified since upload")
+                )
             else:
                 plan.already_present += 1
                 plan.already_bytes += size
@@ -192,6 +238,11 @@ def render(plan: Plan, share_root: Path, bucket: str) -> str:
     lines += [
         "",
         f"already in the bucket : {plan.already_present} file(s), {_human(plan.already_bytes)}",
+        *(
+            [f"    of which re-uploaded because they changed since: "
+             f"{sum(1 for c in plan.to_upload if c.reason != 'new')}"]
+            if any(c.reason != "new" for c in plan.to_upload) else []
+        ),
         f"skipped (excluded)    : {plan.excluded} file(s)",
         f"to upload             : {len(plan.to_upload)} file(s), {_human(plan.upload_bytes)}",
     ]
