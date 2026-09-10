@@ -121,6 +121,12 @@ SOURCE_ROOT=X:\peakFit
 The same values the dashboard and the agent use. If you have `agent-node\.env`
 on that machine already, the first four are identical.
 
+This machine runs the backup, so its S3 key is the **`cataverse-uploader`**
+one - `PutObject` and `ListBucket`, no read, no delete. The rebuild uses a
+different identity (`cataverse-graph-builder`, read-only), so if you ever run
+both on this machine you will need to decide which key lives here; today they
+are on different machines and each holds only what it needs.
+
 ---
 
 ## 4. Install dependencies and check it works
@@ -237,6 +243,11 @@ Two things to read:
   `_test` or `archive` folder you recognise. The rule matches any directory
   whose name *contains* those words, so this is where you would notice it
   quietly catching something you wanted kept.
+- The `in the bucket but no longer on the share` block, if there is one. Those
+  are objects whose file has been deleted upstream. Nothing removes them - no
+  key here has `DeleteObject` - so they sit there until you delete them in the
+  S3 console. That is deliberate: it is what makes an accidental deletion
+  recoverable, and it has already been needed once.
 
 ### Create the task
 
@@ -276,6 +287,44 @@ Exit codes:
 | 1 | One or more files failed - read the log |
 | 2 | `S3_BUCKET` unset, or the share is not reachable |
 | 3 | A previous run was still going; this one did nothing |
+
+---
+
+## 6c. Doing it in the GUI instead
+
+The `schtasks` commands above and the GUI create the same thing. Use whichever
+you prefer; this is also where you go to *look* at a task later, whichever way
+you made it.
+
+**Opening it:** Start menu, type `Task Scheduler`, open it. Your tasks live in
+`Task Scheduler Library` in the left pane - the top-level folder, not one of the
+Microsoft subfolders.
+
+**Create Task**, in the right-hand Actions pane. Not *Create Basic Task* - the
+basic wizard cannot express "every 6 hours".
+
+| Tab | What to set |
+|---|---|
+| **General** | Name: `CataVerse S3 backup`. Leave **Run only when user is logged on** selected - this is what lets the task see the mapped `X:` drive (see §8). Leave "Run with highest privileges" unchecked; neither task needs admin. |
+| **Triggers** | **New...** → Begin the task: `On a schedule`, `Daily`, Start `03:00`. Tick **Repeat task every:** and type `6 hours` into the box - the dropdown only offers 5/10/15/30/60 minutes and 1 hour, but the field accepts typing. Set **for a duration of:** `Indefinitely`. |
+| **Actions** | **New...** → Action: `Start a program`. Program/script: `powershell.exe`. Add arguments: `-NoProfile -ExecutionPolicy Bypass -File "C:\...\graph-node\scripts\backup.ps1"` - keep the quotes around the path. |
+| **Conditions** | Untick **Stop if the computer switches to battery power** if this is a laptop. Nothing else matters. |
+| **Settings** | Set **If the task is already running, then the following rule applies:** to `Do not start a new instance`. This is the same protection the script's lock file gives, one layer up. |
+
+Click OK. The task appears in the library list.
+
+**Looking at it afterwards.** Select the task; the bottom pane has the detail.
+
+- **Last Run Time** and **Last Run Result** are columns in the top list. `0x0`
+  means success; the exit codes in §6b and §7 map to the others.
+- The **History** tab shows every fire. If it says history is disabled, click
+  **Enable All Tasks History** in the right pane - it is off by default and is
+  worth turning on.
+- **Run** in the right pane fires it immediately, which is the quickest way to
+  confirm a new task actually works rather than waiting for 03:00.
+
+The same steps make the rebuild task; change the name and point the `-File`
+argument at `rebuild.ps1`.
 
 ---
 

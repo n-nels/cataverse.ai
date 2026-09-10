@@ -89,6 +89,14 @@ class Plan:
     #: for it before trusting the run.
     excluded_by_directory: dict[str, int] = field(default_factory=dict)
     missing_roots: list[str] = field(default_factory=list)
+    #: Keys in the bucket with no file at the matching path on the share.
+    #:
+    #: Reported, never deleted. Neither IAM user has DeleteObject and that is
+    #: deliberate: an orphan is what a backup looks like when a file is removed
+    #: upstream, which is precisely the case a backup exists for. Automatic
+    #: deletion would turn every accidental removal into a permanent one.
+    orphaned: list[str] = field(default_factory=list)
+    orphan_bytes: int = 0
 
     @property
     def upload_bytes(self) -> int:
@@ -111,6 +119,10 @@ def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
     would mean reading ~5 GB on every run to learn nothing.
     """
     plan = Plan()
+    #: Every path found on the share, excluded or not. An excluded file still
+    #: exists, so its key is not an orphan - only a key with no file at all is.
+    on_share: set[str] = set()
+    roots_present: set[str] = set()
 
     for root_name in UPLOAD_ROOTS:
         root = share_root / root_name
@@ -118,10 +130,12 @@ def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
             plan.missing_roots.append(root_name)
             continue
 
+        roots_present.add(root_name)
         for path in sorted(root.rglob("*")):
             if not path.is_file():
                 continue
             relative = path.relative_to(share_root)
+            on_share.add(relative.as_posix())
             cause = is_excluded(relative)
             if cause:
                 plan.excluded += 1
@@ -142,6 +156,17 @@ def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
             else:
                 plan.already_present += 1
                 plan.already_bytes += size
+
+    # Only roots that were actually walked. If X: is half-mounted, the missing
+    # roots' objects are not orphans - they are unreadable, which is a different
+    # problem and must not be reported as though the data were deleted.
+    for key, obj in sorted(stored.items()):
+        root_name = key.split("/", 1)[0]
+        if root_name not in roots_present:
+            continue
+        if key not in on_share:
+            plan.orphaned.append(key)
+            plan.orphan_bytes += obj.bytes
 
     return plan
 
@@ -177,6 +202,24 @@ def render(plan: Plan, share_root: Path, bucket: str) -> str:
             plan.excluded_by_directory.items(), key=lambda kv: -kv[1]
         ):
             lines.append(f"    {where:<44}{count:>8}")
+
+    if plan.orphaned:
+        lines += [
+            "",
+            f"in the bucket but no longer on the share: {len(plan.orphaned)} "
+            f"object(s), {_human(plan.orphan_bytes)}",
+            "    Nothing is deleted - neither key can. Remove them in the S3",
+            "    console if they are genuinely unwanted.",
+        ]
+        by_base: dict[str, int] = {}
+        for key in plan.orphaned:
+            name = key.rsplit("/", 1)[-1]
+            base = name.split(".")[0] if "." in name else name
+            by_base[base[:40]] = by_base.get(base[:40], 0) + 1
+        for base, count in sorted(by_base.items(), key=lambda kv: -kv[1])[:15]:
+            lines.append(f"    {base:<44}{count:>6}")
+        if len(by_base) > 15:
+            lines.append(f"    ... and {len(by_base) - 15} more")
 
     if plan.missing_roots:
         lines += ["", f"roots not found under {share_root}:"]
@@ -231,7 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    s3 = s3mod.client(settings.aws_region)
+    s3 = s3mod.client(settings.aws_region, settings.uploader_credentials)
     print(f"Listing s3://{settings.s3_bucket} ...")
     stored = s3mod.list_objects(s3, settings.s3_bucket)
     print(f"  {len(stored)} object(s) already there\n")

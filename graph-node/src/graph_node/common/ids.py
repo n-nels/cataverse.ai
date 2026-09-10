@@ -31,6 +31,12 @@ IDENTITY: dict[str, tuple[str, str]] = {
     "ExpConditions": ("id", ""),
     "AdsParams": ("id", ""),
     "KineticChain": ("chain_id", "kc_"),
+    # Pointers into S3. RawFile is keyed on the object key itself, which is
+    # globally unique and already stable, so there is nothing to prefix it
+    # with. SpectrumSeries shares `base_name` with Filename, so it needs its
+    # own prefix to keep the two labels' synthetic ids apart.
+    "RawFile": ("key", ""),
+    "SpectrumSeries": ("base_name", "ss_"),
     # Knowledge. Only ModelParameter carries an `id`; the rest are keyed on
     # their natural name, which is what the YAML authors them by.
     "ChemConcept": ("name", "cc_"),
@@ -38,6 +44,11 @@ IDENTITY: dict[str, tuple[str, str]] = {
     "PyFunction": ("name", "pf_"),
     "KineticModel": ("name", "km_"),
     "ModelParameter": ("id", ""),
+    # Level 2. DataColumn is keyed on `<file type>.<column>` because column
+    # names repeat across types - `File` and `Peak_Name` appear in two.
+    "DataFileType": ("name", "dft_"),
+    "DataColumn": ("id", ""),
+    "PeakGroup": ("name", "pg_"),
 }
 
 
@@ -100,6 +111,15 @@ def chain_id(chain_hash_value: str) -> str:
     return f"kc_{chain_hash_value}"
 
 
+def raw_file_id(key: str) -> str:
+    """The S3 object key is the identity. No prefix, nothing derived."""
+    return key
+
+
+def spectrum_series_id(base_name: str) -> str:
+    return f"ss_{base_name}"
+
+
 def concept_id(name: str) -> str:
     return f"cc_{name}"
 
@@ -118,3 +138,16 @@ def kinetic_model_id(name: str) -> str:
 
 def model_parameter_id(model_name: str, name: str) -> str:
     return f"mp_{model_name}_{name}"
+
+
+def data_file_type_id(name: str) -> str:
+    return f"dft_{name}"
+
+
+def data_column_id(file_type: str, column: str) -> str:
+    """Keyed on the pair. `Peak_Name` alone is not unique across file types."""
+    return f"{file_type}.{column}"
+
+
+def peak_group_id(name: str) -> str:
+    return f"pg_{name}"

@@ -40,13 +40,26 @@ def content_type_for(path: Path) -> str:
 class StoredObject:
     key: str
     bytes: int
+    #: When S3 accepted the object. Optional because the backup's size-only
+    #: comparison never needed it, and its tests construct these by hand.
+    last_modified: str | None = None
 
 
-def client(region: str):
-    """A boto3 S3 client. Credentials come from the environment, not from here."""
+def client(region: str, credentials: dict[str, str] | None = None):
+    """A boto3 S3 client.
+
+    `credentials` is passed explicitly when one machine holds more than one
+    identity. Without it boto3 reads AWS_ACCESS_KEY_ID from the environment,
+    which is right for a machine that does one job.
+
+    boto3 is imported here rather than at module scope on purpose: the TLS
+    trust store has to be installed before botocore builds its SSL context, and
+    importing it at the top of the module would beat `use_system_trust_store()`
+    to it.
+    """
     import boto3
 
-    return boto3.client("s3", region_name=region)
+    return boto3.client("s3", region_name=region, **(credentials or {}))
 
 
 def list_objects(s3, bucket: str, prefix: str = "") -> dict[str, StoredObject]:
@@ -60,7 +73,12 @@ def list_objects(s3, bucket: str, prefix: str = "") -> dict[str, StoredObject]:
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for item in page.get("Contents", []):
-            stored[item["Key"]] = StoredObject(key=item["Key"], bytes=item["Size"])
+            modified = item.get("LastModified")
+            stored[item["Key"]] = StoredObject(
+                key=item["Key"],
+                bytes=item["Size"],
+                last_modified=modified.isoformat() if modified else None,
+            )
     logger.debug("bucket holds %d object(s) under %r", len(stored), prefix)
     return stored
 

@@ -1,55 +1,97 @@
 # KineticModel + ModelParameter seed (§10 of knowledge_graph_instructions.txt).
-# Loaded into a single :KineticModel node and six :ModelParameter nodes,
-# linked by :PARAMETER_OF edges.
+# One :KineticModel node per entry, its :ModelParameter nodes linked by
+# :PARAMETER_OF.
+#
+# The first model is the primary one: FIT_BY attaches every AdsParams to it,
+# because AdsParams holds the pfo-sec columns and nothing else.
+#
+# `pfo` covers three column families in CarbonylPeakArea - pfo_*, pre_pfo_* and
+# post_pfo_*. They are the same equation fitted over different windows, not
+# different models, so they share one set of parameters. Which window a column
+# came from is on the column (`segment`), not on the parameter: splitting them
+# would put two ModelParameters behind one physical quantity and make "the PFO
+# rate constant" ambiguous.
 
-model:
-  name: pfo_secondary
-  description: "PFO with secondary process via coupled ODEs."
-  equations:
-    - "dq/dt = k_a*(q_e - q) - k_s*p"
-    - "dp/dt = k_p*(q - q_inf - p)"
+models:
+  - name: pfo_secondary
+    description: "PFO with secondary process via coupled ODEs."
+    equations:
+      - "dq/dt = k_a*(q_e - q) - k_s*p"
+      - "dp/dt = k_p*(q - q_inf - p)"
+    parameters:
+      - name: k_a
+        role: primary
+        quantity_kind: rate_constant
+        units: "s^-1"
+        definition: "Adsorption rate constant; equivalently the monomer formation
+                     rate constant. Primary process."
+        fitted: true
 
-parameters:
-  - name: k_a
-    role: primary
-    quantity_kind: rate_constant
-    units: "s^-1"
-    definition: "Adsorption rate constant; equivalently the monomer formation
-                 rate constant. Primary process."
-    fitted: true
+      - name: q_e
+        role: primary
+        quantity_kind: capacity
+        units: "a.u."
+        definition: "Equilibrium capacity; equivalently the monomer density capacity; sets the uptake ceiling of the primary process."
+        fitted: true
 
-  - name: q_e
-    role: primary
-    quantity_kind: capacity
-    units: "a.u."
-    definition: "Equilibrium capacity; equivalently the monomer density capacity; sets the uptake ceiling of the primary process."
-    fitted: true
+      - name: k_s
+        role: secondary
+        quantity_kind: rate_constant
+        units: "s^-1"
+        definition: "Secondary process rate constant; how strongly the drainage
+                     state removes mass."
+        fitted: true
 
-  - name: k_s
-    role: secondary
-    quantity_kind: rate_constant
-    units: "s^-1"
-    definition: "Secondary process rate constant; how strongly the drainage
-                 state removes mass."
-    fitted: true
+      - name: k_p
+        role: secondary
+        quantity_kind: rate_constant
+        units: "s^-1"
+        definition: "How quickly the drainage state responds to overshoot above q_inf."
+        fitted: true
 
-  - name: k_p
-    role: secondary
-    quantity_kind: rate_constant
-    units: "s^-1"
-    definition: "How quickly the drainage state responds to overshoot above q_inf."
-    fitted: true
+      - name: q_inf
+        role: secondary
+        quantity_kind: threshold
+        units: "a.u."
+        definition: "Threshold above which drainage activates; long-term or global equilibrium."
+        fitted: true
 
-  - name: q_inf
-    role: secondary
-    quantity_kind: threshold
-    units: "a.u."
-    definition: "Threshold above which drainage activates; long-term or global equilibrium."
-    fitted: true
+      - name: q_0
+        role: initial
+        quantity_kind: capacity
+        units: "a.u."
+        definition: "Initial loading; fixed to the first observed intensity, not fitted."
+        fitted: false
 
-  - name: q_0
-    role: initial
-    quantity_kind: capacity
-    units: "a.u."
-    definition: "Initial loading; fixed to the first observed intensity, not fitted."
-    fitted: false
+  - name: pfo
+    description: "Plain pseudo-first-order uptake. Used for cluster_sum and for
+                  every Peak_Name that is not monomer_sum or one of its
+                  constituent peaks - those use pfo_secondary. Also fitted
+                  separately either side of growth_onset_s where the run is
+                  classified discontinuous; that is the same model over two
+                  windows, carried on the column as `segment`."
+    equations:
+      - "dq/dt = k*(q_e - q)"
+    parameters:
+      - name: k
+        role: primary
+        quantity_kind: rate_constant
+        units: "s^-1"
+        definition: "Pseudo-first-order rate constant. The single rate of the
+                     plain model, with no secondary process."
+        fitted: true
+
+      - name: q_e
+        role: primary
+        quantity_kind: capacity
+        units: "a.u."
+        definition: "Equilibrium capacity; the uptake ceiling the fit approaches."
+        fitted: true
+
+      - name: q_0
+        role: initial
+        quantity_kind: capacity
+        units: "a.u."
+        definition: "Initial loading. TODO - confirm this is fixed to the first
+                     observed intensity as in pfo_secondary, rather than fitted."
+        fitted: false
