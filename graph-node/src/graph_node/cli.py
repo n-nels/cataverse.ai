@@ -261,13 +261,11 @@ def main(argv: list[str] | None = None) -> int:
     if systemic:
         intended.errors.append(systemic)
 
-    knowledge = kbuild.build(ksource.load(args.knowledge_root), intended)
-
-    # A third phase of the same rebuild rather than a separate command.
-    # Pointers attach to Filename nodes, so they must run after the data
-    # phase, and they reuse the listing this run already fetched. Kept apart,
-    # a scheduled rebuild that forgot the second command would leave RawFile
-    # permanently empty with nothing to say so.
+    # A phase of the same rebuild rather than a separate command. Pointers
+    # attach to Filename nodes, so they follow the data phase, and they reuse
+    # the listing this run already fetched. Kept apart, a scheduled rebuild
+    # that forgot the second command would leave RawFile permanently empty
+    # with nothing to say so.
     pointer_graph = None
     if listing is not None and not args.no_pointers:
         pointer_graph = pointers.build(
@@ -277,16 +275,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {warning}")
         print()
 
+    # Knowledge last: OF_TYPE starts on a RawFile, so the pointer graph has
+    # to exist before the knowledge graph can describe what those files are.
+    knowledge = kbuild.build(
+        ksource.load(args.knowledge_root), intended, pointer_graph
+    )
+
     with driver_session(settings) as session:
         result = plan.plan(session, intended, DATA)
         print(plan.render(result, intended, DATA))
         print()
-        knowledge_result = plan.plan(session, knowledge, KNOWLEDGE)
-        print(plan.render(knowledge_result, knowledge, KNOWLEDGE))
         if pointer_graph is not None:
             print()
             pointer_result = plan.plan(session, pointer_graph, POINTERS)
             print(plan.render(pointer_result, pointer_graph, POINTERS))
+
+        knowledge_result = plan.plan(session, knowledge, KNOWLEDGE)
+        print(plan.render(knowledge_result, knowledge, KNOWLEDGE))
 
     safe = result.is_safe_to_apply and knowledge_result.is_safe_to_apply
     if pointer_graph is not None:
@@ -302,6 +307,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # One run id for both halves, and data first: knowledge edges attach to
     # data nodes, so those nodes must exist before the edges reach for them.
+    # Knowledge edges reach into both other scopes - INSTANCE_OF onto data
+    # nodes, OF_TYPE onto RawFile - so the writer needs the labels of
+    # everything the earlier phases wrote.
+    written_labels = {n.id: n.label for n in intended.nodes}
+    if pointer_graph is not None:
+        written_labels.update({n.id: n.label for n in pointer_graph.nodes})
     run_id = new_run_id()
     try:
         with driver_session(settings) as session:
@@ -315,15 +326,6 @@ def main(argv: list[str] | None = None) -> int:
             print("\nApplied: data")
             print(data_outcome.summary())
 
-            knowledge_outcome = apply_module.apply(
-                session,
-                knowledge,
-                KNOWLEDGE,
-                run_id=run_id,
-                allow_mass_deletion=args.allow_mass_deletion,
-                extra_node_labels={n.id: n.label for n in intended.nodes},
-            )
-            print("\nApplied: knowledge")
             print(knowledge_outcome.summary())
 
             if pointer_graph is not None:
@@ -338,6 +340,15 @@ def main(argv: list[str] | None = None) -> int:
                 print("")
                 print("Applied: pointers")
                 print(pointer_outcome.summary())
+            knowledge_outcome = apply_module.apply(
+                session,
+                knowledge,
+                KNOWLEDGE,
+                run_id=run_id,
+                allow_mass_deletion=args.allow_mass_deletion,
+                extra_node_labels=written_labels,
+            )
+            print("\nApplied: knowledge")
     except apply_module.RefusedError as exc:
         print(f"\nRefused: {exc}")
         return 1

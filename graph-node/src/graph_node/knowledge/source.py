@@ -15,7 +15,7 @@ Five files, each described in `original/knowledge_graph_instructions.txt`:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,7 @@ FILES = {
     "py_functions": "py_functions.yaml",
     "model_parameters": "model_parameters.yaml",
     "mappings": "mappings.yaml",
+    "data_file_types": "data_file_types.yaml",
 }
 
 
@@ -45,6 +46,11 @@ class KnowledgeSource:
     model: dict[str, Any]
     parameters: list[dict[str, Any]]
     mappings: dict[str, Any]
+    #: Level 2 - what is inside each file kind the pointers point at.
+    #: Defaulted: a source with no data_file_types.yaml is a knowledge graph
+    #: without Level 2, which is a smaller graph rather than a broken one.
+    file_types: list[dict[str, Any]] = field(default_factory=list)
+    peak_groups: dict[str, Any] = field(default_factory=dict)
 
     @property
     def model_name(self) -> str:
@@ -52,7 +58,7 @@ class KnowledgeSource:
 
 
 def load(root: str | Path | None = None) -> KnowledgeSource:
-    """Read all five files. Raises if any is missing or malformed."""
+    """Read every knowledge file. Raises if any is missing or malformed."""
     root = Path(root) if root is not None else DEFAULT_ROOT
     raw: dict[str, Any] = {}
     for key, filename in FILES.items():
@@ -77,4 +83,6 @@ def load(root: str | Path | None = None) -> KnowledgeSource:
         model=model_file["model"],
         parameters=model_file["parameters"],
         mappings=raw["mappings"] or {},
+        file_types=(raw["data_file_types"] or {}).get("file_types") or [],
+        peak_groups=(raw["data_file_types"] or {}).get("peak_groups") or {},
     )

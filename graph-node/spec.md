@@ -876,6 +876,32 @@ boundary exactly as `INSTANCE_OF` already does, so the knowledge loader owns it.
 This is also the first real piece of the "context graph" (§2): the join between
 measured data and authored meaning.
 
+#### Built 2026-09-10
+
+`knowledge/data_file_types.yaml`, loaded by the knowledge loader. Against the
+live graph: **5 `DataFileType`, 65 `DataColumn`, 3 `PeakGroup`**, with 65
+`HAS_COLUMN`, 6 `MEASURES`, 6 `HAS_GROUP` and **1,373 `OF_TYPE`** - one for
+every RawFile whose kind is described. Applies cleanly, no deletions.
+
+**A third label the sketch above did not have: `PeakGroup`.** Without it Level 2
+gets an agent as far as `CarbonylPeakArea.Cumulative_Peak_Area` and leaves it
+there, because "the monomer band" is not a column - it is a set of `Peak_Name`
+values, summed. Three nodes carry the sets and both isotope numberings, so a
+question asked in 12CO terms finds the 13CO peaks the data actually holds.
+
+**`role` gained `derived`** and `DataFileType` gained `layout`, as designed
+above. A matrix type's repeating columns are one `DataColumn` carrying a
+`pattern` and a `matches` regex rather than a name.
+
+**The phases were reordered: data, pointers, knowledge.** `OF_TYPE` starts on a
+`RawFile`, so the pointer graph has to exist before the knowledge graph can
+describe what those files are. Knowledge now runs last and receives the labels
+of everything the earlier phases wrote, since its edges reach into both.
+
+Two things are reported rather than dropped, both being ways a join can go
+quietly missing: a `measures` naming a parameter no model defines, and a
+`RawFile` kind no `DataFileType` describes.
+
 #### Identity and ownership
 
 | Label | Identity property | Scope |

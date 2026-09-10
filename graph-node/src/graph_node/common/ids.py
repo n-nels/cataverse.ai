@@ -44,6 +44,11 @@ IDENTITY: dict[str, tuple[str, str]] = {
     "PyFunction": ("name", "pf_"),
     "KineticModel": ("name", "km_"),
     "ModelParameter": ("id", ""),
+    # Level 2. DataColumn is keyed on `<file type>.<column>` because column
+    # names repeat across types - `File` and `Peak_Name` appear in two.
+    "DataFileType": ("name", "dft_"),
+    "DataColumn": ("id", ""),
+    "PeakGroup": ("name", "pg_"),
 }
 
 
@@ -133,3 +138,16 @@ def kinetic_model_id(name: str) -> str:
 
 def model_parameter_id(model_name: str, name: str) -> str:
     return f"mp_{model_name}_{name}"
+
+
+def data_file_type_id(name: str) -> str:
+    return f"dft_{name}"
+
+
+def data_column_id(file_type: str, column: str) -> str:
+    """Keyed on the pair. `Peak_Name` alone is not unique across file types."""
+    return f"{file_type}.{column}"
+
+
+def peak_group_id(name: str) -> str:
+    return f"pg_{name}"

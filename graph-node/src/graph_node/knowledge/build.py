@@ -237,7 +237,142 @@ def _attach_to_data(
     return edges, dict(fired), warnings
 
 
-def build(source: KnowledgeSource, data: IntendedGraph) -> IntendedGraph:
+def _build_file_types(
+    source: KnowledgeSource, pointers: IntendedGraph | None
+) -> tuple[list[Node], list[Edge], list[str]]:
+    """Level 2: what is inside the files the pointers point at.
+
+    Formats, not experiments, so these do not multiply as runs accumulate.
+
+    Two kinds of DataColumn. A named one describes a column that is always
+    called the same thing. A pattern one describes a family: the fit matrices
+    carry one column per spectrum, and their column set differs between
+    experiments, so there is no list to enumerate that would still be true for
+    the next file.
+    """
+    nodes: list[Node] = []
+    edges: list[Edge] = []
+    warnings: list[str] = []
+
+    known_parameters = {p["name"] for p in source.parameters}
+
+    groups = (source.peak_groups or {}).get("groups") or []
+    for group in groups:
+        nodes.append(
+            Node(
+                ids.peak_group_id(group["name"]),
+                "PeakGroup",
+                {
+                    "definition": group.get("definition", ""),
+                    "peaks_13co": group.get("peaks_13co") or [],
+                    "peaks_12co": group.get("peaks_12co") or [],
+                    "isotope_collected": (source.peak_groups or {}).get(
+                        "isotope_collected", ""
+                    ),
+                    "shift_cm1": (source.peak_groups or {}).get("shift_cm1"),
+                },
+            )
+        )
+
+    for file_type in source.file_types:
+        type_name = file_type["name"]
+        type_id = ids.data_file_type_id(type_name)
+        nodes.append(
+            Node(
+                type_id,
+                "DataFileType",
+                {
+                    "layout": file_type.get("layout", "long"),
+                    "row_grain": file_type.get("row_grain", ""),
+                    "description": file_type.get("description", ""),
+                },
+            )
+        )
+
+        for column in file_type.get("columns") or []:
+            column_id = ids.data_column_id(type_name, column["name"])
+            properties = {
+                "name": column["name"],
+                "file_type": type_name,
+                "role": column.get("role", ""),
+                "units": column.get("units"),
+                "definition": column.get("definition", ""),
+                "optional": bool(column.get("optional", False)),
+            }
+            if column.get("present_in"):
+                properties["present_in"] = column["present_in"]
+            nodes.append(Node(column_id, "DataColumn", properties))
+            edges.append(Edge("HAS_COLUMN", type_id, column_id))
+
+            measures = column.get("measures")
+            if measures:
+                if measures in known_parameters:
+                    edges.append(
+                        Edge(
+                            "MEASURES",
+                            column_id,
+                            ids.model_parameter_id(source.model_name, measures),
+                        )
+                    )
+                else:
+                    # Reported, not dropped. A `measures` naming a parameter
+                    # that does not exist is how the join a question depends on
+                    # goes quietly missing.
+                    warnings.append(
+                        f"{column_id} measures {measures!r}, which is not a "
+                        f"parameter of {source.model_name}"
+                    )
+
+            if column["name"] == "Peak_Name":
+                for group in groups:
+                    edges.append(
+                        Edge("HAS_GROUP", column_id, ids.peak_group_id(group["name"]))
+                    )
+
+        for pattern in file_type.get("column_patterns") or []:
+            column_id = ids.data_column_id(type_name, pattern["pattern"])
+            nodes.append(
+                Node(
+                    column_id,
+                    "DataColumn",
+                    {
+                        "pattern": pattern["pattern"],
+                        "matches": pattern.get("matches", ""),
+                        "file_type": type_name,
+                        "role": pattern.get("role", ""),
+                        "units": pattern.get("units"),
+                        "definition": pattern.get("definition", ""),
+                        "optional": True,
+                    },
+                )
+            )
+            edges.append(Edge("HAS_COLUMN", type_id, column_id))
+
+    # OF_TYPE crosses from a RawFile, which the pointer phase built.
+    if pointers is not None:
+        described = {f["name"] for f in source.file_types}
+        undescribed: set[str] = set()
+        for node in pointers.nodes:
+            if node.label != "RawFile":
+                continue
+            kind = node.properties.get("kind")
+            if kind in described:
+                edges.append(
+                    Edge("OF_TYPE", node.id, ids.data_file_type_id(kind))
+                )
+            elif kind:
+                undescribed.add(kind)
+        for kind in sorted(undescribed):
+            warnings.append(f"RawFile kind {kind!r} has no DataFileType")
+
+    return nodes, edges, warnings
+
+
+def build(
+    source: KnowledgeSource,
+    data: IntendedGraph,
+    pointers: IntendedGraph | None = None,
+) -> IntendedGraph:
     """The knowledge graph, including its attachment to `data`.
 
     `data` is the intended data graph, not the stored one, so both halves of a
@@ -246,9 +381,13 @@ def build(source: KnowledgeSource, data: IntendedGraph) -> IntendedGraph:
     rebuild happened to write.
     """
     graph = IntendedGraph()
+    level2_nodes, level2_edges, level2_warnings = _build_file_types(source, pointers)
     nodes, edges = _build_vocabulary(source)
     graph.nodes.extend(nodes)
     graph.edges.extend(edges)
+    graph.nodes.extend(level2_nodes)
+    graph.edges.extend(level2_edges)
+    graph.warnings.extend(level2_warnings)
 
     attachment, fired, warnings = _attach_to_data(source, data)
     graph.edges.extend(attachment)

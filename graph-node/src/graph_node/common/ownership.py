@@ -82,6 +82,12 @@ KNOWLEDGE = GraphScope(
             "PyFunction",
             "ModelParameter",
             "KineticModel",
+            # Level 2: what is inside the files the pointers point at. Hand
+            # authored from YAML, so knowledge by the provenance rule - nothing
+            # in a CSV says p_cell is Torr.
+            "DataFileType",
+            "DataColumn",
+            "PeakGroup",
         }
     ),
     relationship_types=frozenset(
@@ -100,6 +106,14 @@ KNOWLEDGE = GraphScope(
             # outlive the node it hangs off.
             "INSTANCE_OF",
             "FIT_BY",
+            # Level 2. HAS_COLUMN and HAS_GROUP stay inside knowledge; OF_TYPE
+            # crosses from a RawFile in POINTERS and MEASURES ends on a
+            # ModelParameter here. This scope owns them all because this loader
+            # creates them, the same rule that puts INSTANCE_OF here.
+            "OF_TYPE",
+            "HAS_COLUMN",
+            "HAS_GROUP",
+            "MEASURES",
         }
     ),
 )
