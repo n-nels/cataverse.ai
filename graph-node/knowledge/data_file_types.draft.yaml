@@ -3,101 +3,182 @@
 # RawFile says where a file is. This says what its columns mean, so a question
 # about a concept can find the column holding it.
 #
-# Columns are read from real objects in the bucket (experiment 004-010,
-# 2026-09-08). Meanings and units are NOT - they need Nick. Every TODO below is
-# a real gap left visible on purpose: a guessed unit ends up on a plot axis and
-# nothing downstream ever contradicts it.
+# Columns come from reading the header of EVERY file of each kind in the bucket
+# (287 CarbonylPeakArea, 288 CarbonylPeakFitParams, 2026-09-09), not from one
+# sample. That mattered: the first draft was built from a single file that
+# turned out to be the narrowest of seven different shapes.
 #
-# `measures` names a ModelParameter already in the graph - one of the six of the
-# pfo_secondary model: k_a, k_p, k_s, q_0, q_e, q_inf.
+# `optional: true` means the column is absent from some files. `present_in`
+# records how many. An agent has to know a column may not be there - a plot
+# that works for one experiment and fails for the next is worse than one that
+# says up front which experiments it can draw.
+#
+# `measures` names a ModelParameter already in the graph. Today those are only
+# the six of pfo_secondary: k_a, k_p, k_s, q_0, q_e, q_inf. The pfo and
+# pre/post-pfo columns below have no ModelParameter to point at yet - see
+# `models_to_add` at the bottom.
 #
 # role vocabulary: index | measured | fitted | derived | provenance
-#   `derived` is new. Nothing in the existing set fits a column computed per row
-#   from another column in the same file, and `fitted` would be actively wrong.
+#   `derived` is new: a column computed per row from another column in the same
+#   file. `fitted` would be wrong - nothing was fitted.
+#
+# No row counts anywhere. They are a property of one experiment, not of a
+# format, and they vary. The agent should count rows when it needs them.
+
+# ---------------------------------------------------------------- peak groups
+# Peaks are named for their wavenumber, and the wavenumber depends on which CO
+# isotope was used. Everything is collected with 13CO, which sits 50 cm-1 below
+# the 12CO reference. So Peak_1975 in the data is the 2025 cm-1 peak a reader
+# would look up in the 12CO literature.
+#
+# Source: ir-spectro-node/config/analysis.yaml (voigt_fit). Verified against
+# the data - every Peak_Name in a sampled file is one of these.
+#
+# This is what a user means by "the monomer band": not one peak but a sum.
+
+peak_groups:
+  isotope_collected: "13CO"
+  isotope_reference: "12CO"
+  shift_cm1: -50
+  groups:
+    - name: monomer_sum
+      definition: "Sum of the peak areas of the four monomer bands - a single
+                   CO on a single Pd atom."
+      peaks_13co: [2093, 2103, 2113, 2125]
+      peaks_12co: [2143, 2153, 2163, 2175]
+    - name: cluster_sum
+      definition: "Sum of the peak areas of the nine cluster bands - CO on
+                   multi-atom Pd sites."
+      peaks_13co: [1975, 1988, 2000, 2015, 2030, 2040, 2050, 2062, 2073]
+      peaks_12co: [2025, 2038, 2050, 2065, 2080, 2090, 2100, 2112, 2123]
+    - name: unknown
+      definition: "Fitted but unassigned. In neither sum. Not summed at all -
+                   these appear only as individual Peak_<n> rows."
+      peaks_13co: [2136, 2146, 2156, 2176, 2196]
+      peaks_12co: [2186, 2196, 2206, 2226, 2246]
 
 file_types:
 
   # ---------------------------------------------------------------- long files
-  # One row per observation, fixed and known column set.
+  # One row per observation.
 
   - name: CarbonylPeakArea
     layout: long
     row_grain: "one row per (spectrum, peak)"
     description: "Fitted uptake per peak, refit at each time point as data
                   accumulates. Carries the fit converging, not a final answer."
-    observed: "5,460 rows, 20 peaks, 273 spectra, 6 delta groups"
+    shapes_observed: 7
     columns:
       - {name: "File", role: provenance, units: null, definition: "Spectrum this row was fitted from, e.g. delta10.0012."}
-      - {name: "Delta_Group", role: index, units: null, definition: "TODO - what defines a delta group?"}
-      - {name: "Peak_Name", role: index, units: null, definition: "Peak identity: Peak_1975 and friends, plus monomer_sum and cluster_sum."}
-      - {name: "Peak_Center", role: measured, units: "cm-1", definition: "Fitted peak centre."}
+      - {name: "Delta_Group", role: index, units: null, definition: "Artificial data expansion. delta<x> where <x> is the distance to the background spectrum: delta10.0012 uses spectrum .0002 as background, delta5.0012 uses .0007."}
+      - {name: "Peak_Name", role: index, units: null, definition: "Peak identity: Peak_<wavenumber> for an individual band, or monomer_sum / cluster_sum. See peak_groups above."}
+      - {name: "Peak_Center", role: measured, units: "cm-1", optional: true, present_in: "280/287", definition: "Fitted peak centre."}
       - {name: "Time (s)", role: index, units: "s", definition: "Elapsed time of this spectrum."}
-      - {name: "Cumulative_Peak_Area", role: measured, units: "a.u.", definition: "TODO"}
-      - {name: "Cumulative_Integral", role: measured, units: "a.u.", definition: "TODO"}
-      - {name: "classification", role: provenance, units: null, definition: "TODO - the only non-empty value seen is continuous."}
-      - {name: "growth_onset_s", role: measured, units: "s", definition: "TODO - empty in every row of the sampled file."}
-      - {name: "pfo-sec_r^2", role: fitted, units: null, definition: "Coefficient of determination for the fit."}
-      - {name: "pfo-sec_rmse", role: fitted, units: "a.u.", definition: "Root mean square error of the fit."}
+      - {name: "Cumulative_Peak_Area", role: measured, units: "a.u.", definition: "Sum of all peak areas up to this time point within a given (Peak_Name, Delta_Group)."}
+      - {name: "Cumulative_Integral", role: measured, units: "a.u.", definition: "Running sum of Data_Integral - the 1750-2250 cm-1 integral - up to this time point."}
+      - {name: "classification", role: provenance, units: null, definition: "continuous or discontinuous. Discontinuous suggests nucleation and growth. Empty on most rows."}
+      - {name: "growth_onset_s", role: measured, units: "s", definition: "Approximate time at which cluster growth begins. Populated only where classification is discontinuous - confirmed across 12 files, never set otherwise."}
+
+      # --- pfo_secondary: the model in the graph today. In every file.
+      - {name: "pfo-sec_r^2", role: fitted, units: null, definition: "Coefficient of determination for the pfo_secondary fit."}
+      - {name: "pfo-sec_rmse", role: fitted, units: "a.u.", definition: "Root mean square error of the pfo_secondary fit."}
       - {name: "pfo-sec_k_a_s-1", role: fitted, units: "s^-1", measures: k_a}
-      - {name: "pfo-sec_k_a_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_a. Empty throughout the sampled file."}
+      - {name: "pfo-sec_k_a_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_a. Empty in the files sampled."}
       - {name: "pfo-sec_q_e_au", role: fitted, units: "a.u.", measures: q_e}
-      - {name: "pfo-sec_q_e_stderr", role: fitted, units: "a.u.", definition: "Standard error on q_e. Empty throughout the sampled file."}
+      - {name: "pfo-sec_q_e_stderr", role: fitted, units: "a.u.", definition: "Standard error on q_e. Empty in the files sampled."}
       - {name: "pfo-sec_k_s_s-1", role: fitted, units: "s^-1", measures: k_s}
-      - {name: "pfo-sec_k_s_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_s. Empty throughout the sampled file."}
+      - {name: "pfo-sec_k_s_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_s. Empty in the files sampled."}
       - {name: "pfo-sec_k_p_s-1", role: fitted, units: "s^-1", measures: k_p}
-      - {name: "pfo-sec_k_p_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_p. Empty throughout the sampled file."}
+      - {name: "pfo-sec_k_p_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_p. Empty in the files sampled."}
       - {name: "pfo-sec_q_inf_au", role: fitted, units: "a.u.", measures: q_inf}
-      - {name: "pfo-sec_q_inf_stderr", role: fitted, units: "a.u.", definition: "Standard error on q_inf. Empty throughout the sampled file."}
+      - {name: "pfo-sec_q_inf_stderr", role: fitted, units: "a.u.", definition: "Standard error on q_inf. Empty in the files sampled."}
       - {name: "pfo-sec_q0_au", role: fitted, units: "a.u.", measures: q_0}
+
+      # --- plain pfo: the simpler fit, used for peaks that are not monomer_sum.
+      # No ModelParameter to point at yet.
+      - {name: "pfo_k_s-1", role: fitted, units: "s^-1", optional: true, present_in: "284/287", definition: "Rate constant of the plain PFO fit. TODO - confirm this is the fit used for individual peaks rather than the sums."}
+      - {name: "pfo_k_stderr", role: fitted, units: "s^-1", optional: true, present_in: "284/287", definition: "Standard error on the plain PFO rate constant."}
+      - {name: "pfo_q_e_au", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Equilibrium capacity of the plain PFO fit."}
+      - {name: "pfo_q_e_stderr", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Standard error on the plain PFO equilibrium capacity."}
+      - {name: "pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Initial capacity of the plain PFO fit."}
+      - {name: "pfo_r^2", role: fitted, units: null, optional: true, present_in: "284/287", definition: "Coefficient of determination for the plain PFO fit."}
+      - {name: "pfo_rmse", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Root mean square error of the plain PFO fit."}
+
+      # --- pre/post split: the discontinuous case, fitted either side of
+      # growth onset. TWO GENERATIONS of column names exist - see notes below.
+      - {name: "pre_pfo_k_s-1", role: fitted, units: "s^-1", optional: true, present_in: "24/287", definition: "PFO rate constant before growth onset."}
+      - {name: "pre_pfo_q_e_au", role: fitted, units: "a.u.", optional: true, present_in: "24/287", definition: "PFO equilibrium capacity before growth onset."}
+      - {name: "pre_pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "26/287", definition: "PFO initial capacity before growth onset."}
+      - {name: "pre_r2", role: fitted, units: null, optional: true, present_in: "26/287", definition: "Coefficient of determination for the pre-onset fit."}
+      - {name: "post_pfo_k_s-1", role: fitted, units: "s^-1", optional: true, present_in: "24/287", definition: "PFO rate constant after growth onset."}
+      - {name: "post_pfo_q_e_au", role: fitted, units: "a.u.", optional: true, present_in: "24/287", definition: "PFO equilibrium capacity after growth onset."}
+      - {name: "post_pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "26/287", definition: "PFO initial capacity after growth onset."}
+      - {name: "post_r2", role: fitted, units: null, optional: true, present_in: "26/287", definition: "Coefficient of determination for the post-onset fit."}
+
+      # --- an older spelling of the same idea: ka/kd/Keq rather than k/q_e.
+      # TODO - is this a superseded generation, or a different model?
+      - {name: "pre_pfo_ka_s-1", role: fitted, units: "s^-1", optional: true, present_in: "16/287", definition: "TODO - adsorption rate constant, pre-onset. Older column generation."}
+      - {name: "pre_pfo_kd_s-1", role: fitted, units: "s^-1", optional: true, present_in: "16/287", definition: "TODO - desorption rate constant, pre-onset."}
+      - {name: "pre_pfo_Keq_au", role: fitted, units: "a.u.", optional: true, present_in: "16/287", definition: "TODO - equilibrium constant, pre-onset. Units? ka/kd would be dimensionless."}
+      - {name: "pre_pfo_qe_au", role: fitted, units: "a.u.", optional: true, present_in: "16/287", definition: "TODO - equilibrium capacity, pre-onset. Note the spelling differs from pre_pfo_q_e_au."}
+      - {name: "post_pfo_ka_s-1", role: fitted, units: "s^-1", optional: true, present_in: "16/287", definition: "TODO - adsorption rate constant, post-onset."}
+      - {name: "post_pfo_kd_s-1", role: fitted, units: "s^-1", optional: true, present_in: "16/287", definition: "TODO - desorption rate constant, post-onset."}
+      - {name: "post_pfo_Keq_au", role: fitted, units: "a.u.", optional: true, present_in: "16/287", definition: "TODO - equilibrium constant, post-onset."}
+      - {name: "post_pfo_qe_au", role: fitted, units: "a.u.", optional: true, present_in: "16/287", definition: "TODO - equilibrium capacity, post-onset."}
+
+      # --- absolute quantification, only in a minority of files.
+      - {name: "Cumulative_PdCO_mol", role: derived, units: "mol", optional: true, present_in: "29/287", definition: "TODO - cumulative CO on Pd in moles. Absolute rather than a.u., so presumably calibrated."}
+      - {name: "Cumul_PdCO_mol_stderr", role: derived, units: "mol", optional: true, present_in: "29/287", definition: "TODO - standard error on the above."}
 
   - name: CarbonylPeakFitParams
     layout: long
     row_grain: "one row per (spectrum, peak)"
     description: "The peak-shape fit itself - position, width, amplitude -
                   rather than the kinetics fitted on top of it."
-    observed: "4,950 rows, 18 peaks, 275 spectra"
+    shapes_observed: 2
     columns:
       - {name: "File", role: provenance, units: null, definition: "Spectrum this row was fitted from."}
-      - {name: "Delta_Group", role: index, units: null, definition: "TODO - as above."}
-      - {name: "Peak_Name", role: index, units: null, definition: "Peak identity."}
-      - {name: "Peak_Value", role: index, units: "cm-1", definition: "Nominal wavenumber of the peak, e.g. 1975."}
-      - {name: "Data_Integral", role: measured, units: "a.u.", definition: "TODO"}
-      - {name: "Time_Delta (s)", role: index, units: "s", definition: "TODO - elapsed time, or interval since the previous spectrum?"}
+      - {name: "Delta_Group", role: index, units: null, definition: "As in CarbonylPeakArea: delta<x> where <x> is the distance to the background spectrum."}
+      - {name: "Peak_Name", role: index, units: null, definition: "Peak identity. Individual bands only - the sums do not appear here."}
+      - {name: "Peak_Value", role: index, units: "cm-1", definition: "Nominal wavenumber of the peak, e.g. 1975. The 13CO value."}
+      - {name: "Data_Integral", role: measured, units: "a.u.", definition: "Integral from 1750-2250 cm-1."}
+      - {name: "Time_Delta (s)", role: index, units: "s", definition: "Time between this spectrum and its background spectrum. A function of Delta_Group and the sampling interval."}
       - {name: "Peak_Area", role: fitted, units: "a.u.", definition: "Area under the fitted peak."}
       - {name: "Center", role: fitted, units: "cm-1", definition: "Fitted centre position."}
       - {name: "Amplitude", role: fitted, units: "a.u.", definition: "Fitted peak height."}
       - {name: "Sigma", role: fitted, units: "cm-1", definition: "Gaussian width of the pseudo-Voigt."}
       - {name: "Gamma", role: fitted, units: "cm-1", definition: "Lorentzian width of the pseudo-Voigt."}
-      - {name: "Y0", role: fitted, units: "a.u.", definition: "Baseline offset. 0.0 throughout the sampled file."}
+      - {name: "Y0", role: fitted, units: "a.u.", definition: "Baseline offset. Fixed at 0 by the fit config (analysis.yaml: y0.vary false)."}
       - {name: "fwhm", role: fitted, units: "cm-1", definition: "Full width at half maximum."}
+      - {name: "PdCO_mol", role: derived, units: "mol", optional: true, present_in: "29/288", definition: "TODO - CO on Pd in moles for this peak."}
+      - {name: "PdCO_mol_stderr", role: derived, units: "mol", optional: true, present_in: "29/288", definition: "TODO - standard error on the above."}
 
   - name: pressureLog
     layout: long
-    row_grain: "one row per 5-second instrument sample"
+    row_grain: "one row per instrument sample, about 5 s apart"
     description: "Manifold and cell pressure across the whole run, with
                   adsorption quantities recomputed at each sample. Its own
                   instrument stream - nothing here comes from the IR pipeline."
-    observed: "109,244 rows over 6.36 days at 5.03 s"
+    shapes_observed: 1
     columns:
       - {name: "timestamp", role: index, units: null, definition: "Absolute wall clock, microsecond precision."}
       - {name: "relative_time_s", role: index, units: "s", definition: "Seconds since the run started."}
-      - {name: "p_mfld", role: measured, units: "Torr", definition: "Manifold pressure. The gauge resolves about 65 levels across a run."}
-      - {name: "p_cell", role: measured, units: "Torr", definition: "Cell pressure. Finest-grained column in the file."}
+      - {name: "p_mfld", role: measured, units: "Torr", definition: "Manifold pressure. Coarser than p_cell - the gauge resolves far fewer distinct values."}
+      - {name: "p_cell", role: measured, units: "Torr", definition: "Cell pressure. The finest-grained column in the file."}
       - {name: "amount_adsorbed_umol/g", role: derived, units: "umol/g", definition: "Recomputed from p_mfld on every row."}
       - {name: "apparent_conversion", role: derived, units: null, definition: "Recomputed from p_mfld on every row."}
       - {name: "apparent_coverage", role: derived, units: null, definition: "Recomputed from p_mfld on every row."}
 
   # -------------------------------------------------------------- matrix files
   # One row per wavenumber, one column per spectrum. The column SET varies by
-  # experiment - 94, 141 and 276 columns seen in three different files - so
-  # these cannot be a fixed list. The repeating columns get a pattern instead.
+  # experiment - 94, 141 and 276 columns seen - so these cannot be a fixed list.
+  # The repeating columns get a pattern instead.
 
   - name: CarbonylFitBaseline
     layout: matrix
     row_grain: "one row per wavenumber"
     description: "Fitted baseline under each spectrum, as a wavenumber by
                   spectrum matrix."
-    observed: "259 rows; 276 columns for 004-010, 94 for 000-004"
     columns:
       - {name: "Wavenumber (cm-1)", role: index, units: "cm-1", definition: "The row axis."}
     column_patterns:
@@ -113,7 +194,6 @@ file_types:
     row_grain: "one row per wavenumber"
     description: "Fit residual for each spectrum - observed minus fitted - as a
                   wavenumber by spectrum matrix."
-    observed: "259 rows; 276 columns for 004-010, 94 for 000-004"
     columns:
       - {name: "Wavenumber (cm-1)", role: index, units: "cm-1", definition: "The row axis."}
     column_patterns:
@@ -122,3 +202,36 @@ file_types:
         role: fitted
         units: "a.u."
         definition: "Residual for one spectrum. One column per spectrum."
+
+# ------------------------------------------------------------- models to add
+# The graph holds one KineticModel, pfo_secondary, with six ModelParameters.
+# The data has columns for at least two more fits, and until those exist there
+# is nothing for `measures` to point at - so a question about the plain PFO
+# rate constant cannot be answered the way one about k_a can.
+#
+# Nick, 2026-09-09: the classification and the pfo fit are both expected to
+# change in the near term, so these do not have to be right yet - but they
+# should be captured rather than silently missing.
+
+models_to_add:
+  - name: pfo
+    status: TODO
+    description: "Plain pseudo-first-order. Used for peaks other than
+                  monomer_sum, and where classification is not discontinuous."
+    columns: ["pfo_k_s-1", "pfo_q_e_au", "pfo_q0_au", "pfo_r^2", "pfo_rmse"]
+
+  - name: pfo_pre_post
+    status: TODO
+    description: "The discontinuous case: a separate PFO fit either side of
+                  growth_onset_s."
+    columns: ["pre_pfo_k_s-1", "pre_pfo_q_e_au", "pre_pfo_q0_au", "pre_r2",
+              "post_pfo_k_s-1", "post_pfo_q_e_au", "post_pfo_q0_au", "post_r2"]
+
+  - name: pfo_pre_post_ka_kd
+    status: TODO
+    description: "An older spelling of the above - ka/kd/Keq instead of k/q_e.
+                  Is this a superseded generation, or a genuinely different
+                  model? Present in 16 files, none of them recent."
+    columns: ["pre_pfo_ka_s-1", "pre_pfo_kd_s-1", "pre_pfo_Keq_au",
+              "pre_pfo_qe_au", "post_pfo_ka_s-1", "post_pfo_kd_s-1",
+              "post_pfo_Keq_au", "post_pfo_qe_au"]
