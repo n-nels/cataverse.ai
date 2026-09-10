@@ -902,6 +902,28 @@ Two things are reported rather than dropped, both being ways a join can go
 quietly missing: a `measures` naming a parameter no model defines, and a
 `RawFile` kind no `DataFileType` describes.
 
+#### A second kinetic model - 2026-09-10
+
+`model_parameters.yaml` holds a list of models rather than one. `pfo_secondary`
+stays primary: `FIT_BY` attaches every `AdsParams` to it, because `AdsParams`
+holds the pfo-sec columns and nothing else.
+
+**`pfo` is one model, not two.** The `pfo_*`, `pre_pfo_*` and `post_pfo_*`
+column families carry the same three quantities - `k`, `q_e`, `q_0` - because
+they are the same equation fitted over different windows. Two `KineticModel`
+nodes would mean six `ModelParameter`s behind three physical quantities, and
+"the PFO rate constant" would have two answers. Which window a column came from
+is a `segment` property on the column.
+
+**`measures` is now `model.parameter`.** Parameter names collide across models -
+both have `q_e` - so a bare name cannot say which is meant. A bare name still
+resolves against the primary model, which is what every entry meant before a
+second model existed, and `pfo.k_a` is reported rather than silently resolved:
+`k_a` belongs to `pfo_secondary`.
+
+That takes `MEASURES` from 6 to 15. The seven `pfo_*` columns and the six
+pre/post columns can now be reached from the concept a question names.
+
 #### Identity and ownership
 
 | Label | Identity property | Scope |

@@ -43,6 +43,10 @@ class KnowledgeSource:
     concepts: list[dict[str, Any]]
     species: list[dict[str, Any]]
     py_functions: list[dict[str, Any]]
+    #: Every model. The first is the primary one - FIT_BY attaches to it.
+    models: list[dict[str, Any]]
+    #: The primary model and its parameters, kept as their own fields because
+    #: FIT_BY and the MEASURES default both resolve against them.
     model: dict[str, Any]
     parameters: list[dict[str, Any]]
     mappings: dict[str, Any]
@@ -71,17 +75,31 @@ def load(root: str | Path | None = None) -> KnowledgeSource:
             raise KnowledgeSourceError(f"{filename}: {exc}") from exc
 
     model_file = raw["model_parameters"] or {}
-    if "model" not in model_file or "parameters" not in model_file:
-        raise KnowledgeSourceError(
-            "model_parameters.yaml must define both `model` and `parameters`"
-        )
+    models = model_file.get("models")
+    if not models:
+        # The single-model shape this file used before 2026-09-10.
+        if "model" not in model_file or "parameters" not in model_file:
+            raise KnowledgeSourceError(
+                "model_parameters.yaml must define `models`, or both `model` "
+                "and `parameters`"
+            )
+        models = [dict(model_file["model"], parameters=model_file["parameters"])]
+    for entry in models:
+        if not entry.get("name") or not entry.get("parameters"):
+            raise KnowledgeSourceError(
+                f"every model needs a name and parameters; got {entry.get('name')!r}"
+            )
+    names = [m["name"] for m in models]
+    if len(names) != len(set(names)):
+        raise KnowledgeSourceError(f"duplicate model name in {names}")
 
     return KnowledgeSource(
         concepts=raw["concepts"] or [],
         species=raw["species"] or [],
         py_functions=raw["py_functions"] or [],
-        model=model_file["model"],
-        parameters=model_file["parameters"],
+        models=models,
+        model=models[0],
+        parameters=models[0]["parameters"],
         mappings=raw["mappings"] or {},
         file_types=(raw["data_file_types"] or {}).get("file_types") or [],
         peak_groups=(raw["data_file_types"] or {}).get("peak_groups") or {},

@@ -97,28 +97,43 @@ def _build_vocabulary(source: KnowledgeSource) -> tuple[list[Node], list[Edge]]:
         )
     )
 
-    for parameter in source.parameters:
-        name = parameter["name"]
-        parameter_id = ids.model_parameter_id(model_name, name)
+    for extra in source.models[1:]:
         nodes.append(
             Node(
-                parameter_id,
-                "ModelParameter",
+                ids.kinetic_model_id(extra["name"]),
+                "KineticModel",
                 {
-                    "id": parameter_id,
-                    "name": name,
-                    "model_name": model_name,
-                    "param_role": parameter.get("role"),
-                    "quantity_kind": parameter.get("quantity_kind"),
-                    "units": parameter.get("units"),
-                    "definition": parameter.get("definition"),
-                    "fitted": parameter.get("fitted"),
+                    "name": extra["name"],
+                    "description": extra.get("description"),
+                    "equations": list(extra.get("equations") or []),
                 },
             )
         )
-        edges.append(
-            Edge("PARAMETER_OF", parameter_id, ids.kinetic_model_id(model_name))
-        )
+
+    for model_entry in source.models:
+        owning_model = model_entry["name"]
+        for parameter in model_entry["parameters"]:
+            name = parameter["name"]
+            parameter_id = ids.model_parameter_id(owning_model, name)
+            nodes.append(
+                Node(
+                    parameter_id,
+                    "ModelParameter",
+                    {
+                        "id": parameter_id,
+                        "name": name,
+                        "model_name": owning_model,
+                        "param_role": parameter.get("role"),
+                        "quantity_kind": parameter.get("quantity_kind"),
+                        "units": parameter.get("units"),
+                        "definition": parameter.get("definition"),
+                        "fitted": parameter.get("fitted"),
+                    },
+                )
+            )
+            edges.append(
+                Edge("PARAMETER_OF", parameter_id, ids.kinetic_model_id(owning_model))
+            )
 
     mappings = source.mappings
     for function_name, concepts in (mappings.get("py_to_concept") or {}).items():
@@ -254,7 +269,13 @@ def _build_file_types(
     edges: list[Edge] = []
     warnings: list[str] = []
 
-    known_parameters = {p["name"] for p in source.parameters}
+    # `measures` is `model.parameter`. A bare name resolves against the primary
+    # model, which is what every entry meant before a second model existed.
+    known_parameters = {
+        f"{m['name']}.{p['name']}"
+        for m in source.models
+        for p in m["parameters"]
+    }
 
     groups = (source.peak_groups or {}).get("groups") or []
     for group in groups:
@@ -301,17 +322,28 @@ def _build_file_types(
             }
             if column.get("present_in"):
                 properties["present_in"] = column["present_in"]
+            if column.get("segment"):
+                # Which window of the run this fit covers. The pre and post
+                # columns measure the same parameters as the whole-curve fit -
+                # same model, different window - so the distinction lives here
+                # rather than in a second set of ModelParameters.
+                properties["segment"] = column["segment"]
             nodes.append(Node(column_id, "DataColumn", properties))
             edges.append(Edge("HAS_COLUMN", type_id, column_id))
 
             measures = column.get("measures")
             if measures:
-                if measures in known_parameters:
+                qualified = (
+                    measures if "." in measures
+                    else f"{source.model_name}.{measures}"
+                )
+                if qualified in known_parameters:
+                    model_part, _, param_part = qualified.partition(".")
                     edges.append(
                         Edge(
                             "MEASURES",
                             column_id,
-                            ids.model_parameter_id(source.model_name, measures),
+                            ids.model_parameter_id(model_part, param_part),
                         )
                     )
                 else:
@@ -319,8 +351,8 @@ def _build_file_types(
                     # that does not exist is how the join a question depends on
                     # goes quietly missing.
                     warnings.append(
-                        f"{column_id} measures {measures!r}, which is not a "
-                        f"parameter of {source.model_name}"
+                        f"{column_id} measures {measures!r}, which no model "
+                        f"defines"
                     )
 
             if column["name"] == "Peak_Name":

@@ -82,37 +82,37 @@ file_types:
       # --- pfo_secondary: the model in the graph today. In every file.
       - {name: "pfo-sec_r^2", role: fitted, units: null, definition: "Coefficient of determination for the pfo_secondary fit."}
       - {name: "pfo-sec_rmse", role: fitted, units: "a.u.", definition: "Root mean square error of the pfo_secondary fit."}
-      - {name: "pfo-sec_k_a_s-1", role: fitted, units: "s^-1", measures: k_a}
+      - {name: "pfo-sec_k_a_s-1", role: fitted, units: "s^-1", measures: pfo_secondary.k_a}
       - {name: "pfo-sec_k_a_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_a. Empty in the files sampled."}
-      - {name: "pfo-sec_q_e_au", role: fitted, units: "a.u.", measures: q_e}
+      - {name: "pfo-sec_q_e_au", role: fitted, units: "a.u.", measures: pfo_secondary.q_e}
       - {name: "pfo-sec_q_e_stderr", role: fitted, units: "a.u.", definition: "Standard error on q_e. Empty in the files sampled."}
-      - {name: "pfo-sec_k_s_s-1", role: fitted, units: "s^-1", measures: k_s}
+      - {name: "pfo-sec_k_s_s-1", role: fitted, units: "s^-1", measures: pfo_secondary.k_s}
       - {name: "pfo-sec_k_s_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_s. Empty in the files sampled."}
-      - {name: "pfo-sec_k_p_s-1", role: fitted, units: "s^-1", measures: k_p}
+      - {name: "pfo-sec_k_p_s-1", role: fitted, units: "s^-1", measures: pfo_secondary.k_p}
       - {name: "pfo-sec_k_p_stderr", role: fitted, units: "s^-1", definition: "Standard error on k_p. Empty in the files sampled."}
-      - {name: "pfo-sec_q_inf_au", role: fitted, units: "a.u.", measures: q_inf}
+      - {name: "pfo-sec_q_inf_au", role: fitted, units: "a.u.", measures: pfo_secondary.q_inf}
       - {name: "pfo-sec_q_inf_stderr", role: fitted, units: "a.u.", definition: "Standard error on q_inf. Empty in the files sampled."}
-      - {name: "pfo-sec_q0_au", role: fitted, units: "a.u.", measures: q_0}
+      - {name: "pfo-sec_q0_au", role: fitted, units: "a.u.", measures: pfo_secondary.q_0}
 
       # --- plain pfo: the simpler fit, used for peaks that are not monomer_sum.
       # No ModelParameter to point at yet.
-      - {name: "pfo_k_s-1", role: fitted, units: "s^-1", optional: true, present_in: "284/287", definition: "Rate constant of the plain PFO fit. This is the fit used for cluster_sum and for every Peak_Name that is not monomer_sum or one of its constituent peaks - those use pfo_secondary instead."}
+      - {name: "pfo_k_s-1", role: fitted, units: "s^-1", optional: true, present_in: "284/287", definition: "Rate constant of the plain PFO fit. This is the fit used for cluster_sum and for every Peak_Name that is not monomer_sum or one of its constituent peaks - those use pfo_secondary instead.", measures: pfo.k}
       - {name: "pfo_k_stderr", role: fitted, units: "s^-1", optional: true, present_in: "284/287", definition: "Standard error on the plain PFO rate constant."}
-      - {name: "pfo_q_e_au", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Equilibrium capacity of the plain PFO fit."}
+      - {name: "pfo_q_e_au", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Equilibrium capacity of the plain PFO fit.", measures: pfo.q_e}
       - {name: "pfo_q_e_stderr", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Standard error on the plain PFO equilibrium capacity."}
-      - {name: "pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Initial capacity of the plain PFO fit."}
+      - {name: "pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Initial capacity of the plain PFO fit.", measures: pfo.q_0}
       - {name: "pfo_r^2", role: fitted, units: null, optional: true, present_in: "284/287", definition: "Coefficient of determination for the plain PFO fit."}
       - {name: "pfo_rmse", role: fitted, units: "a.u.", optional: true, present_in: "284/287", definition: "Root mean square error of the plain PFO fit."}
 
       # --- pre/post split: the discontinuous case, fitted either side of
       # growth onset. TWO GENERATIONS of column names exist - see notes below.
-      - {name: "pre_pfo_k_s-1", role: fitted, units: "s^-1", optional: true, present_in: "24/287", definition: "PFO rate constant before growth onset."}
-      - {name: "pre_pfo_q_e_au", role: fitted, units: "a.u.", optional: true, present_in: "24/287", definition: "PFO equilibrium capacity before growth onset."}
-      - {name: "pre_pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "26/287", definition: "PFO initial capacity before growth onset."}
+      - {name: "pre_pfo_k_s-1", role: fitted, units: "s^-1", optional: true, present_in: "24/287", definition: "PFO rate constant before growth onset.", measures: pfo.k, segment: pre}
+      - {name: "pre_pfo_q_e_au", role: fitted, units: "a.u.", optional: true, present_in: "24/287", definition: "PFO equilibrium capacity before growth onset.", measures: pfo.q_e, segment: pre}
+      - {name: "pre_pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "26/287", definition: "PFO initial capacity before growth onset.", measures: pfo.q_0, segment: pre}
       - {name: "pre_r2", role: fitted, units: null, optional: true, present_in: "26/287", definition: "Coefficient of determination for the pre-onset fit."}
-      - {name: "post_pfo_k_s-1", role: fitted, units: "s^-1", optional: true, present_in: "24/287", definition: "PFO rate constant after growth onset."}
-      - {name: "post_pfo_q_e_au", role: fitted, units: "a.u.", optional: true, present_in: "24/287", definition: "PFO equilibrium capacity after growth onset."}
-      - {name: "post_pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "26/287", definition: "PFO initial capacity after growth onset."}
+      - {name: "post_pfo_k_s-1", role: fitted, units: "s^-1", optional: true, present_in: "24/287", definition: "PFO rate constant after growth onset.", measures: pfo.k, segment: post}
+      - {name: "post_pfo_q_e_au", role: fitted, units: "a.u.", optional: true, present_in: "24/287", definition: "PFO equilibrium capacity after growth onset.", measures: pfo.q_e, segment: post}
+      - {name: "post_pfo_q0_au", role: fitted, units: "a.u.", optional: true, present_in: "26/287", definition: "PFO initial capacity after growth onset.", measures: pfo.q_0, segment: post}
       - {name: "post_r2", role: fitted, units: null, optional: true, present_in: "26/287", definition: "Coefficient of determination for the post-onset fit."}
 
       # --- ka/kd/Keq: deliberately NOT modelled, per Nick 2026-09-10.

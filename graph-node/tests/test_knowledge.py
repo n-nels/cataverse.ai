@@ -62,16 +62,16 @@ def test_vocabulary_matches_the_stored_graph(yamls):
     knowledge = kbuild.build(yamls, IntendedGraph())
     assert knowledge.nodes_by_label() == {
         "ChemConcept": 15, "ChemSpecies": 8, "PyFunction": 5,
-        "KineticModel": 1, "ModelParameter": 6,
+        "KineticModel": 2, "ModelParameter": 9,
         "DataFileType": 5, "DataColumn": 65, "PeakGroup": 3,
     }
     counts = knowledge.edges_by_type()
     assert counts["SUBTYPE_OF"] == 8
-    assert counts["PARAMETER_OF"] == 6
+    assert counts["PARAMETER_OF"] == 9
     assert counts["IMPLEMENTS"] == 12
     assert counts["USES_SPECIES"] == 12
     assert counts["HAS_COLUMN"] == 65
-    assert counts["MEASURES"] == 6
+    assert counts["MEASURES"] == 15
     assert counts["HAS_GROUP"] == 6
 
 
@@ -162,10 +162,13 @@ def test_a_rule_that_never_fires_is_warned_about(yamls):
 
 
 def test_a_mapping_naming_an_undefined_concept_is_an_error(yamls):
-    broken = ksource.KnowledgeSource(
-        concepts=yamls.concepts, species=yamls.species,
-        py_functions=yamls.py_functions, model=yamls.model,
-        parameters=yamls.parameters,
+    # `replace` rather than a full constructor: listing every field means the
+    # test breaks whenever KnowledgeSource gains one, which says nothing about
+    # the behaviour it is meant to pin.
+    import dataclasses
+
+    broken = dataclasses.replace(
+        yamls,
         mappings={"py_to_concept": {"clean_surface": ["not_a_real_concept"]}},
     )
     knowledge = kbuild.build(broken, IntendedGraph())
@@ -281,3 +284,66 @@ def test_peak_groups_carry_both_isotope_numberings(yamls):
     assert monomer.properties["peaks_13co"] == [2093, 2103, 2113, 2125]
     assert monomer.properties["peaks_12co"] == [2143, 2153, 2163, 2175]
     assert monomer.properties["shift_cm1"] == -50
+
+
+def test_both_models_are_built_with_their_own_parameters(yamls):
+    """pfo_secondary and pfo. Parameter names collide - both have q_e - so the
+    ids must carry the model or one would overwrite the other."""
+    knowledge = kbuild.build(yamls, IntendedGraph())
+    models = sorted(n.properties["name"] for n in knowledge.nodes
+                    if n.label == "KineticModel")
+    assert models == ["pfo", "pfo_secondary"]
+    q_e = sorted(n.id for n in knowledge.nodes
+                 if n.label == "ModelParameter" and n.properties["name"] == "q_e")
+    assert q_e == ["mp_pfo_q_e", "mp_pfo_secondary_q_e"]
+
+
+def test_the_pre_and_post_columns_share_the_parameters_of_the_whole_curve_fit(yamls):
+    """Same model over two windows, not two models. Six columns, three
+    parameters - splitting them would put two ModelParameters behind one
+    physical quantity and make "the PFO rate constant" ambiguous."""
+    knowledge = kbuild.build(yamls, IntendedGraph())
+    by_id = {n.id: n for n in knowledge.nodes}
+    measures = {
+        e.start: e.end for e in knowledge.edges if e.type == "MEASURES"
+    }
+    for prefix in ("pre_pfo", "post_pfo"):
+        column = f"CarbonylPeakArea.{prefix}_k_s-1"
+        assert measures[column] == "mp_pfo_k"
+        assert by_id[column].properties["segment"] == prefix.split("_")[0]
+    assert measures["CarbonylPeakArea.pfo_k_s-1"] == "mp_pfo_k"
+    assert "segment" not in by_id["CarbonylPeakArea.pfo_k_s-1"].properties
+
+
+def test_a_bare_measures_still_resolves_against_the_primary_model(yamls):
+    """The unqualified form every entry used before a second model existed."""
+    import dataclasses
+
+    source = dataclasses.replace(
+        yamls,
+        file_types=[{
+            "name": "T",
+            "columns": [{"name": "c", "role": "fitted", "measures": "k_a"}],
+        }],
+    )
+    knowledge = kbuild.build(source, IntendedGraph())
+    measures = [e for e in knowledge.edges if e.type == "MEASURES"]
+    assert len(measures) == 1
+    assert measures[0].end == "mp_pfo_secondary_k_a"
+
+
+def test_a_measures_naming_the_wrong_model_is_reported(yamls):
+    """`pfo.k_a` is not a thing - k_a belongs to pfo_secondary. Qualifying by
+    model is what makes that detectable rather than silently resolving."""
+    import dataclasses
+
+    source = dataclasses.replace(
+        yamls,
+        file_types=[{
+            "name": "T",
+            "columns": [{"name": "c", "role": "fitted", "measures": "pfo.k_a"}],
+        }],
+    )
+    knowledge = kbuild.build(source, IntendedGraph())
+    assert not [e for e in knowledge.edges if e.type == "MEASURES"]
+    assert any("pfo.k_a" in w for w in knowledge.warnings)
