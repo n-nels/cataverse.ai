@@ -52,29 +52,15 @@ class _KineticUtilities:
         shift_value = shifts.get(isotope_value, 0) - shifts.get(base_isotope, 0)
         return [f"Peak_{int(peak + shift_value)}" for peak in base_list]
 
-    def get_monomer_peak_names(self, isotope: str | None) -> list[str]:
-        """Offline monomer_sum peak names.
-
-        Prefers ``monomer_sum_peaks_base`` (offline-only override) over the
-        live ``monomer_peaks_base`` when the former is set in analysis.yaml,
-        so redefining monomer_sum for reprocessing never touches the live
-        pipeline's monomer peak list (fitting, monomer_max bounds, plots).
-        """
+    @staticmethod
+    def get_monomer_peak_names(isotope: str | None) -> list[str]:
         config_settings = config.get_analysis_setting("voigt_fit")
-        base_list_key = (
-            "monomer_sum_peaks_base"
-            if config_settings.get("monomer_sum_peaks_base")
-            else "monomer_peaks_base"
-        )
-        if base_list_key == "monomer_peaks_base":
-            isotope_value = isotope or config_settings.get("isotope_default", "13CO")
-            merged_settings = dict(config_settings)
-            merged_settings["isotope_default"] = isotope_value
-            return [
-                f"Peak_{int(peak)}"
-                for peak in get_shifted_monomer_peaks(merged_settings)
-            ]
-        return self.get_peak_names(base_list_key, isotope)
+        isotope_value = isotope or config_settings.get("isotope_default", "13CO")
+        merged_settings = dict(config_settings)
+        merged_settings["isotope_default"] = isotope_value
+        return [
+            f"Peak_{int(peak)}" for peak in get_shifted_monomer_peaks(merged_settings)
+        ]
 
     def build_cluster_sum(
         self, df: pd.DataFrame, isotope: str | None = None
@@ -162,11 +148,6 @@ class _KineticUtilities:
             df["Cumulative_Peak_Area"], errors="coerce"
         )
         df = df.dropna(subset=["Time (s)", "Cumulative_Peak_Area"])
-        if "Peak_Name" in df.columns:
-            # The live pipeline already bakes monomer_sum/cluster_sum rows into
-            # the source CSV. Drop them and rebuild from the atomic per-peak
-            # rows so an offline peak-set override actually takes effect.
-            df = df[~df["Peak_Name"].isin(("monomer_sum", "cluster_sum"))]
         return self.append_sum_rows(df)
 
     @staticmethod
