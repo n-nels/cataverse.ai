@@ -6,7 +6,7 @@ active nucleation-classifier detection candidates being scored against
 alternatives. ``classify_trajectory`` is the default/baseline detector;
 ``classify_trajectory_sustained_rise``, ``classify_trajectory_drawdown`` and
 ``classify_trajectory_combined`` are candidates under evaluation, selectable
-via ``cli.py``'s ``--classifier`` flag.
+via ``classify_cli.py``'s ``--classifier`` flag.
 """
 
 from __future__ import annotations

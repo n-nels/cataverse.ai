@@ -21,8 +21,8 @@ from src.core import config
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_DATASET_FOLDERS = ["nn1120-3_pd_ceo2_004"]
-DEFAULT_SCAN_PARENT = True
+DEFAULT_DATASET_FOLDERS = ["nn1120-2_pd_ceo2_000/_test"]
+DEFAULT_SCAN_PARENT = False
 DEFAULT_PEAK_NAMES = ["monomer_sum", "cluster_sum"]
 DEFAULT_PFO_PARAMETERS = [
     "pfo_k_s-1",
@@ -510,7 +510,11 @@ def main(
         dataset_label = "parent"
         output_dir = Path(config.get_path("data.figures")) / PARENT_OUTPUT_SUBDIR
     else:
-        dataset_label = dataset_paths[0].name
+        data_root = Path(config.get_path("data.peak_fit"))
+        try:
+            dataset_label = "_".join(dataset_paths[0].relative_to(data_root).parts)
+        except ValueError:
+            dataset_label = dataset_paths[0].name
         output_dir = Path(
             config.get_path(
                 "data.figures",
@@ -539,5 +543,5 @@ def main(
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    # main()
-    plot_params_all()
+    main()
+    # plot_params_all()

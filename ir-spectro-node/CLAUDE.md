@@ -25,7 +25,7 @@ To run a single file through the pipeline, edit those constants rather than
 adding argparse.
 
 **Batch classification is the one exception**: `scripts/run_kinetics_classification.py`
-(wrapping `src/utils/kinetics/cli.py`) is an argparse CLI, added because the
+(wrapping `src/utils/kinetics/classify_cli.py`) is an argparse CLI, added because the
 classification algorithm itself is under active iteration (see
 `src/utils/kinetics/classification.py` and `docs/spec.md`) and needs a
 `--classifier` flag to A/B candidate detectors and run the ground-truth check

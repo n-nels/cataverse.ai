@@ -67,12 +67,14 @@ def fit_file(
     *,
     model: str = "secondary_pfo",
     peak_names: list[str] | None = None,
-    mode: str = "full_series",
+    mode: str = "rolling",
     min_points: int = 4,
     init: list[float] | None = None,
     use_prior_p0: bool = True,
     output_folder: str | None = "_test",
     save: bool = True,
+    monomer_sum_peaks: list[str] | None = None,
+    cluster_sum_peaks: list[str] | None = None,
 ) -> FitRunResult:
     """Fit one ``*_CarbonylPeakArea.csv`` file.
 
@@ -90,6 +92,10 @@ def fit_file(
             fitting starts fresh from ``init`` (or defaults) for every row.
         output_folder: Output subfolder name when ``save=True``.
         save: If True, write merged legacy-style CSV output.
+        monomer_sum_peaks: Optional Peak_Name list overriding which peaks are
+            summed into ``monomer_sum``. ``None`` keeps the config-defined
+            definition (or the input CSV's existing monomer_sum row).
+        cluster_sum_peaks: Same override, for ``cluster_sum``.
 
     Returns:
         FitRunResult containing in-memory fit rows and optional output path.
@@ -113,6 +119,8 @@ def fit_file(
         mode=mode,
         p0=init,
         carry_forward_p0=use_prior_p0,
+        monomer_sum_peaks=monomer_sum_peaks,
+        cluster_sum_peaks=cluster_sum_peaks,
     )
 
     output_path: Path | None = None
@@ -128,6 +136,8 @@ def fit_file(
             mode=mode,
             p0=init,
             use_prior_p0=use_prior_p0,
+            monomer_sum_peaks=monomer_sum_peaks,
+            cluster_sum_peaks=cluster_sum_peaks,
         )
 
     return FitRunResult(
@@ -265,11 +275,13 @@ def fit_folder(
     *,
     model: str = "secondary_pfo",
     peak_names: list[str] | None = None,
-    mode: str = "full_series",
+    mode: str = "rolling",
     min_points: int = 4,
     init: list[float] | None = None,
     use_prior_p0: bool = True,
     output_folder: str = "_test",
+    monomer_sum_peaks: list[str] | None = None,
+    cluster_sum_peaks: list[str] | None = None,
 ) -> BatchFitResult:
     """Fit all matching CarbonylPeakArea files in one dataset folder.
 
@@ -284,6 +296,10 @@ def fit_folder(
             between rows (only accepted if r² improves by > 0.01). If False,
             fitting starts fresh from ``init`` (or defaults) for every row.
         output_folder: Output subfolder name for merged outputs.
+        monomer_sum_peaks: Optional Peak_Name list overriding which peaks are
+            summed into ``monomer_sum``. ``None`` keeps the config-defined
+            definition (or each input CSV's existing monomer_sum row).
+        cluster_sum_peaks: Same override, for ``cluster_sum``.
 
     Returns:
         BatchFitResult summarizing successes, failures, and output files.
@@ -313,6 +329,8 @@ def fit_folder(
                 use_prior_p0=use_prior_p0,
                 output_folder=output_folder,
                 save=True,
+                monomer_sum_peaks=monomer_sum_peaks,
+                cluster_sum_peaks=cluster_sum_peaks,
             )
             outputs.append(csv_file.parent / output_folder / csv_file.name)
         except Exception as exc:
@@ -333,7 +351,7 @@ def fit_folder_by_sum_models(
     *,
     monomer_model: str = "secondary_pfo",
     cluster_model: str = "pfo",
-    mode: str = "full_series",
+    mode: str = "rolling",
     min_points: int = 4,
     monomer_init: list[float] | None = None,
     cluster_init: list[float] | None = None,

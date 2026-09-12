@@ -63,7 +63,10 @@ class _KineticUtilities:
         ]
 
     def build_cluster_sum(
-        self, df: pd.DataFrame, isotope: str | None = None
+        self,
+        df: pd.DataFrame,
+        isotope: str | None = None,
+        peak_names_override: list[str] | None = None,
     ) -> pd.DataFrame:
         df = df.copy()
         df["Time (s)"] = pd.to_numeric(df["Time (s)"], errors="coerce")
@@ -72,9 +75,12 @@ class _KineticUtilities:
         )
         df = df.dropna(subset=["Time (s)", "Cumulative_Peak_Area"])
 
-        cluster_rows = df[
-            df["Peak_Name"].isin(self.get_peak_names("cluster_peaks_base", isotope))
-        ]
+        peak_names = (
+            peak_names_override
+            if peak_names_override is not None
+            else self.get_peak_names("cluster_peaks_base", isotope)
+        )
+        cluster_rows = df[df["Peak_Name"].isin(peak_names)]
         if cluster_rows.empty:
             return pd.DataFrame()
 
@@ -88,7 +94,10 @@ class _KineticUtilities:
         )
 
     def build_monomer_sum(
-        self, df: pd.DataFrame, isotope: str | None = None
+        self,
+        df: pd.DataFrame,
+        isotope: str | None = None,
+        peak_names_override: list[str] | None = None,
     ) -> pd.DataFrame:
         df = df.copy()
         df["Time (s)"] = pd.to_numeric(df["Time (s)"], errors="coerce")
@@ -97,7 +106,12 @@ class _KineticUtilities:
         )
         df = df.dropna(subset=["Time (s)", "Cumulative_Peak_Area"])
 
-        monomer_rows = df[df["Peak_Name"].isin(self.get_monomer_peak_names(isotope))]
+        peak_names = (
+            peak_names_override
+            if peak_names_override is not None
+            else self.get_monomer_peak_names(isotope)
+        )
+        monomer_rows = df[df["Peak_Name"].isin(peak_names)]
         if monomer_rows.empty:
             return pd.DataFrame()
 
@@ -110,18 +124,37 @@ class _KineticUtilities:
             monomer_rows.groupby(group_cols)["Cumulative_Peak_Area"].sum().reset_index()
         )
 
-    def append_sum_rows(self, df: pd.DataFrame) -> pd.DataFrame:
+    def append_sum_rows(
+        self,
+        df: pd.DataFrame,
+        monomer_sum_peaks: list[str] | None = None,
+        cluster_sum_peaks: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """Append monomer_sum/cluster_sum rows if not already present.
+
+        ``monomer_sum_peaks``/``cluster_sum_peaks`` override which Peak_Name
+        rows get summed into that group. When given, any existing row of
+        that sum type is dropped first and rebuilt from the atomic peak
+        rows -- the source CSV already has monomer_sum/cluster_sum baked in
+        by the live pipeline, so without dropping it first an override would
+        have nothing to do.
+        """
+        if monomer_sum_peaks is not None and "Peak_Name" in df.columns:
+            df = df[df["Peak_Name"] != "monomer_sum"]
+        if cluster_sum_peaks is not None and "Peak_Name" in df.columns:
+            df = df[df["Peak_Name"] != "cluster_sum"]
+
         sum_builders = {
-            "monomer_sum": self.build_monomer_sum,
-            "cluster_sum": self.build_cluster_sum,
+            "monomer_sum": (self.build_monomer_sum, monomer_sum_peaks),
+            "cluster_sum": (self.build_cluster_sum, cluster_sum_peaks),
         }
         template_columns = list(df.columns)
         sum_frames: list[pd.DataFrame] = []
 
-        for sum_name, builder in sum_builders.items():
+        for sum_name, (builder, override) in sum_builders.items():
             if "Peak_Name" in df.columns and (df["Peak_Name"] == sum_name).any():
                 continue
-            sum_df = cast(pd.DataFrame, builder(df))
+            sum_df = cast(pd.DataFrame, builder(df, peak_names_override=override))
             if not isinstance(sum_df, pd.DataFrame):
                 LOGGER.warning("Unexpected sum output for %s", sum_name)
                 continue
@@ -141,14 +174,23 @@ class _KineticUtilities:
         frames.extend(sum_frames)
         return pd.concat(frames, ignore_index=True)
 
-    def prepare_peak_area_df(self, df: pd.DataFrame) -> pd.DataFrame:
+    def prepare_peak_area_df(
+        self,
+        df: pd.DataFrame,
+        monomer_sum_peaks: list[str] | None = None,
+        cluster_sum_peaks: list[str] | None = None,
+    ) -> pd.DataFrame:
         df = df.copy()
         df["Time (s)"] = pd.to_numeric(df["Time (s)"], errors="coerce")
         df["Cumulative_Peak_Area"] = pd.to_numeric(
             df["Cumulative_Peak_Area"], errors="coerce"
         )
         df = df.dropna(subset=["Time (s)", "Cumulative_Peak_Area"])
-        return self.append_sum_rows(df)
+        return self.append_sum_rows(
+            df,
+            monomer_sum_peaks=monomer_sum_peaks,
+            cluster_sum_peaks=cluster_sum_peaks,
+        )
 
     @staticmethod
     def write_fit_params_to_legacy(

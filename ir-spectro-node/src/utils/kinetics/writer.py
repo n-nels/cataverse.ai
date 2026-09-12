@@ -72,6 +72,8 @@ class KineticWriter:
         mode: str,
         p0: list[float] | None,
         carry_forward_p0: bool,
+        monomer_sum_peaks: list[str] | None = None,
+        cluster_sum_peaks: list[str] | None = None,
     ) -> pd.DataFrame:
         return self.prepare_model_fit_rows(
             model_key,
@@ -81,6 +83,8 @@ class KineticWriter:
             mode=mode,
             p0=p0,
             carry_forward_p0=carry_forward_p0,
+            monomer_sum_peaks=monomer_sum_peaks,
+            cluster_sum_peaks=cluster_sum_peaks,
         )
 
     def _select_secondary_p0(
@@ -227,6 +231,8 @@ class KineticWriter:
         mode: str = "rolling",
         p0: list[float] | None = None,
         carry_forward_p0: bool = True,
+        monomer_sum_peaks: list[str] | None = None,
+        cluster_sum_peaks: list[str] | None = None,
     ) -> pd.DataFrame:
         """Prepare fit-result rows for one DataFrame.
 
@@ -256,6 +262,12 @@ class KineticWriter:
             at time point N+1.  When False, each time point starts from
             ``p0`` (or defaults) independently.  Only affects
             ``secondary_pfo`` in ``"rolling"`` mode.
+        monomer_sum_peaks : list[str] | None
+            Override which Peak_Name rows get summed into ``monomer_sum``.
+            None = use the config-defined definition (or the input CSV's
+            existing monomer_sum row, if already present).
+        cluster_sum_peaks : list[str] | None
+            Same override, for ``cluster_sum``.
         """
         spec = self.model_specs.get(model_key)
         if spec is None:
@@ -263,7 +275,11 @@ class KineticWriter:
         if mode not in {"rolling", "full_series"}:
             raise ValueError("mode must be one of: rolling, full_series")
 
-        df = self.utils.prepare_peak_area_df(df)
+        df = self.utils.prepare_peak_area_df(
+            df,
+            monomer_sum_peaks=monomer_sum_peaks,
+            cluster_sum_peaks=cluster_sum_peaks,
+        )
         if peak_names is not None:
             df = cast(pd.DataFrame, df[df["Peak_Name"].isin(peak_names)].copy())
 
@@ -471,6 +487,8 @@ class KineticWriter:
         mode: str = "rolling",
         p0: list[float] | None = None,
         use_prior_p0: bool = True,
+        monomer_sum_peaks: list[str] | None = None,
+        cluster_sum_peaks: list[str] | None = None,
     ) -> Path:
         """Fit a single kinetics model to one CarbonylPeakArea CSV.
 
@@ -501,10 +519,20 @@ class KineticWriter:
             at time point N+1.  When False, each time point starts from
             ``p0`` (or defaults) independently.  Only affects
             ``secondary_pfo`` in ``"rolling"`` mode.
+        monomer_sum_peaks : list[str] | None
+            Override which Peak_Name rows get summed into ``monomer_sum``.
+            None = use the config-defined definition (or the input CSV's
+            existing monomer_sum row, if already present).
+        cluster_sum_peaks : list[str] | None
+            Same override, for ``cluster_sum``.
         """
         carbonyl_peak_area_path = Path(carbonyl_peak_area_path)
         df_legacy = pd.read_csv(carbonyl_peak_area_path)
-        df_legacy = self.utils.prepare_peak_area_df(df_legacy)
+        df_legacy = self.utils.prepare_peak_area_df(
+            df_legacy,
+            monomer_sum_peaks=monomer_sum_peaks,
+            cluster_sum_peaks=cluster_sum_peaks,
+        )
 
         fit_params = self._prepare_model_rows_for_file(
             model_key,
