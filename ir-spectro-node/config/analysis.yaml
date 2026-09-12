@@ -29,6 +29,10 @@ voigt_fit:
     - 2163
     - 2153
     - 2143
+  monomer_sum_peaks_base: # 12CO -- offline monomer_sum only; falls back to monomer_peaks_base when absent
+    - 2163
+    - 2153
+    - 2143
   cluster_peaks_base: # 12CO
     - 2123
     - 2112
