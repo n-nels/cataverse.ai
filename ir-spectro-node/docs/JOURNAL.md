@@ -413,3 +413,101 @@ All new methods (`detect_discontinuity_drawdown`, `classify_trajectory_drawdown`
 `classify_trajectory_combined`) are additive in `kinetic_fit_writer.py` —
 `classify_trajectory` (the original, still used by the live path per spec
 §4's non-goals) is untouched.
+
+## Round 4 — 2026-09-11
+
+Per advisor: 2 negative results before per-peak work. (1) Threaded
+`required_consecutive` into `run_validation` (was hardcoded); combined detector
+at rc=1/2/3 stays 283-284/288 (rc=2 trades the `004-014` miss for `003-097` as
+a new FP) — no free gain, rc=3 stands. (2) Round 3's drawdown/rise ratio was
+computed non-causally at full trajectory length; recomputed at each fire's
+actual prefix, separation vanishes (TP range 0.068-0.648 vs FP `003-109`=0.141,
+`004-031`=0.761 — both inside/above the TP range) — dead end, not a real
+discriminator. (3) Per-peak decline (low 3 vs other 6 cluster peaks, relative
+drawdown) separates `003-109`/`004-031` from all 24 TPs but not `004-032`
+(0.709, inside TP range); also non-causal, unverified for real-time use. No
+detector change landed; 284/288 stands. Next: ask the user whether the 3
+remaining FPs (all `basis=algorithm_batch_matches_existing`, same weak status
+as round 1's `003-097`/`003-115`) are batch-only mislabels, or keep hunting a
+real 4th feature.
+
+## Round 5 — 2026-09-11
+
+User, directly: "`004-032` should be discontinuous" - answering round 4's
+open question for one of the three files. Corrected
+`src/utils/kinetics/ground_truth.json` (`nn1120-3_pd_ceo2_004-032`:
+`continuous`->`discontinuous`, `basis`->`user_corrected_2026-09-11`) and
+`docs/spec.md` §3/§4 (folder count 9->10 discontinuous, 47/241->48/240
+overall). Re-ran the harness (`classify_trajectory_combined`,
+`required_consecutive=3`, no code change): **284/288 -> 285/288** - the
+drawdown rule's fire on this file was correct all along, the label was wrong.
+Two mismatches remain: `..._003-109` (false positive - round 4's causal-ratio
+and per-peak-decline checks don't separate it either) and `..._004-014`
+(intermittent-flicker miss, §4/§6.0, unrelated). `..._003-109` carries the
+same `algorithm_batch_matches_existing` basis `..._004-032` had before this
+correction - worth asking the user about that one too before more detector
+work, per spec §6.2.
+
+## Round 6 — 2026-09-11
+
+Asked the user about `..._003-109` (shape: rises 0.285->1.197 by midpoint,
+eases to 0.958 by end - a ~20% pullback but ending >3x above start, not
+back near baseline). User confirmed: **`continuous`, label stands** -
+unlike `..._004-032`, this is not a mislabel. Recorded in `docs/spec.md`
+§4/§6.2. This reframes the remaining gap: `..._003-109` is now a confirmed
+detector-precision problem, not a ground-truth question - the drawdown
+rule needs to tell "mild pullback, stays elevated" apart from "genuine
+reversal toward original baseline," which neither of round 4's tried
+features (causal ratio, per-peak decline) does. Untried candidate for next
+round: a feature measuring how far the drawdown closes back toward the
+*pre-rise* baseline (not just its absolute/peak-relative size) - true
+positives return near their starting value, `..._003-109` does not. No
+code or harness change this round; 285/288 stands, with `..._003-109`
+(false positive) and `..._004-014` (unrelated intermittent miss) as the
+two remaining, both now well-understood rather than open questions.
+
+## Round 7 — 2026-09-11
+
+User asked how to use `src/utils/kinetics/` to actually reprocess (write
+output CSVs), not just validate. Found the gap: `classify_file`/
+`write_pfo_classification` hardcoded `classifier.classify_trajectory` (the
+original detector) via `_classification_payload` - there was no way to
+write output with `classify_trajectory_combined`. Added an optional
+`classify_fn` parameter threaded through `_classification_payload` ->
+`prepare_pfo_classification_rows` -> `write_pfo_classification` ->
+`classify_file` (all default `None`, falling back to
+`classifier.classify_trajectory` - no behavior change for existing
+callers). Also added `classify_folder` to `src/utils/kinetics/api.py`
+(mirrors `fit_folder`'s file-discovery loop; `classify_folder` didn't
+exist before - only `classify_file` did), exported from `__init__.py`.
+Smoke-tested: `classify_file(path, classify_fn=CLASSIFIER.classify_trajectory_combined)`
+on `nn1120-4_pd_ceo2_000-000` (a file the old detector always missed) wrote
+`_test/..._000-000_CarbonylPeakArea.csv` with `classification=discontinuous`,
+`growth_onset_s=14701.4` - confirms the wiring reaches real output, not
+just the in-memory validation harness. `fit_file`/`prepare_model_fit_rows`'s
+own `_classification_payload` call (used for PFO pre_/post_ fit segments)
+was left on its default (still `classify_trajectory`) - out of scope for
+this ask, unchanged behavior there.
+
+## Round 8 — 2026-09-11
+
+Before running, queried the existing `graphify-out/graph.json` per user
+instruction (`classify_file`/`classify_folder`, Community 9 in
+`kinetics/api.py`, has no edge to `classify_trajectory()` in
+`kinetics_fitting.py`, Community 1) - confirms the offline reprocess path
+is structurally isolated from the live real-time detector, consistent with
+CLAUDE.md's two-implementations warning. No surprises, proceeded.
+
+Ran `classify_folder(folder, classify_fn=CLASSIFIER.classify_trajectory_combined)`
+over all 7 sample folders, writing to each folder's `_test/`. All 289
+on-disk files processed, 0 failures (33+10+57+4+117+34+34 - note 34 not 33
+in `nn1120-4_pd_ceo2_000`, see below).
+
+**Found: an unlabeled 289th file.** `nn1120-4_pd_ceo2_000` has
+`20260910_181627_pd_ceo2_000-035_CarbonylPeakArea.csv` on disk (dated
+2026-09-10) that isn't in `ground_truth.json` (still 288 entries, 33 for
+this folder) and was never part of the 285/288 harness result.
+`classify_folder` discovers files from disk, not from ground truth, so it
+got reprocessed anyway - classified `continuous`. Needs a label (algorithm
+or user) and a `ground_truth.json` entry before it counts toward Y; flagging
+rather than guessing one.

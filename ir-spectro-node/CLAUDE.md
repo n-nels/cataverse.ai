@@ -10,6 +10,7 @@ uv sync                          # install deps (uv is the package manager; Pyth
 python scripts\run_server.py     # OPUS ZMQ instrument server (production entry point)
 python scripts\run_norhoff.py    # Norhof LN2 pump control loop (separate process)
 python scripts\run_analysis.py   # batch/offline analysis — see note below
+python scripts\run_kinetics_classification.py  # batch classification CLI — see note below
 
 uvx ruff check .                 # lint (ruff is not a declared dependency; run via uvx)
 uvx ruff format .
@@ -19,9 +20,21 @@ There is no test suite and no pytest dependency. Validation is done by running a
 module against real data on disk and diffing the CSV output against a prior run.
 Most modules carry an `if __name__ == "__main__":` block with an editable
 `file_directory` / `name` constant at the top — that block, not CLI arguments, is
-how batch work is run (`scripts/run_analysis.py`, `src/analysis/main.py`,
-`src/utils/kinetic_fit_writer.py`). To run a single file through the pipeline,
-edit those constants rather than adding argparse.
+how batch work is run (`scripts/run_analysis.py`, `src/analysis/main.py`).
+To run a single file through the pipeline, edit those constants rather than
+adding argparse.
+
+**Batch classification is the one exception**: `scripts/run_kinetics_classification.py`
+(wrapping `src/utils/kinetics/cli.py`) is an argparse CLI, added because the
+classification algorithm itself is under active iteration (see
+`src/utils/kinetics/classification.py` and `docs/spec.md`) and needs a
+`--classifier` flag to A/B candidate detectors and run the ground-truth check
+(`--validate`) without editing source. `--classifier` defaults to `combined`
+(`classify_trajectory_combined`, 285/288 per `docs/spec.md` §6.2) — the plain
+original detector is still available as `--classifier default` (264/288) for
+comparison. Batch *fitting* (`fit_file`/`fit_folder`/`fit_folder_by_sum_models`)
+is **not** covered by this CLI and still follows the edit-constants convention,
+via `src/utils/kinetics/api.py`'s own `__main__` block.
 
 `src/utils/kinetics/` is the tidier programmatic wrapper over the batch writer:
 `from src.utils.kinetics import fit_file, fit_folder, classify_file`. It defaults
@@ -68,12 +81,21 @@ column set.
 
 **Two kinetics implementations exist — check which one you are editing.**
 `src/analysis/kinetics_fitting.py` is the live/real-time implementation used by
-the server pipeline. `src/utils/kinetic_fit_writer.py` is a parallel
-class-based (`MODELS` / `CLASSIFIER` / `WRITER`) implementation used for offline
-reprocessing, and it duplicates the models, the classification thresholds
-(`FLAT_WINDOW_S`, `MIN_FLAT_START_S`, `EPS_FLAT_DEFAULT`, `RISE_DELTA_DEFAULT`)
-and the parameter-name lists. A change to model or classification behavior
-usually has to land in both, or the two paths silently disagree.
+the server pipeline. `src/utils/kinetics/{models,classification,utils,writer}.py`
+is a parallel class-based (`MODELS` / `CLASSIFIER` / `WRITER`, wired together at
+the bottom of `writer.py`) implementation used for offline reprocessing —
+`models.py` holds the PFO/secondary-PFO model strategies, `classification.py`
+holds `KineticClassification` (the default detector plus several in-progress
+detection candidates — see below), `utils.py` holds dataframe/CSV helpers, and
+`writer.py` holds `KineticWriter`, the row-preparation/writing orchestration,
+plus the module-level singletons. This offline copy duplicates the models, the
+classification thresholds (`FLAT_WINDOW_S`, `MIN_FLAT_START_S`, `EPS_FLAT_DEFAULT`,
+`RISE_DELTA_DEFAULT`) and the parameter-name lists found in
+`kinetics_fitting.py`. A change to model or classification behavior usually has
+to land in both, or the two paths silently disagree. Porting a validated
+offline classifier into the live path is tracked as separate, future,
+out-of-scope work in `docs/spec.md` §8 — do not do it as a side effect of
+editing one side.
 
 **Models.** Cluster peaks get PFO `q(t) = q_0 + q_e(1 - exp(-k t))`; monomer peaks
 get a coupled-ODE secondary PFO solved with `solve_ivp`. Peak membership is not
@@ -85,7 +107,11 @@ only, aggregating across all `Delta_Group` values.
 **Classification** (`classify_trajectory`) labels a trajectory `continuous` or
 `discontinuous` by finding a flat window followed by a sustained rise; a
 discontinuous trajectory also gets `pre_`/`post_` breakpoint PFO fits around
-`growth_onset_s`.
+`growth_onset_s`. The offline `KineticClassification` (`src/utils/kinetics/classification.py`)
+additionally carries `classify_trajectory_sustained_rise`, `classify_trajectory_drawdown`,
+and `classify_trajectory_combined` — active detection candidates being scored
+against `ground_truth.json`, not dead alternatives; select one via
+`scripts\run_kinetics_classification.py --classifier {sustained_rise,drawdown,combined}`.
 
 ### Configuration
 

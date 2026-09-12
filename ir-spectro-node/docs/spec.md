@@ -36,12 +36,13 @@ real-time path.
 
 ## 3. Ground truth
 
-All 288 files are labeled. **47 discontinuous, 241 continuous.**
+All 288 files are labeled. **48 discontinuous, 240 continuous** (was 47/241 —
+see the 2026-09-11 correction in §4).
 
 | Folder | Files | Discontinuous | Basis |
 |---|---|---|---|
 | `nn1120-3_pd_ceo2_003` | 117 | 14 | Matches existing algorithm, batch mode |
-| `nn1120-3_pd_ceo2_004` | 34 | 9 | Matches existing algorithm, batch mode |
+| `nn1120-3_pd_ceo2_004` | 34 | 10 | Matches existing algorithm, batch mode, except one user correction (§4) |
 | `nn1120-4_pd_ceo2_000` | 33 | 24 | User-declared (existing algorithm says 0) |
 | `nn1120-2_pd_ceo2_000` | 33 | 0 | User-confirmed, matches existing algorithm |
 | `nn1120-3_pd_ceo2_000` | 10 | 0 | User-confirmed, matches existing algorithm |
@@ -135,6 +136,34 @@ need one.
   `src/utils/kinetics/api.py` (which calls `write_model_fit_params`/
   `write_pfo_classification` directly), only the
   `process_carbonyl_peak_area_folder` entry point.
+- **2026-09-11 - Ground truth correction: `nn1120-3_pd_ceo2_004-032` is
+  `discontinuous`, not `continuous`.** User correction, direct instruction
+  ("004-032 should be discontinuous"), overriding the prior
+  `algorithm_batch_matches_existing` basis. This file was flagged in round 3
+  of `docs/JOURNAL.md` as one of three files where the new
+  `detect_discontinuity_drawdown` rule fired against a `continuous` label -
+  it turns out the label, not the detector, was wrong here. Updated in
+  `src/utils/kinetics/ground_truth.json` (`basis` now
+  `user_corrected_2026-09-11`); `nn1120-3_pd_ceo2_004`'s count moves 9->10
+  discontinuous, folder total 47->48 overall. Re-running the harness with
+  `classify_trajectory_combined` moves the full-harness result
+  284/288 -> **285/288** immediately (the false positive on this file is now
+  a correctly-fired true positive) - no detector change required. Two
+  mismatches remain: `nn1120-3_pd_ceo2_003-109` (still an unresolved false
+  positive) and `nn1120-3_pd_ceo2_004-014` (the intermittent-flicker miss
+  from round 2/§6.0). `docs/JOURNAL.md` round 5 has the harness output.
+- **2026-09-11 - Ground truth confirmed correct for `nn1120-3_pd_ceo2_003-109`:
+  `continuous`, label stands.** Unlike `..._004-032` above, this one was
+  checked with the user directly rather than assumed. Trajectory: rises
+  0.285->1.197 (peak at ~t=58000s, roughly the run's midpoint out of
+  113699s total), then eases to 0.958 by the end - a ~20% pullback from
+  peak, but ending >3x above its starting value, not back near baseline
+  like the genuine `nn1120-4_pd_ceo2_000` rise-then-decay positives. User
+  confirmed this is `continuous`: a mild late pullback after sustained
+  elevated growth, not a reversal event. This makes the drawdown rule's
+  fire here a genuine detector-precision gap (the rule's `drawdown_delta`
+  threshold is too sensitive to a partial pullback), not a ground-truth
+  problem - do not revisit this label again without new evidence.
 
 ## 5. Verification to date
 
@@ -263,17 +292,38 @@ characteristics, not a property of the data independent of the detector.
   (`..._004-031`, ratio 1.8, inside the true-positive range of 0.74-5.0) -
   not committed to code, since it would be a knife-edge partial fix. See
   `docs/JOURNAL.md` round 3 for full detail.
-- **What it takes:** One more discriminating feature for `..._004-031`
-  specifically - most likely the peak-selective decline in
-  `Peak_2000`/`Peak_1988`/`Peak_1975` already noted above, which needs
-  per-peak trajectories the validation harness doesn't yet load (still
-  `cluster_sum`-only). If that doesn't discriminate either, the
-  `continuous` label on `..._004-031` may itself warrant a second look with
-  the user, the same way `nn1120-4_pd_ceo2_000`'s labels were originally
-  user-declared rather than algorithmic (§3/§4).
-- **When it stops being deferrable:** Close - 284/288 is not yet the 288/288
-  the §7 acceptance test requires, but every remaining case is now isolated
-  to one file and one feature gap rather than a systemic detector failure.
+- **Tried and mostly failed (2026-09-11, iterate round 4).** The
+  `drawdown/rise` ratio above was computed non-causally, at full trajectory
+  length - re-derived causally (ratio at the actual prefix where the
+  drawdown rule first fires, as the real-time pipeline would see it), the
+  separation vanishes entirely: true-positive range 0.068-0.648 vs. false
+  positives at 0.141 and 0.761, both inside/above that range. Not a real
+  discriminator; dead end. Per-peak decline
+  (`Peak_2000`/`Peak_1988`/`Peak_1975` vs. the other six cluster peaks,
+  relative drawdown) fares partway better - separates `..._003-109` and
+  `..._004-031` from all 24 true positives, but not `..._004-032` (0.709,
+  inside the true-positive range) - and was also computed non-causally, so
+  unverified for real-time use even where it does separate. See
+  `docs/JOURNAL.md` round 4.
+- **Ground truth correction (2026-09-11), see §4.** `..._004-032` is
+  actually `discontinuous` - the drawdown rule firing on it was correct, the
+  label was wrong. Harness result **284/288 -> 285/288** with no detector
+  change. Two mismatches remain: `..._003-109` (false positive, still
+  unresolved) and `..._004-014` (the intermittent-flicker miss, §4/§6.0).
+- **What it takes:** `..._003-109`'s label is now confirmed correct (see
+  above) - this is a real detector-precision gap, not a label issue. The
+  drawdown rule needs to distinguish "mild pullback after sustained
+  elevated growth, ends far above baseline" (`..._003-109`, continuous)
+  from "rise then genuine reversal toward original baseline"
+  (`nn1120-4_pd_ceo2_000` positives, discontinuous). Two tried features
+  don't do this (causal ratio, per-peak decline - round 4). A feature based
+  on *how far back toward the starting/pre-rise baseline* the drawdown goes
+  (not just its absolute or peak-relative size) is untried and is the
+  natural next candidate, given `..._003-109` ends >3x its starting value
+  while genuine positives decay back to near-zero/original baseline.
+- **When it stops being deferrable:** Very close - 285/288, one confirmed
+  detector-precision gap (`..._003-109`) plus one unrelated intermittent
+  miss (`..._004-014`), neither a systemic failure.
 
 ## 7. Approach
 

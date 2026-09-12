@@ -1760,8 +1760,8 @@
     "file": "20260618_034450_pd_ceo2_004-032_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260618_034450_pd_ceo2_004-032",
-    "label": "continuous",
-    "basis": "algorithm_batch_matches_existing"
+    "label": "discontinuous",
+    "basis": "user_corrected_2026-09-11"
   },
   {
     "file": "20260621_142245_pd_ceo2_004-033_CarbonylPeakArea.csv",

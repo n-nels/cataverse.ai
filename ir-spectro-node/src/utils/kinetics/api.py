@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -15,6 +15,22 @@ if str(path) not in sys.path:
 
 from src.utils.kinetics.result_types import BatchFitResult, FitRunResult
 from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT, WRITER
+
+
+def _discover_area_csvs(dataset_path: Path) -> list[Path]:
+    """Find ``*_CarbonylPeakArea.csv`` files under a dataset folder.
+
+    Excludes prior output/reference subfolders (``_test``, ``arxiv``,
+    ``CalibrationData``).
+    """
+    return [
+        path
+        for path in sorted(dataset_path.rglob("*_CarbonylPeakArea.csv"))
+        if "_test" not in path.parts
+        and "arxiv" not in path.parts
+        and "CalibrationData" not in path.parts
+        and path.name.endswith(str(AREA_SUFFIX))
+    ]
 
 
 def _metrics_summary(df: pd.DataFrame, model: str | None) -> dict[str, float]:
@@ -134,6 +150,7 @@ def classify_file(
     min_points: int = 4,
     output_folder: str | None = "_test",
     save: bool = True,
+    classify_fn: Callable[..., dict[str, Any]] | None = None,
 ) -> FitRunResult:
     """Run classification-only workflow on one ``*_CarbonylPeakArea.csv`` file.
 
@@ -143,6 +160,10 @@ def classify_file(
         min_points: Minimum points required for classification logic.
         output_folder: Output subfolder name when ``save=True``.
         save: If True, write merged legacy-style CSV output.
+        classify_fn: Optional override for the ``classify_trajectory``-shaped
+            callable used on ``cluster_sum`` (e.g.
+            ``CLASSIFIER.classify_trajectory_combined``). ``None`` keeps the
+            default ``KineticClassification.classify_trajectory`` behavior.
 
     Returns:
         FitRunResult with classification rows and optional output path.
@@ -157,6 +178,7 @@ def classify_file(
         df_input,
         min_points=min_points,
         peak_names=peak_names,
+        classify_fn=classify_fn,
     )
 
     output_path: Path | None = None
@@ -168,6 +190,7 @@ def classify_file(
             output_folder_name=output_folder,
             min_points=min_points,
             peak_names=peak_names,
+            classify_fn=classify_fn,
         )
 
     return FitRunResult(
@@ -180,6 +203,60 @@ def classify_file(
         metrics_summary={},
         warnings=[],
         fit_params=fit_rows,
+    )
+
+
+def classify_folder(
+    dataset_folder: str | Path,
+    *,
+    peak_names: list[str] | None = None,
+    min_points: int = 4,
+    output_folder: str = "_test",
+    classify_fn: Callable[..., dict[str, Any]] | None = None,
+) -> BatchFitResult:
+    """Classify all matching CarbonylPeakArea files in one dataset folder.
+
+    Args:
+        dataset_folder: Absolute folder path or relative folder under SEARCH_ROOT.
+        peak_names: Optional Peak_Name filter. ``None`` classifies all peaks.
+        min_points: Minimum points required for classification logic.
+        output_folder: Output subfolder name for merged outputs.
+        classify_fn: Optional override for the ``classify_trajectory``-shaped
+            callable used on ``cluster_sum`` (see ``classify_file``).
+
+    Returns:
+        BatchFitResult summarizing successes, failures, and output files.
+    """
+    dataset_path = Path(dataset_folder)
+    if not dataset_path.is_absolute():
+        dataset_path = SEARCH_ROOT / dataset_path
+
+    csv_files = _discover_area_csvs(dataset_path)
+
+    outputs: list[Path] = []
+    failures: dict[str, str] = {}
+    for csv_file in csv_files:
+        try:
+            result = classify_file(
+                csv_file,
+                peak_names=peak_names,
+                min_points=min_points,
+                output_folder=output_folder,
+                save=True,
+                classify_fn=classify_fn,
+            )
+            if result.output_path is not None:
+                outputs.append(result.output_path)
+        except Exception as exc:
+            failures[str(csv_file)] = str(exc)
+
+    return BatchFitResult(
+        dataset_folder=dataset_path,
+        n_files_found=len(csv_files),
+        n_files_success=len(outputs),
+        n_files_failed=len(failures),
+        outputs=outputs,
+        failures=failures,
     )
 
 
@@ -220,14 +297,7 @@ def fit_folder(
     if not dataset_path.is_absolute():
         dataset_path = SEARCH_ROOT / dataset_path
 
-    csv_files = [
-        path
-        for path in sorted(dataset_path.rglob("*_CarbonylPeakArea.csv"))
-        if "_test" not in path.parts
-        and "arxiv" not in path.parts
-        and "CalibrationData" not in path.parts
-        and path.name.endswith(str(AREA_SUFFIX))
-    ]
+    csv_files = _discover_area_csvs(dataset_path)
 
     outputs: list[Path] = []
     failures: dict[str, str] = {}
@@ -291,14 +361,7 @@ def fit_folder_by_sum_models(
     if not dataset_path.is_absolute():
         dataset_path = SEARCH_ROOT / dataset_path
 
-    csv_files = [
-        path
-        for path in sorted(dataset_path.rglob("*_CarbonylPeakArea.csv"))
-        if "_test" not in path.parts
-        and "arxiv" not in path.parts
-        and "CalibrationData" not in path.parts
-        and path.name.endswith(str(AREA_SUFFIX))
-    ]
+    csv_files = _discover_area_csvs(dataset_path)
 
     outputs: list[Path] = []
     failures: dict[str, str] = {}
@@ -394,14 +457,7 @@ def remove_legacy_pfo_columns_folder(
     if not dataset_path.is_absolute():
         dataset_path = SEARCH_ROOT / dataset_path
 
-    csv_files = [
-        path
-        for path in sorted(dataset_path.rglob("*_CarbonylPeakArea.csv"))
-        if "_test" not in path.parts
-        and "arxiv" not in path.parts
-        and "CalibrationData" not in path.parts
-        and path.name.endswith(str(AREA_SUFFIX))
-    ]
+    csv_files = _discover_area_csvs(dataset_path)
 
     outputs: list[Path] = []
     failures: dict[str, str] = {}
@@ -427,7 +483,6 @@ def remove_legacy_pfo_columns_folder(
 
 
 if __name__ == "__main__":
-    
     fit_folder_by_sum_models(
         dataset_folder=SEARCH_ROOT / "nn1120-3_pd_ceo2_004",
         monomer_model="secondary_pfo",

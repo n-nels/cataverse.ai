@@ -21,7 +21,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.utils.kinetic_fit_writer import CLASSIFIER, SEARCH_ROOT, WRITER
+from src.utils.kinetics.writer import CLASSIFIER, SEARCH_ROOT, WRITER
 
 GROUND_TRUTH_PATH = Path(__file__).parent / "ground_truth.json"
 MIN_POINTS = 4
@@ -154,8 +154,13 @@ def run_validation(
     *,
     classify_fn: Callable[..., dict[str, Any]] | None = None,
     search_root: Path = SEARCH_ROOT,
+    required_consecutive: int = REQUIRED_CONSECUTIVE_FIRES,
 ) -> ValidationReport:
-    classify_fn = classify_fn if classify_fn is not None else CLASSIFIER.classify_trajectory
+    classify_fn = (
+        classify_fn
+        if classify_fn is not None
+        else CLASSIFIER.classify_trajectory_combined
+    )
     entries = json.loads(Path(ground_truth_path).read_text())
 
     report = ValidationReport()
@@ -163,7 +168,12 @@ def run_validation(
         csv_path = search_root / entry["folder"] / entry["file"]
         try:
             time_s, intensity = _cluster_sum_trajectory(csv_path)
-            fired = ever_fires(classify_fn, time_s, intensity)
+            fired = ever_fires(
+                classify_fn,
+                time_s,
+                intensity,
+                required_consecutive=required_consecutive,
+            )
             error = None
             n_points = len(time_s)
         except Exception as exc:  # noqa: BLE001 - record and keep going
