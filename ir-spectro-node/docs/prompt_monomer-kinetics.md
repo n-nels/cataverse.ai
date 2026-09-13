@@ -44,7 +44,10 @@ Out of scope for this loop:
   features — deferred to a future, separate loop once candidate features are
   known to be worth building on.
 - Do not touch `cluster_sum`'s own detector code or the nuc-clf loop
-  (`docs/prompt_nuc-clf.md`) — read `cluster_sum` for plotting only (see below).
+  (`docs/prompt_nuc-clf.md`) — including its `growth_onset_s`/classification
+  output, which must not be used as a reference value here. `cluster_sum`'s
+  own raw data series is in scope for plotting and for this loop's own
+  metrics derived directly from it.
 - Do not modify the pfo-sec fitting code itself, or the fit CLI
   (`scripts/run_kinetics_fit.py`) — read its output, don't change it.
 

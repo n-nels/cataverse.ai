@@ -113,3 +113,74 @@ general. (3) The monomer-peak-precedes-cluster-onset finding is strong enough
 on its own to be a headline candidate feature for the eventual catalog —
 worth telling the human this explicitly next round rather than only
 continuing to search for more features.
+
+## Round 3 — 2026-09-12
+
+**User correction, applied this round:** `cluster_growth_onset_s` (from
+`classify_trajectory_combined`, round 2's comparison reference) was flagged
+as errant — do not use it. `cluster_sum`'s own raw data series stays in
+scope, but the onset marker on it must be this loop's own metric, not the
+nuc-clf detector's opinion, and the loop should not reach for further
+external metrics beyond `monomer_sum`/`cluster_sum`/`pfo-sec_*`.
+
+**Change made:** in `monomer_features.py`, replaced `cluster_reference_onset`
+(which called `CLASSIFIER.classify_trajectory_combined`) with
+`cluster_rise_onset_feature` — first *sustained* (2 consecutive rows) time
+`cluster_sum`'s raw point-to-point rate (`diff(value)/diff(time)`, 3-point
+smoothed) exceeds 10% of its own max, deliberately mirroring
+`q_inf_onset_feature`'s own-threshold-crossing shape rather than inventing a
+new style. `CLASSIFIER`/`WRITER` imports dropped (both now unused). Catalog
+column renamed `cluster_growth_onset_s`→`cluster_rise_onset_s`,
+`monomer_peak_minus_cluster_onset_s`→`_cluster_rise_onset_s`; plot title no
+longer shows `cluster_classification` (that also came from the same call).
+Re-ran on all 34 files, 0 failures.
+
+**Result — reported honestly, this is a weaker/noisier result than round 2's
+classifier-based comparison, not a confirmation of it:** monomer peak now
+leads the new `cluster_rise_onset_s` in only 19/34 files (vs 23/24 against
+the old classifier reference); median diff -3540s, mean -15879s, std 45289s
+— no clean sign pattern. Visual check on `...-000`: `cluster_sum` there is
+*net declining* across the run, and the new metric's onset (t≈59700s) is
+just a late noise bump crossing the rate threshold, not real growth — the
+same false-positive mode round 2 flagged for `continuous`/noisy files, now
+hitting this onset metric directly rather than being screened out by a
+classifier label. `...-011` (round 2's one reversed case) is confirmed
+visually noisy/flat overall, not a real LaMer trajectory either.
+
+**What's next, and why:** the naive point-to-point rate is too noisy on
+`cluster_sum` to threshold directly (unlike `pfo-sec_q_inf_au`, which is a
+fitted parameter, not a raw diff). Try either (a) a wider smoothing window
+before differencing, or (b) gating this metric on the series' net trend
+(rise vs. decline over the whole trajectory) before reporting an onset at
+all, so a noise bump in an overall-declining curve can't masquerade as one.
+Saved output unchanged in location:
+`C:\Data\peakFit\nn1120-4_pd_ceo2_000\_test\monomer_features_lamer_mapping.csv`
++ 34 `*_monomer_lamer.png`.
+
+## Round 4 — 2026-09-12
+
+**Bridge = the two maxima.** Root cause of round 3's failure found:
+`cluster_sum`'s "noise" is a `Delta_Group` artifact — within-group scatter
+~0.03 au vs ~0.30 au between group means, so pooling six offset levels into
+one time-sorted series made the sawtooth that round 3's rate threshold
+tripped on. Dropped `cluster_rise_onset_feature`; added `peak_by_delta_group`
+(pick the peak inside each group, median across groups, group spread carried
+as free uncertainty). Monomer anchor (`monomer_peak_feature`) deliberately
+untouched; running the same picker on `monomer_sum` agrees with it (median
+|diff| 3300s, 31/34 within 10000s) — method validated before trusting it on
+`cluster_sum`, where signal and artifact are the same size.
+
+**Result:** cluster max follows monomer max in **31/34** files, and **24/26**
+once both peaks are required interior to the window (`*_peak_index_frac` in
+[0.05, 0.95], a threshold-free gate); median lag **23700s**, and the lag
+exceeds its own group spread in 17/24. So round 2's monomer-leads ordering
+survives on one comparable, series-derived basis — resolving the round-2 vs
+round-3 denominator mismatch (23/24 was classifier-gated, 19/34 ungated).
+Both gated reversals explained: `-011` flat/noisy, `-013` a null run
+(negative `monomer_sum` throughout, group spread 122278s — the spread flags
+it automatically). Catalog column `cluster_minus_monomer_peak_lag_s`, same
+`_test/` paths as before; plots now draw one thin line per `Delta_Group`,
+which is what makes the artifact visible.
+
+**Next:** the lag is a net-growth-phase duration — compare it against
+`pfo-sec_k_a`/`k_p` timescales, which is the model-side half of the bridge.

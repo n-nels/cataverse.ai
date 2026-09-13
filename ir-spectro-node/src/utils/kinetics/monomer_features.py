@@ -4,9 +4,15 @@ Loop instance: docs/prompt_monomer-kinetics.md / docs/JOURNAL_monomer-kinetics.m
 Standalone module, no CLI -- plain functions plus an editable-constants
 ``__main__`` block (see prompt_monomer-kinetics.md for why). Scope: monomer_sum
 in the 34 files under C:\\Data\\peakFit\\nn1120-4_pd_ceo2_000\\ only. Does not
-touch cluster_sum's own detector code -- classify_trajectory_combined is called
-read-only, purely to plot a reference growth_onset_s next to this loop's own
-monomer-side features.
+touch cluster_sum's own detector code, and does not use the classifier's
+growth_onset_s as a reference (flagged errant in round 3); no metrics beyond
+monomer_sum/cluster_sum/pfo-sec.
+
+Round 4: the bridge between the two species is their two maxima -- the
+monomer_sum max (the anchor, ``monomer_peak_feature``, unchanged) and the
+cluster_sum max (``peak_by_delta_group``) -- and the lag between them. Round
+3's threshold-based ``cluster_rise_onset_feature`` was removed: the Delta_Group
+offsets it was tripping on are an artifact, not signal (see peak_by_delta_group).
 """
 
 from __future__ import annotations
@@ -26,7 +32,7 @@ path = Path(__file__).resolve().parents[3]
 if str(path) not in sys.path:
     sys.path.append(str(path))
 
-from src.utils.kinetics.writer import CLASSIFIER, SEARCH_ROOT, WRITER
+from src.utils.kinetics.writer import SEARCH_ROOT
 
 PFO_SEC_COLUMNS = [
     "pfo-sec_k_a_s-1",
@@ -57,14 +63,35 @@ def monomer_trajectory(df: pd.DataFrame) -> pd.DataFrame:
     return grouped.sort_values("Time (s)").reset_index(drop=True)
 
 
+def monomer_with_groups(df: pd.DataFrame) -> pd.DataFrame:
+    """monomer_sum rows keeping Delta_Group -- input for the per-group check
+    on the peak picker (see ``process_file``). The reported monomer anchor
+    still comes from ``monomer_peak_feature`` on the averaged curve."""
+    rows = df.loc[
+        df["Peak_Name"] == "monomer_sum",
+        ["Time (s)", "Delta_Group", "Cumulative_Peak_Area"],
+    ].copy()
+    rows["Time (s)"] = pd.to_numeric(rows["Time (s)"], errors="coerce")
+    rows["Cumulative_Peak_Area"] = pd.to_numeric(
+        rows["Cumulative_Peak_Area"], errors="coerce"
+    )
+    rows = rows.dropna(subset=["Time (s)", "Cumulative_Peak_Area"])
+    return rows.sort_values("Time (s)").reset_index(drop=True)
+
+
 def cluster_trajectory(df: pd.DataFrame) -> pd.DataFrame:
-    """cluster_sum trajectory, time-sorted only -- matches validation.py's own
-    ``_cluster_sum_trajectory`` (no dedup across Delta_Group), so that calling
-    the existing combined classifier here reproduces what the real harness
-    would compute, not a version reshaped by this module's own averaging.
+    """cluster_sum rows, time-sorted, keeping Delta_Group.
+
+    Delta_Group is retained rather than averaged away because the groups are
+    systematically offset from one another (see ``peak_by_delta_group``), so
+    the right unit of analysis here is one group's own curve, not a pooled
+    series. Round 2's reason for reading this un-deduped (to reproduce what
+    the nuc-clf classifier harness would see) no longer applies -- that call
+    was removed in round 3.
     """
     rows = df.loc[
-        df["Peak_Name"] == "cluster_sum", ["Time (s)", "Cumulative_Peak_Area"]
+        df["Peak_Name"] == "cluster_sum",
+        ["Time (s)", "Delta_Group", "Cumulative_Peak_Area"],
     ].copy()
     rows["Time (s)"] = pd.to_numeric(rows["Time (s)"], errors="coerce")
     rows["Cumulative_Peak_Area"] = pd.to_numeric(
@@ -82,7 +109,11 @@ def monomer_peak_feature(monomer: pd.DataFrame) -> dict[str, float]:
     amplitude is the raw (unsmoothed) value at that time.
     """
     if monomer.empty:
-        return {"peak_time_s": np.nan, "peak_amplitude_au": np.nan}
+        return {
+            "peak_time_s": np.nan,
+            "peak_amplitude_au": np.nan,
+            "peak_index_frac": np.nan,
+        }
     smoothed = (
         monomer["Cumulative_Peak_Area"].rolling(3, center=True, min_periods=1).mean()
     )
@@ -90,6 +121,64 @@ def monomer_peak_feature(monomer: pd.DataFrame) -> dict[str, float]:
     return {
         "peak_time_s": float(monomer.loc[idx, "Time (s)"]),
         "peak_amplitude_au": float(monomer.loc[idx, "Cumulative_Peak_Area"]),
+        "peak_index_frac": float(idx) / max(len(monomer) - 1, 1),
+    }
+
+
+def peak_by_delta_group(
+    rows: pd.DataFrame, prefix: str, min_points: int = 5
+) -> dict[str, float]:
+    """Peak picked inside each Delta_Group separately, then aggregated by median.
+
+    Why not pool the groups first: the Delta_Group levels are systematically
+    offset from each other. In this dataset's late-time window a group's own
+    scatter is ~0.02-0.04 a.u. while the spread *between* group means is
+    ~0.30 a.u. -- comparable to cluster_sum's entire dynamic range. A pooled
+    time-sorted series therefore zigzags between six offset levels, and which
+    group happens to be sampled at a given time moves the pooled value more
+    than the chemistry does. (This is what made round 3's rate-threshold onset
+    fire on "noise" bumps; they were composition artifacts, not noise.)
+
+    Each group spans >90% of the trajectory in every file here, so each yields
+    a legitimate peak on an internally consistent curve. The median across
+    groups is the reported peak; the spread across groups is carried as a free
+    uncertainty estimate. Groups with fewer than ``min_points`` samples are
+    skipped as too short to peak-pick.
+    """
+    keys = [
+        f"{prefix}_peak_time_s",
+        f"{prefix}_peak_amplitude_au",
+        f"{prefix}_peak_time_spread_s",
+        f"{prefix}_peak_index_frac",
+        f"{prefix}_n_groups",
+    ]
+    empty = dict.fromkeys(keys, np.nan)
+    if rows.empty or "Delta_Group" not in rows:
+        return empty
+
+    times: list[float] = []
+    amplitudes: list[float] = []
+    index_fractions: list[float] = []
+    for _, group in rows.groupby("Delta_Group"):
+        group = group.sort_values("Time (s)").reset_index(drop=True)
+        if len(group) < min_points:
+            continue
+        smoothed = (
+            group["Cumulative_Peak_Area"].rolling(3, center=True, min_periods=1).mean()
+        )
+        idx = int(smoothed.idxmax())
+        times.append(float(group.loc[idx, "Time (s)"]))
+        amplitudes.append(float(group.loc[idx, "Cumulative_Peak_Area"]))
+        index_fractions.append(float(idx) / max(len(group) - 1, 1))
+
+    if not times:
+        return empty
+    return {
+        f"{prefix}_peak_time_s": float(np.median(times)),
+        f"{prefix}_peak_amplitude_au": float(np.median(amplitudes)),
+        f"{prefix}_peak_time_spread_s": float(np.max(times) - np.min(times)),
+        f"{prefix}_peak_index_frac": float(np.median(index_fractions)),
+        f"{prefix}_n_groups": float(len(times)),
     }
 
 
@@ -133,34 +222,14 @@ def final_fit_params(monomer: pd.DataFrame) -> dict[str, float]:
     return out
 
 
-def cluster_reference_onset(cluster: pd.DataFrame) -> dict[str, Any]:
-    """Batch (whole-trajectory, not prefix-swept) classify_trajectory_combined
-    on cluster_sum -- a read-only reference point for comparison. This does
-    not run the nuc-clf loop's own validation harness/aggregation policy; it's
-    a single best-effort growth_onset_s to plot next to this loop's monomer
-    features, not a claim about that loop's own correctness metric.
-    """
-    if cluster.empty or len(cluster) < 4:
-        return {
-            "cluster_classification": "insufficient_data",
-            "cluster_growth_onset_s": np.nan,
-        }
-    time_s = cluster["Time (s)"].to_numpy(dtype=float)
-    intensity = cluster["Cumulative_Peak_Area"].to_numpy(dtype=float)
-    result = CLASSIFIER.classify_trajectory_combined(time_s, intensity)
-    return {
-        "cluster_classification": result.get("classification"),
-        "cluster_growth_onset_s": result.get("growth_onset_s", np.nan),
-    }
-
-
 def _plot_file(
     csv_path: Path,
     monomer: pd.DataFrame,
     cluster: pd.DataFrame,
     peak: dict[str, float],
     q_inf_onset: dict[str, float],
-    cluster_ref: dict[str, Any],
+    cluster_peak: dict[str, float],
+    lag_s: float,
     output_dir: Path,
 ) -> Path:
     fig, ax1 = plt.subplots(figsize=(9, 5))
@@ -178,33 +247,60 @@ def _plot_file(
     ax1.tick_params(axis="y", labelcolor="tab:blue")
 
     ax2 = ax1.twinx()
-    if not cluster.empty:
+    # One thin line per Delta_Group rather than a pooled series -- the groups
+    # are offset by ~the whole cluster_sum dynamic range, so pooling them is
+    # what produced the apparent sawtooth in earlier rounds' plots.
+    for name, group in cluster.groupby("Delta_Group"):
+        group = group.sort_values("Time (s)")
         ax2.plot(
-            cluster["Time (s)"],
-            cluster["Cumulative_Peak_Area"],
+            group["Time (s)"],
+            group["Cumulative_Peak_Area"],
             "o-",
             color="tab:orange",
-            ms=3,
-            lw=1,
-            label="cluster_sum",
+            ms=2,
+            lw=0.8,
+            alpha=0.5,
+            label=str(name),
         )
-    ax2.set_ylabel("cluster_sum (a.u.)", color="tab:orange")
+    ax2.set_ylabel("cluster_sum per Delta_Group (a.u.)", color="tab:orange")
     ax2.tick_params(axis="y", labelcolor="tab:orange")
 
     handles: list[Any] = []
     labels: list[str] = []
 
-    if not np.isnan(peak["peak_time_s"]):
-        ax1.axvline(peak["peak_time_s"], color="tab:blue", ls="--", lw=1.2)
+    monomer_t = peak["peak_time_s"]
+    cluster_t = cluster_peak.get("cluster_peak_time_s", np.nan)
+
+    if not np.isnan(monomer_t):
+        ax1.axvline(monomer_t, color="tab:blue", ls="--", lw=1.2)
         (h,) = ax1.plot(
-            peak["peak_time_s"],
-            peak["peak_amplitude_au"],
+            monomer_t, peak["peak_amplitude_au"], "*", color="tab:blue", ms=16
+        )
+        handles.append(h)
+        labels.append(f"monomer max t={monomer_t:.0f}s")
+
+    if not np.isnan(cluster_t):
+        ax2.axvline(cluster_t, color="tab:red", ls="--", lw=1.2)
+        (h,) = ax2.plot(
+            cluster_t,
+            cluster_peak["cluster_peak_amplitude_au"],
             "*",
-            color="tab:blue",
+            color="tab:red",
             ms=16,
         )
         handles.append(h)
-        labels.append(f"monomer peak t={peak['peak_time_s']:.0f}s")
+        spread = cluster_peak.get("cluster_peak_time_spread_s", np.nan)
+        labels.append(f"cluster max t={cluster_t:.0f}s (group spread {spread:.0f}s)")
+
+    if not np.isnan(lag_s):
+        h = ax1.axvspan(
+            min(monomer_t, cluster_t),
+            max(monomer_t, cluster_t),
+            color="tab:grey",
+            alpha=0.15,
+        )
+        handles.append(h)
+        labels.append(f"lag = {lag_s:.0f}s")
 
     q_inf_t = q_inf_onset.get("q_inf_onset_time_s", np.nan)
     if not np.isnan(q_inf_t):
@@ -212,19 +308,8 @@ def _plot_file(
         handles.append(h)
         labels.append(f"q_inf onset t={q_inf_t:.0f}s")
 
-    cluster_onset = cluster_ref.get("cluster_growth_onset_s", np.nan)
-    if cluster_onset is not None and not (
-        isinstance(cluster_onset, float) and np.isnan(cluster_onset)
-    ):
-        h = ax2.axvline(cluster_onset, color="tab:red", ls="-.", lw=1.8)
-        handles.append(h)
-        labels.append(f"cluster growth_onset (combined) t={cluster_onset:.0f}s")
-
     ax1.legend(handles, labels, loc="upper right", fontsize=8)
-    ax1.set_title(
-        f"{csv_path.stem}\ncluster_classification="
-        f"{cluster_ref.get('cluster_classification')}"
-    )
+    ax1.set_title(csv_path.stem)
     fig.tight_layout()
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{csv_path.stem}_monomer_lamer.png"
@@ -242,7 +327,12 @@ def process_file(csv_path: Path, output_dir: Path) -> dict[str, Any]:
     peak = monomer_peak_feature(monomer)
     q_inf_onset = q_inf_onset_feature(monomer)
     finals = final_fit_params(monomer)
-    cluster_ref = cluster_reference_onset(cluster)
+    cluster_peak = peak_by_delta_group(cluster, "cluster")
+    # Same per-group method run on monomer_sum purely as a check on the method:
+    # monomer's hump is large against the group offset, so its anchor peak
+    # (monomer_peak_feature, unchanged) and this should agree. If they don't,
+    # the per-group picker is suspect before it is trusted on cluster_sum.
+    monomer_check = peak_by_delta_group(monomer_with_groups(df), "monomer_pergroup")
 
     row: dict[str, Any] = {
         "file": csv_path.name,
@@ -251,24 +341,37 @@ def process_file(csv_path: Path, output_dir: Path) -> dict[str, Any]:
         **peak,
         **q_inf_onset,
         **finals,
-        **cluster_ref,
+        **cluster_peak,
+        **monomer_check,
     }
 
-    onset_s = row.get("cluster_growth_onset_s", np.nan)
-    peak_t = row.get("peak_time_s", np.nan)
-    row["monomer_peak_minus_cluster_onset_s"] = (
-        peak_t - onset_s
-        if not np.isnan(peak_t) and onset_s is not None and not np.isnan(onset_s)
+    monomer_t = row.get("peak_time_s", np.nan)
+    cluster_t = row.get("cluster_peak_time_s", np.nan)
+    row["cluster_minus_monomer_peak_lag_s"] = (
+        cluster_t - monomer_t
+        if not np.isnan(monomer_t) and not np.isnan(cluster_t)
+        else np.nan
+    )
+    row["monomer_pergroup_minus_anchor_s"] = (
+        row["monomer_pergroup_peak_time_s"] - monomer_t
+        if not np.isnan(monomer_t) and not np.isnan(row["monomer_pergroup_peak_time_s"])
         else np.nan
     )
 
-    _plot_file(csv_path, monomer, cluster, peak, q_inf_onset, cluster_ref, output_dir)
+    _plot_file(
+        csv_path,
+        monomer,
+        cluster,
+        peak,
+        q_inf_onset,
+        cluster_peak,
+        row["cluster_minus_monomer_peak_lag_s"],
+        output_dir,
+    )
     return row
 
 
-def run_folder(
-    dataset_folder: Path, output_folder: str = "_test"
-) -> pd.DataFrame:
+def run_folder(dataset_folder: Path, output_folder: str = "_test") -> pd.DataFrame:
     csv_files = sorted(dataset_folder.glob("*_CarbonylPeakArea.csv"))
     output_dir = dataset_folder / output_folder
 
@@ -295,11 +398,12 @@ if __name__ == "__main__":
                 [
                     "file",
                     "peak_time_s",
-                    "peak_amplitude_au",
-                    "q_inf_onset_time_s",
-                    "cluster_classification",
-                    "cluster_growth_onset_s",
-                    "monomer_peak_minus_cluster_onset_s",
+                    "peak_index_frac",
+                    "cluster_peak_time_s",
+                    "cluster_peak_index_frac",
+                    "cluster_peak_time_spread_s",
+                    "cluster_minus_monomer_peak_lag_s",
+                    "monomer_pergroup_minus_anchor_s",
                 ]
             ]
         )
