@@ -37,6 +37,46 @@ class _KineticUtilities:
         return r_squared, rmse, rss
 
     @staticmethod
+    def resolve_output_dir(source_dir: Path, output_folder_name: str) -> Path:
+        """Resolve the output directory for a source dataset folder.
+
+        Offline reprocessing must never write next to its own input: the
+        source ``*_CarbonylPeakArea.csv`` is read back as fit history, so
+        overwriting it in place corrupts the dataset. Output always lands in
+        a subfolder of the source folder (normally ``_test``).
+
+        Rejects any folder name that would resolve back to the source folder
+        or escape it -- ``""`` and ``"."`` both collapse to the parent under
+        ``Path.__truediv__``, and an absolute right-hand side discards the
+        left side entirely.
+        """
+        if not isinstance(output_folder_name, str) or not output_folder_name.strip():
+            raise ValueError(
+                "output_folder_name must be a non-empty subfolder name "
+                "(e.g. '_test'); got "
+                f"{output_folder_name!r}. Writing into the source folder "
+                "would overwrite the input CarbonylPeakArea CSV."
+            )
+        name = output_folder_name.strip()
+        if name in {".", ".."} or "/" in name or "\\" in name:
+            raise ValueError(
+                f"output_folder_name must be a single subfolder name; got {name!r}."
+            )
+        if Path(name).is_absolute() or Path(name).drive or Path(name).anchor:
+            raise ValueError(
+                f"output_folder_name must be relative, not an absolute path; got {name!r}."
+            )
+
+        # Input already inside the output subfolder: write in place there.
+        output_dir = source_dir if source_dir.name == name else source_dir / name
+        if output_dir.resolve() == source_dir.resolve() and source_dir.name != name:
+            raise ValueError(
+                f"output_folder_name {name!r} resolves to the source folder; refusing "
+                "to overwrite source data."
+            )
+        return output_dir
+
+    @staticmethod
     def prefix_fit_results(fit_result: dict[str, Any], prefix: str) -> dict[str, Any]:
         return {f"{prefix}{k}": v for k, v in fit_result.items() if k not in {"rmse"}}
 
@@ -247,10 +287,8 @@ class _KineticUtilities:
                 df_merged.rename(columns={column: base_column}, inplace=True)
             df_merged.drop(columns=[column], inplace=True)
 
-        output_dir = (
-            legacy_path.parent
-            if legacy_path.parent.name == output_folder_name
-            else legacy_path.parent / output_folder_name
+        output_dir = _KineticUtilities.resolve_output_dir(
+            legacy_path.parent, output_folder_name
         )
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / legacy_path.name
@@ -286,10 +324,8 @@ class _KineticUtilities:
     ) -> Path:
         """Write a plain legacy CSV (no merge), preserving file name."""
         legacy_path = Path(legacy_path)
-        output_dir = (
-            legacy_path.parent
-            if legacy_path.parent.name == output_folder_name
-            else legacy_path.parent / output_folder_name
+        output_dir = _KineticUtilities.resolve_output_dir(
+            legacy_path.parent, output_folder_name
         )
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / legacy_path.name

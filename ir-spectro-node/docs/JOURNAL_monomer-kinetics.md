@@ -184,3 +184,87 @@ which is what makes the artifact visible.
 
 **Next:** the lag is a net-growth-phase duration — compare it against
 `pfo-sec_k_a`/`k_p` timescales, which is the model-side half of the bridge.
+
+## Round 5 — 2026-09-12
+
+**Collapsed `Delta_Group` by mean** as instructed; every number now comes off
+the two collapsed curves (round 4's per-group picking retired, group scatter
+kept only as `*_group_std_mean_au`). Inflection is defined as **argmax of the
+smoothed d/dt, bounded at the cluster max** — a second-derivative zero
+crossing is not stable on 75–107 points, and leaving the search unbounded
+reproduces round 3's noise-bump failure one derivative up.
+
+**Hypothesis largely holds.** Casting the monomer max onto the cluster curve:
+median |Δ| = **5699s at w5 = 3.2 sampling intervals = 3.0% of span** (gated
+n=25, boundary gate from round 4). It lands on the **exact same sample in
+5/25** files and within one sampling interval in 8/25. The inflection is
+unchanged between smoothing windows w3 and w5 in 15/26 files, so it is not a
+smoothing artifact. Direction: the monomer max sits slightly *after* the
+inflection (20/25 at w5, median +4800s), not before.
+
+**The "clearer on later-dated samples" claim is NOT supported — it runs the
+other way.** |Δ| *grows* with sample date (Spearman rho +0.45, p=0.025 at w3;
+early-half median 4500s vs late-half 9599s; weaker and non-significant at w5,
+rho +0.30, p=0.14). The cleanest exact hit, `-003`, is early-dated
+(2026-07-07). Inspecting `-035` (latest) shows why: its cluster curve rises
+early then plateaus noisily, so the bounded argmax lands on a plateau bump
+rather than a growth ramp. A sharpness metric meant to test the other reading
+of "noticeable" divided by a near-zero rise and returned ~1e15 — discarded as
+broken rather than reported.
+
+**Next:** a rise-quality gate (require a real monotone ramp before the max)
+would let the date claim be retested on curves where an inflection is
+actually defined.
+
+## Round 6 — 2026-09-12
+
+**Inflection removed as instructed.** For the record, how it *was* defined
+(round 5): argmax of `np.gradient` over a centered rolling mean (w3/w5),
+bounded at the cluster max — smoothing yes, **no threshold**; the 10%-of-max
+threshold was round 3's deleted `cluster_rise_onset_feature`. Replaced with
+four threshold-free coordinates: each species' max, and the vertical cast of
+that max's time onto the other curve. No normalised curve-crossing computed —
+the twin y-axis makes a literal crossing an axis artifact.
+
+**Slices:** t0→monomer max = LaMer I, →cluster max = II, →end = III. Gated on
+both maxima interior (frac 0.05–0.95) and ordered; 24/34 pass, all 34 casts
+in-grid (no `np.interp` clamping). Median durations 10680 / 19200 / 148498s =
+5.7% / 10.3% / 79.0% of the run — burst-plus-growth is a tenth of the run,
+ripening dominates, which is the LaMer shape. 10 gate failures: 9 have their
+max at sample 0 (monotone-declining null runs), plus `-011` where cluster max
+precedes monomer max by 1800s — round 4's known flat/noisy file.
+
+**Output:** `_test/monomer_features_lamer_slices.csv` (new name, new schema)
++ 34 `*_monomer_lamer.png` with I/II/III `axvspan` shading and all four
+coordinates in the legend. Next: use the slices — per-region LaMer sign test
+(monomer slope + in I, − in II; cluster slope II > I).
+
+## Round 7 — 2026-09-12
+
+**Used round 6's slices for a threshold-free LaMer sign test** (least-squares
+slope per region, not endpoint differences): monomer rises in I **24/24**,
+monomer falls in II **23/24** (1 NaN: `-009` has <3 points in II). But cluster
+slope II > slope I holds in only **5/24** — the expected sign fails in 19.
+
+**This is a real result, not noise, and it revises the LaMer reading.** The
+cluster curve is already accumulating at its steepest during region I and is
+decelerating toward its own max through II (visible on `-024`: cluster ramps
+hard before the monomer max, then plateaus). So growth is *not* switched on by
+the monomer max — it is already near maximal rate there. That is consistent
+with round 5's finding that the monomer max lands on the cluster's
+steepest-growth point. Nucleation and growth overlap heavily here; the classic
+LaMer separation of a discrete burst *preceding* growth does not hold. The
+monomer max marks the end of net monomer supply excess, coinciding with peak
+growth rate, and region II is growth deceleration, not growth onset.
+
+**Model-side half:** region II = **7.3×** the ODE's own uptake timescale
+1/k_a (median; IQR 4.1–9.7; 1/k_a median 3952s vs region II 19200s), and the
+two are uncorrelated (Spearman rho 0.24, p=0.26, n=24) — k_a does not set the
+burst-to-cluster-max duration.
+
+**Output:** same `_test/monomer_features_lamer_slices.csv` (now with
+`*_slope_*`, three `lamer_*` booleans, `region_II_over_k_a_timescale`) + 34
+PNGs, stage labels staggered and the sign-test result in each title. Next: the
+failing test says region II is mis-named — consider slicing at the cluster
+curve's *rise start* instead of the run start, so region I isn't already
+containing the growth ramp.
