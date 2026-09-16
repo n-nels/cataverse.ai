@@ -465,3 +465,25 @@ kinetics_classification:
   smoothing_window: 4
   eps_flat: 1.0e-6
   rise_delta: 1.1e-1
+
+# -------------------
+# ir_fitting (offline EDA / reprocessing)
+# -------------------
+# Read by src/utils/ir_fitting only. The live server path never sees this block:
+# voigt_fit.peak_list_base and voigt_fit.cluster_peaks_base stay untouched, so
+# existing *_CarbonylPeakFitParams.csv / *_CarbonylPeakArea.csv row sets do not
+# change. Keys mirror voigt_fit's so promoting a peak to live is a copy of
+# values between two lists.
+ir_fitting:
+  # 12CO base wavenumbers, shifted by voigt_fit.isotope_shift_cm1 at read time.
+  # Integers only -- Peak_Name is formatted Peak_<value> and must match the
+  # historic strings exactly (Peak_1795, not Peak_1795.0).
+  # 1845 / 1825 here reproduce the historic Peak_1795 / Peak_1775 at 13CO,
+  # which the staged param_rules [1790,1800] and [1770,1780] already serve.
+  extra_peaks_base: []
+
+  # Group membership, mirroring voigt_fit's *_peaks_base keys. Recorded for
+  # later promotion into the live config; does not affect fitting.
+  extra_cluster_peaks_base: []
+  extra_monomer_peaks_base: []
+  extra_unknown_peaks_base: []

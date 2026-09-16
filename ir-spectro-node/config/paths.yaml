@@ -38,6 +38,10 @@ data:
   plot_monomer_max: "plot_monomer_max"
   plot_monomer_max_all: "plot_monomer_max_all"
 
+  # Visualization subfolders for src/utils/ir_fitting (offline EDA).
+  plot_individual_fit: "plot_individual_fit"
+  plot_baseline: "plot_baseline"
+
 # -------------------
 # Filename Patterns
 # -------------------
