@@ -42,6 +42,10 @@ data:
   plot_individual_fit: "plot_individual_fit"
   plot_baseline: "plot_baseline"
 
+  # Baseline-experiment output (figures + comparison CSV together). Under the
+  # figures tree because it is an experiment log to look at, not pipeline data.
+  baseline_experiments: "baseline_experiments"
+
 # -------------------
 # Filename Patterns
 # -------------------

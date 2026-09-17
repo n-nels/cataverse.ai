@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import pandas as pd
@@ -25,8 +26,20 @@ if str(path) not in sys.path:
 
 from src.core import config
 from src.utils.ir_fitting import config as ir_config
-from src.utils.ir_fitting import writer
-from src.utils.ir_fitting.result_types import BatchFitResult, MeasurementFitResult
+from src.utils.ir_fitting import runner, writer
+from src.utils.ir_fitting.baseline import (
+    JUDGED_FILES,
+    BaselineVariant,
+    overlap_shift,
+    signal_range,
+)
+from src.utils.ir_fitting.result_types import (
+    BaselineComparison,
+    BaselineTrace,
+    BatchFitResult,
+    FileBaselineComparison,
+    MeasurementFitResult,
+)
 from src.utils.ir_fitting.runner import ExistingPeakRowsError, fit_subifg_file
 
 LOGGER = logging.getLogger(__name__)
@@ -95,6 +108,7 @@ def fit_file(
     on_existing: str = "skip",
     output_folder: str = "_test",
     save: bool = True,
+    baseline_settings: dict | None = None,
 ) -> MeasurementFitResult:
     """Fit the ``ir_fitting`` peaks for one measurement.
 
@@ -162,6 +176,7 @@ def fit_file(
         append_only=append_only,
         baseline=baseline,
         on_existing=on_existing,
+        baseline_settings=baseline_settings,
     )
 
     result.merged_params = writer.merge_params(
@@ -186,6 +201,7 @@ def _run_measurement(
     append_only: bool,
     baseline: str,
     on_existing: str,
+    baseline_settings: dict | None = None,
 ) -> tuple[MeasurementFitResult, pd.DataFrame]:
     """Process every subIFG file of a measurement.
 
@@ -214,6 +230,7 @@ def _run_measurement(
                 append_only=append_only,
                 baseline=baseline,
                 on_existing=on_existing,
+                baseline_settings=baseline_settings,
             )
         except ExistingPeakRowsError:
             raise  # on_existing="error" is meant to stop the run
@@ -234,6 +251,7 @@ def load_measurement(
     measurement: str | Path,
     *,
     baseline: str = "saved",
+    baseline_settings: dict | None = None,
 ) -> MeasurementFitResult:
     """Load one measurement without fitting anything.
 
@@ -270,11 +288,204 @@ def load_measurement(
         append_only=True,
         baseline=baseline,
         on_existing="skip",
+        baseline_settings=baseline_settings,
     )
     LOGGER.info(
         "%s: loaded %d files, fitted nothing", result.file_name, len(result.files)
     )
     return result
+
+
+def compare_baselines(
+    variants: Sequence[BaselineVariant | tuple],
+    *,
+    folder_name: str = "nn1120-4_pd_ceo2_000",
+    files: Sequence[str] | None = None,
+    run_name: str = "sweep",
+    plot: bool = True,
+    save: bool = True,
+    dpi: int = 300,
+) -> BaselineComparison:
+    """Compute several baseline variants on the same files and compare them.
+
+    The entry point for baseline experimentation. Fits nothing, touches no
+    params CSV, and writes only into the figures tree -- so it is safe to run
+    repeatedly while deciding what a good baseline looks like.
+
+    Every variant is measured against the **first** one, so put the baseline
+    you are comparing to at the front (normally ``("current", {})``).
+
+    Args:
+        variants: :class:`BaselineVariant` objects, or
+            ``(label, settings[, window])`` tuples. ``settings`` overrides any
+            of ``num_std``, ``half_window``, ``interp_half_window``,
+            ``fill_half_window``, ``smooth_half_window``; anything omitted
+            keeps its ``config/analysis.yaml`` value. ``window`` is
+            ``(high, low)`` cm-1 and defaults to the 2250-1750 ROI.
+        folder_name: Dataset the files belong to.
+        files: subIFG filenames, e.g.
+            ``["20260715_094622_pd_ceo2_000-007_delta10.0042"]``. ``None`` uses
+            :data:`~src.utils.ir_fitting.baseline.JUDGED_FILES` -- the eight
+            eye-judged files of ``spec.md`` sections 14.2/14.3.
+        run_name: Subfolder under the dataset's baseline-experiment directory.
+            Use a different name per experiment so runs do not overwrite.
+        plot: Render one figure per file.
+        save: Write figures and the comparison CSV.
+        dpi: Figure resolution.
+
+    Returns:
+        :class:`BaselineComparison` -- per-file traces, a tidy table, and the
+        paths written. The table reports how far each baseline *moved*; it does
+        not score quality, because no reliable score exists here (spec.md
+        section 14.8). Judge the figures.
+    """
+    resolved = [BaselineVariant.coerce(item) for item in variants]
+    if not resolved:
+        raise ValueError("variants must contain at least one entry")
+
+    labels = [variant.label for variant in resolved]
+    if len(set(labels)) != len(labels):
+        raise ValueError(f"variant labels must be unique; got {labels}")
+
+    selected: list[tuple[str, str]] = (
+        list(JUDGED_FILES) if files is None else [(str(name), "") for name in files]
+    )
+    if not selected:
+        raise ValueError("files must contain at least one subIFG filename")
+
+    source_dir = subifg_dir(folder_name)
+    comparison = BaselineComparison(folder_name=folder_name, run_name=run_name)
+    voigt_settings = ir_config.get_voigt_settings()
+    rows: list[dict] = []
+
+    for file_stem, verdict in selected:
+        subifg_path = source_dir / file_stem
+        if not subifg_path.exists():
+            message = f"missing {subifg_path}"
+            LOGGER.error(message)
+            comparison.warnings.append(message)
+            continue
+
+        file_key = runner.file_key_for(subifg_path)
+        delta_group, _ = runner.split_file_key(file_key)
+        item = FileBaselineComparison(
+            file_key=file_key,
+            delta_group=delta_group,
+            subifg_path=subifg_path,
+            verdict=verdict,
+        )
+
+        reference: BaselineTrace | None = None
+        reference_range = float("nan")
+        for variant in resolved:
+            try:
+                arr = runner.load_subifg_roi(subifg_path, window=variant.window)
+            except Exception as exc:  # a bad window must not abort the run
+                message = f"{file_stem} / {variant.label}: {exc}"
+                LOGGER.error(message)
+                comparison.warnings.append(message)
+                continue
+            wavenumbers, intensity = arr[:, 0], arr[:, 1]
+            values, degenerate = variant.compute(intensity, voigt_settings)
+
+            trace = BaselineTrace(
+                label=variant.label,
+                settings=dict(variant.settings),
+                window=tuple(variant.window),
+                wavenumbers=wavenumbers,
+                raw=intensity,
+                baseline=values,
+                degenerate=degenerate,
+            )
+            if reference is None:
+                reference = trace
+                reference_range = signal_range(intensity)
+            else:
+                shift, region = overlap_shift(
+                    reference.wavenumbers,
+                    reference.baseline,
+                    wavenumbers,
+                    values,
+                )
+                trace.moved_pct_of_range = 100 * shift / reference_range
+                trace.compared_over = region
+
+            item.traces.append(trace)
+            rows.append(
+                {
+                    "file": file_stem,
+                    "verdict": verdict,
+                    "variant": variant.label,
+                    "window": f"{variant.window[0]:.0f}-{variant.window[1]:.0f}",
+                    "moved_pct_of_range": trace.moved_pct_of_range,
+                    "compared_over": (
+                        ""
+                        if trace.compared_over is None
+                        else f"{trace.compared_over[0]:.0f}-{trace.compared_over[1]:.0f}"
+                    ),
+                    "degenerate": degenerate,
+                    "settings": str(dict(variant.settings)),
+                }
+            )
+
+        if item.traces:
+            comparison.files.append(item)
+
+    comparison.table = pd.DataFrame(rows)
+
+    if plot and comparison.files:
+        # Imported here: src.visualizations depends on this package, so a
+        # module-level import would be circular.
+        from src.visualizations.plot_baseline import plot_baseline_comparison
+
+        for item in comparison.files:
+            figure_path = plot_baseline_comparison(
+                item,
+                folder_name=folder_name,
+                run_name=run_name,
+                save=save,
+                dpi=dpi,
+            )
+            if figure_path is not None:
+                comparison.figure_paths.append(figure_path)
+
+    if save and not comparison.table.empty:
+        output_dir = baseline_experiment_dir(folder_name, run_name)
+        comparison.table_path = output_dir / "baseline_comparison.csv"
+        comparison.table.to_csv(comparison.table_path, index=False)
+
+    for message in comparison.warnings:
+        LOGGER.warning("%s", message)
+    LOGGER.info("%s", comparison.summary())
+    return comparison
+
+
+def baseline_experiment_dir(folder_name: str, run_name: str) -> Path:
+    """Return (and create) the output directory for a baseline experiment.
+
+    Under the figures tree, not ``data.peak_fit``: this is an experiment log to
+    look at, not pipeline data, and nothing downstream reads it. That also
+    keeps it clear of ``writer.resolve_output_dir``, whose job is protecting the
+    params CSV from being overwritten in place -- a hazard figures do not have.
+    """
+    if not isinstance(run_name, str) or not run_name.strip():
+        raise ValueError(f"run_name must be a non-empty name; got {run_name!r}")
+    name = run_name.strip()
+    if Path(name).is_absolute() or ".." in Path(name).parts:
+        raise ValueError(f"run_name must be a relative subfolder name; got {name!r}")
+
+    output_dir = (
+        Path(
+            config.get_path(
+                "data.figures",
+                folder_name,
+                config.get_path("data.baseline_experiments"),
+            )
+        )
+        / name
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
 
 
 def _log_warning_summary(result: MeasurementFitResult) -> None:
@@ -300,6 +511,7 @@ def fit_folder(
     on_existing: str = "skip",
     output_folder: str = "_test",
     save: bool = True,
+    baseline_settings: dict | None = None,
 ) -> BatchFitResult:
     """Fit every measurement in a subIFG dataset folder.
 
@@ -318,6 +530,7 @@ def fit_folder(
                     on_existing=on_existing,
                     output_folder=output_folder,
                     save=save,
+                    baseline_settings=baseline_settings,
                 )
             )
         except Exception as exc:
@@ -327,14 +540,75 @@ def fit_folder(
 
 
 if __name__ == "__main__":
-    # Edit these constants to run a batch -- see CLAUDE.md on the
-    # edit-constants convention used across this repo.
+    # Edit the constants under the mode you want, then run:
+    #     uv run python src\utils\ir_fitting\api.py
+    # See CLAUDE.md on the edit-constants convention used across this repo.
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    import matplotlib
 
-    folder_name = "nn1120-3_pd_ceo2_004"
-    name = "20260304_145524_pd_ceo2_004-000"
+    matplotlib.use("Agg")  # no interactive windows from a batch run
 
-    run = fit_file(subifg_dir(folder_name) / name)
-    print(run.summary())
-    for output_kind, output_path in run.output_paths.items():
-        print(f"  {output_kind}: {output_path}")
+    MODE = "baseline"  # "baseline" = compare baselines; "fit" = run the peak fit
+
+    if MODE == "baseline":
+        # ------------------------------------------------------------------
+        # Baseline experiment. Fits nothing, writes only figures + one CSV.
+        #
+        # Each variant is ("label", {settings}) or ("label", {settings},
+        # (high, low)) to also change the window. The FIRST variant is what
+        # every other one is measured against.
+        #
+        # Settings you can change (anything omitted keeps its
+        # config/analysis.yaml value; a misspelled name raises):
+        #     num_std, half_window, interp_half_window,
+        #     fill_half_window, smooth_half_window
+        #
+        # Window is (high, low) in cm-1 and changes which slice of the
+        # spectrum the algorithm sees -- which changes the baseline
+        # everywhere, not just at the edges (spec.md section 14.8).
+        # ------------------------------------------------------------------
+        folder_name = "nn1120-4_pd_ceo2_000"
+        run_name = "sweep"  # change per experiment so runs do not overwrite
+
+        variants = [
+            ("current", {}),
+            # ("num_std 1.4", {"num_std": 1.4}),
+            # ("half_window 20", {"half_window": 20}),
+            # # Window change: same settings, top edge at 2200 instead of 2250.
+            ("window 2200", {}, (2225.0, 1775.0)),
+        ]
+
+        # files=None uses JUDGED_FILES: 8 files -- 6 judged wrong, plus 2
+        # judged good (both from measurement ...-022, so the good gate is n=1
+        # measurement, not n=2 independent ones).
+        # Pass subIFG filenames to look at others, e.g.
+        #     files=["20260715_094622_pd_ceo2_000-007_delta10.0082"]
+        comparison = compare_baselines(
+            variants,
+            folder_name=folder_name,
+            files=None,
+            run_name=run_name,
+        )
+
+        print(f"\nOutput -> {baseline_experiment_dir(folder_name, run_name)}")
+        print(
+            "\n'moved_pct_of_range' = how far that baseline sits from the first\n"
+            "variant, as a percentage of the file's signal range, over the\n"
+            "wavenumbers the two share. For scale, the 2040 cm-1 peak is about\n"
+            "20% of signal range. It says the baseline MOVED, not that moving it\n"
+            "was an improvement -- judge the figures.\n"
+        )
+        print(
+            comparison.table.drop(columns=["settings"]).to_string(
+                index=False, float_format=lambda v: f"{v:7.2f}"
+            )
+        )
+
+    else:
+        folder_name = "nn1120-3_pd_ceo2_004"
+        name = "20260304_145524_pd_ceo2_004-000"
+
+        run = fit_file(subifg_dir(folder_name) / name)
+        print(run.summary())
+        for output_kind, output_path in run.output_paths.items():
+            print(f"  {output_kind}: {output_path}")

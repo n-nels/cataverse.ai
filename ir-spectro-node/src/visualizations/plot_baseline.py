@@ -26,7 +26,12 @@ if str(path) not in sys.path:
     sys.path.append(str(path))
 
 from src.core import config
-from src.utils.ir_fitting.result_types import FileFitResult, MeasurementFitResult
+from src.utils.ir_fitting.baseline import union_window
+from src.utils.ir_fitting.result_types import (
+    FileBaselineComparison,
+    FileFitResult,
+    MeasurementFitResult,
+)
 from src.visualizations._axes import XLim, as_windows, rescale_y_to_window
 
 LOGGER = logging.getLogger(__name__)
@@ -179,6 +184,129 @@ def plot_file_baseline(
     return output_path
 
 
+def plot_baseline_comparison(
+    comparison: FileBaselineComparison,
+    *,
+    folder_name: str,
+    run_name: str,
+    xlim: tuple[float, float] | None = None,
+    save: bool = True,
+    dpi: int = 300,
+) -> Path | None:
+    """Draw every baseline variant for one subIFG file on one figure.
+
+    A pure renderer: it computes nothing. ``src/utils/ir_fitting/api.py``
+    ::``compare_baselines`` builds the :class:`FileBaselineComparison` and calls
+    this.
+
+    Unlike :func:`plot_file_baseline`, which compares a recomputed baseline
+    against the *stored* CSV column, this draws variant against variant -- the
+    comparison an experiment needs.
+
+    There is deliberately **no quality score**. The low-wavenumber bands are
+    negative-going (``spec.md`` section 1), so these spectra carry features of
+    both signs and the baseline is a centre-line estimator, not a lower
+    envelope. An envelope-violation metric ranks the one file judged *good*
+    worst of all eight judged files, so such a score is actively misleading.
+    Judgement stays with the eye; this makes the comparison cheap to make.
+
+    Args:
+        comparison: One file's variants.
+        folder_name: Dataset folder, used to resolve the output path.
+        run_name: Experiment subfolder name.
+        xlim: Display window, high to low. Defaults to the union of every
+            variant's window, so a narrower variant's trace visibly *stops*
+            rather than being cropped out of view.
+        save: Write the figure to disk.
+        dpi: Figure resolution.
+
+    Returns:
+        The written path, or None when ``save`` is False.
+    """
+    from src.utils.ir_fitting.api import baseline_experiment_dir
+
+    traces = comparison.traces
+    if not traces:
+        return None
+
+    if xlim is None:
+        xlim = union_window(traces)
+
+    fig, (ax_raw, ax_sub) = plt.subplots(
+        2, 1, figsize=(8, 6.5), sharex=True, gridspec_kw={"height_ratios": [1, 1]}
+    )
+
+    reference = traces[0]
+    ax_raw.plot(
+        reference.wavenumbers,
+        reference.raw,
+        color="black",
+        linewidth=1.2,
+        label="raw subIFG",
+        zorder=5,
+    )
+
+    colors = plt.get_cmap("tab10").colors
+    for index, trace in enumerate(traces):
+        color = colors[index % len(colors)]
+        style = "-" if index == 0 else "--"
+
+        label = trace.label
+        if not trace.is_reference:
+            label += f"  ({trace.moved_pct_of_range:.1f}%)"
+        if trace.window != reference.window:
+            label += f"  [{trace.window[0]:.0f}-{trace.window[1]:.0f}]"
+        if trace.degenerate:
+            label += "  DEGENERATE"
+
+        ax_raw.plot(
+            trace.wavenumbers,
+            trace.baseline,
+            color=color,
+            linewidth=1.1,
+            linestyle=style,
+            label=label,
+        )
+        ax_sub.plot(
+            trace.wavenumbers,
+            trace.corrected,
+            color=color,
+            linewidth=1.1,
+            linestyle=style,
+            label=label,
+        )
+
+    ax_raw.set_ylabel("Log Reflectance")
+    title = comparison.subifg_path.name
+    if comparison.verdict:
+        title += f"   [{comparison.verdict}]"
+    ax_raw.set_title(title, fontsize=9)
+    ax_raw.legend(fontsize=7, loc="upper right", ncol=2)
+
+    ax_sub.axhline(0, color="0.7", linewidth=0.5)
+    ax_sub.set_ylabel("baseline-subtracted")
+    ax_sub.set_xlabel("Wavenumber (cm-1)")
+    ax_sub.set_xlim(xlim)
+    ax_sub.legend(fontsize=7, loc="upper right", ncol=2)
+
+    # Percentages in the legend are relative to the first variant, over the
+    # region the two share -- see BaselineTrace.compared_over.
+    for axes in (ax_raw, ax_sub):
+        rescale_y_to_window(axes, reference.wavenumbers, xlim)
+
+    fig.tight_layout()
+
+    if not save:
+        plt.close(fig)
+        return None
+
+    output_dir = baseline_experiment_dir(folder_name, run_name)
+    output_path = output_dir / f"{comparison.subifg_path.name}.png"
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
 def plot_measurement_baselines(
     measurement: MeasurementFitResult,
     *,
@@ -293,6 +421,10 @@ def plot_baselines(
 
 if __name__ == "__main__":
     # Edit these constants to run a batch.
+    #
+    # This module *views* baselines. To experiment with baseline settings or
+    # window size, use src/utils/ir_fitting/api.py::compare_baselines -- the
+    # experiment is orchestrated there and only rendered here.
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     import matplotlib
 
@@ -301,13 +433,8 @@ if __name__ == "__main__":
     folder_name = "nn1120-4_pd_ceo2_000"
     name = "20260715_094622_pd_ceo2_000-007"
 
-    # folder_name = "nn1120-2_pd_ceo2_000"
-    # name = "20241126_112801_pd_ceo2_000-003"
-
     # No fitting, no dependency on ir_fitting.extra_peaks_base.
-    # Drop file_keys to plot every file. Emits a zoomed and a full-range figure
-    # per file; pass xlim=ZOOM_LIMITS or xlim=X_LIMITS for just one.
-    # Pass name=None to loop every measurement in the folder.
-    paths = plot_baselines(folder_name, name, xlim=X_LIMITS, file_keys=["delta5"])
-    for item in paths:
+    # Drop file_keys to plot every file; name=None loops every measurement.
+    # xlim=DEFAULT_WINDOWS emits a zoomed and a full-range figure per file.
+    for item in plot_baselines(folder_name, name, xlim=X_LIMITS, file_keys=["delta10"]):
         print(item)

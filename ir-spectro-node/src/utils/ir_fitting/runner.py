@@ -77,16 +77,29 @@ def split_file_key(file_key: str) -> tuple[str, str]:
     return delta_group, file_index
 
 
-def load_subifg_roi(subifg_path: Path) -> np.ndarray:
-    """Load a subIFG file clipped to the analysis ROI.
+def load_subifg_roi(
+    subifg_path: Path,
+    window: tuple[float, float] | None = None,
+) -> np.ndarray:
+    """Load a subIFG file clipped to a wavenumber window.
 
-    Mirrors ``src/analysis/io.py::import_data`` -- same 1750-2250 window, same
-    descending wavenumber order as written by the instrument.
+    Defaults to the analysis ROI, mirroring ``src/analysis/io.py::import_data``
+    -- same 1750-2250 window, same descending wavenumber order as written by
+    the instrument.
+
+    ``window`` is ``(high, low)`` cm-1 and exists for baseline
+    experimentation: ``create_baseline`` receives only ``y``, so the window
+    *is* the array the algorithm sees. The fit path does not pass it, and
+    changing the ROI that peaks are fitted over is a separate decision -- this
+    is only the seam that would make it possible.
     """
+    high, low = window if window is not None else (ROI_MAX_CM1, ROI_MIN_CM1)
     df = pd.read_csv(subifg_path, header=None)
-    roi = df.loc[(df[0] >= ROI_MIN_CM1) & (df[0] <= ROI_MAX_CM1)]
+    roi = df.loc[(df[0] >= low) & (df[0] <= high)]
     if roi.empty:
-        raise ValueError(f"No subIFG data in ROI for {subifg_path}")
+        raise ValueError(
+            f"No subIFG data in {low:.0f}-{high:.0f} cm-1 for {subifg_path}"
+        )
     return np.asarray(roi.values, dtype=float)
 
 
@@ -107,20 +120,26 @@ def resolve_baseline(
     mode: str,
     voigt_settings: dict,
     warnings: list[str],
+    baseline_settings: dict | None = None,
 ) -> tuple[np.ndarray, str]:
     """Return ``(baseline, source)`` for one file.
 
     ``"saved"`` reads the file's column from ``*_CarbonylFitBaseline.csv``, which
     guarantees the new peak areas sit on exactly the same baseline as the
     existing peaks. ``"recompute"`` re-runs ``create_baseline``; with no
-    ``ir_fitting.baseline`` override that reproduces the saved values exactly,
-    because ``pybaselines.classification.std_distribution`` takes no peak list
-    and so cannot know that extra peaks were declared (see spec.md section 6).
+    ``ir_fitting.baseline`` override and no ``baseline_settings`` that reproduces
+    the saved values exactly, because
+    ``pybaselines.classification.std_distribution`` takes no peak list and so
+    cannot know that extra peaks were declared (see spec.md section 6).
+
+    ``baseline_settings`` overrides the resolved settings for this call only --
+    the sweep hook of section 14.6 step 1. It forces ``"recompute"``, since
+    reading a stored column would ignore it.
     """
     if mode not in {"saved", "recompute"}:
         raise ValueError(f"baseline must be 'saved' or 'recompute'; got {mode!r}")
 
-    if mode == "saved":
+    if mode == "saved" and not baseline_settings:
         if df_saved_baseline is None or file_key not in df_saved_baseline.columns:
             message = (
                 f"{file_key}: no saved baseline column available; recomputing instead"
@@ -132,19 +151,30 @@ def resolve_baseline(
                 pd.to_numeric(df_saved_baseline[file_key], errors="coerce"),
                 dtype=float,
             )
-            saved = saved[: intensity.size]
-            if saved.size != intensity.size or np.isnan(saved).all():
+            # Wavenumbers DESCEND, so index 0 is the high-wavenumber end and a
+            # narrower top edge drops samples from the FRONT. Align on the tail,
+            # and require an exact length match rather than truncating: a
+            # head-slice would pass the size check while sitting 26 samples out
+            # of register, silently comparing 2250-1800 against 2200-1750.
+            if saved.size != intensity.size:
                 message = (
                     f"{file_key}: saved baseline length {saved.size} does not "
-                    f"match spectrum length {intensity.size}; recomputing instead"
+                    f"match spectrum length {intensity.size} -- the saved column "
+                    "was written over a different wavenumber window; recomputing "
+                    "instead"
                 )
+                LOGGER.warning(message)
+                warnings.append(message)
+            elif np.isnan(saved).all():
+                message = f"{file_key}: saved baseline column is all NaN; recomputing"
                 LOGGER.warning(message)
                 warnings.append(message)
             else:
                 return saved, "saved"
 
     _, baseline = create_baseline(
-        intensity, ir_config.get_baseline_settings(voigt_settings)
+        intensity,
+        ir_config.get_baseline_settings(voigt_settings, override=baseline_settings),
     )
     return np.asarray(baseline, dtype=float), "recompute"
 
@@ -278,11 +308,15 @@ def fit_subifg_file(
     append_only: bool = True,
     baseline: str = "saved",
     on_existing: str = "skip",
+    baseline_settings: dict | None = None,
 ) -> FileFitResult | None:
     """Fit the ``ir_fitting`` peaks for one subIFG file.
 
     Returns ``None`` when the file is skipped by ``manually_skip_files``, so
     offline coverage matches the live path exactly.
+
+    ``baseline_settings`` overrides the baseline settings for this call only
+    (see :func:`resolve_baseline`).
     """
     if on_existing not in {"skip", "overwrite", "error"}:
         raise ValueError(
@@ -307,6 +341,7 @@ def fit_subifg_file(
         baseline,
         voigt_settings,
         warnings,
+        baseline_settings=baseline_settings,
     )
     corrected = intensity - baseline_values
 

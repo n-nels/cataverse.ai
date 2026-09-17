@@ -6,6 +6,8 @@ to a ``_test`` subfolder. See ``spec.md`` for the design.
 """
 
 from src.utils.ir_fitting.api import (
+    baseline_experiment_dir,
+    compare_baselines,
     fit_file,
     fit_folder,
     load_measurement,
@@ -13,8 +15,18 @@ from src.utils.ir_fitting.api import (
     resolve_folder,
     subifg_dir,
 )
+from src.utils.ir_fitting.baseline import (
+    DEFAULT_WINDOW,
+    JUDGED_FILES,
+    BaselineVariant,
+)
 
 __all__ = [
+    "DEFAULT_WINDOW",
+    "JUDGED_FILES",
+    "BaselineVariant",
+    "baseline_experiment_dir",
+    "compare_baselines",
     "fit_file",
     "fit_folder",
     "load_measurement",

@@ -163,6 +163,93 @@ class MeasurementFitResult:
 
 
 @dataclass
+class BaselineTrace:
+    """One baseline variant evaluated on one subIFG file."""
+
+    label: str
+    settings: dict
+    window: tuple[float, float]
+    wavenumbers: np.ndarray
+    raw: np.ndarray
+    baseline: np.ndarray
+
+    degenerate: bool = False
+    """``std_distribution`` found no baseline points -- the curve is not real."""
+
+    moved_pct_of_range: float = 0.0
+    """How far this baseline sits from the reference variant's.
+
+    Percentage of the reference's signal range over the region the two share.
+    It says the baseline *moved*, not that moving it was an improvement -- no
+    quality score is available here (see ``spec.md`` section 14.8).
+    """
+
+    compared_over: tuple[float, float] | None = None
+    """``(high, low)`` region :attr:`moved_pct_of_range` was measured over.
+
+    Not always the full window: variants with different windows are compared on
+    their overlap, and the number is uninterpretable without knowing which.
+    """
+
+    @property
+    def corrected(self) -> np.ndarray:
+        """Baseline-subtracted signal."""
+        return self.raw - self.baseline
+
+    @property
+    def is_reference(self) -> bool:
+        """True for the variant everything else is measured against."""
+        return self.compared_over is None
+
+
+@dataclass
+class FileBaselineComparison:
+    """Every baseline variant evaluated on one subIFG file."""
+
+    file_key: str
+    delta_group: str
+    subifg_path: Path
+    verdict: str = ""
+    """``"bad"`` / ``"good"`` / ``""`` -- an eye judgement, not a measurement."""
+
+    traces: list[BaselineTrace] = field(default_factory=list)
+
+    @property
+    def reference(self) -> BaselineTrace | None:
+        """The first variant, which the others are compared against."""
+        return self.traces[0] if self.traces else None
+
+
+@dataclass
+class BaselineComparison:
+    """A baseline experiment across one or more subIFG files."""
+
+    folder_name: str
+    run_name: str
+    files: list[FileBaselineComparison] = field(default_factory=list)
+    table: pd.DataFrame = field(default_factory=pd.DataFrame)
+    figure_paths: list[Path] = field(default_factory=list)
+    table_path: Path | None = None
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def n_degenerate(self) -> int:
+        """Number of (file, variant) pairs that produced no real baseline."""
+        return sum(
+            1 for item in self.files for trace in item.traces if trace.degenerate
+        )
+
+    def summary(self) -> str:
+        """One-line run summary."""
+        n_variants = len(self.files[0].traces) if self.files else 0
+        return (
+            f"{self.run_name}: {len(self.files)} files x {n_variants} variants, "
+            f"{len(self.figure_paths)} figures, "
+            f"{self.n_degenerate} degenerate baselines"
+        )
+
+
+@dataclass
 class BatchFitResult:
     """Fit outcome for a whole dataset folder."""
 

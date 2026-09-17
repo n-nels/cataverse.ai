@@ -125,18 +125,53 @@ def get_live_peaks(voigt_settings: dict | None = None) -> list[int]:
     return _shift_peaks(list(base_peaks), voigt_settings, "voigt_fit.peak_list_base")
 
 
-def get_baseline_settings(voigt_settings: dict | None = None) -> dict:
+BASELINE_KEYS = frozenset(
+    {
+        "half_window",
+        "interp_half_window",
+        "fill_half_window",
+        "num_std",
+        "smooth_half_window",
+        "weights",
+    }
+)
+"""The settings ``create_baseline`` forwards to ``std_distribution``.
+
+Used to reject a typo'd override key. ``create_baseline`` reads its settings
+with ``.get(...)`` and silently falls back to a default, so ``num_stds: 1.4``
+would run the *unmodified* baseline and look like "this parameter does
+nothing" -- the most misleading possible outcome for a sweep.
+"""
+
+
+def get_baseline_settings(
+    voigt_settings: dict | None = None,
+    override: dict | None = None,
+) -> dict:
     """Return baseline settings for a recompute.
 
-    Inherits ``voigt_fit.baseline``. An ``ir_fitting.baseline`` override is
-    deferred (see ``spec.md`` section 6); if one is present it is merged over
-    the inherited values so adding it later needs no code change here.
+    Layered lowest-precedence first: ``voigt_fit.baseline``, then the
+    ``ir_fitting.baseline`` yaml block, then ``override``.
+
+    ``override`` is the per-call sweep hook -- it lets one script try many
+    candidate settings in a loop without editing yaml between runs, which is
+    what section 14.6 step 1 asks for. The yaml block stays the way to pin a
+    chosen candidate as the new offline default.
     """
     voigt_settings = (
         voigt_settings if voigt_settings is not None else get_voigt_settings()
     )
     settings = dict(voigt_settings.get("baseline", {}))
-    override = get_ir_fitting_settings().get("baseline")
-    if override:
-        settings.update(override)
+    yaml_override = get_ir_fitting_settings().get("baseline")
+    for layer in (yaml_override, override):
+        if not layer:
+            continue
+        unknown = set(layer) - BASELINE_KEYS
+        if unknown:
+            raise ValueError(
+                f"unknown baseline setting(s) {sorted(unknown)}; "
+                f"expected any of {sorted(BASELINE_KEYS)}. "
+                "create_baseline would ignore these silently."
+            )
+        settings.update(layer)
     return settings

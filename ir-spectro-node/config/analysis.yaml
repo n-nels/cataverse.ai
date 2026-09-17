@@ -487,3 +487,19 @@ ir_fitting:
   extra_cluster_peaks_base: []
   extra_monomer_peaks_base: []
   extra_unknown_peaks_base: []
+
+  # Optional baseline override for OFFLINE runs only. Absent = inherit
+  # voigt_fit.baseline exactly, which is the default and reproduces the saved
+  # baseline bit-for-bit. Uncomment to pin a different offline default; an
+  # unknown key raises rather than being silently ignored.
+  #
+  # For one-off experiments prefer the per-call kwarg, which needs no edit here:
+  #     compare_baselines([("current", {}), ("try", {"num_std": 1.4})])
+  # See src/utils/ir_fitting/spec.md section 14 before changing these.
+  #
+  # baseline:
+  #   half_window: 10
+  #   interp_half_window: 5
+  #   fill_half_window: 6
+  #   num_std: 1.1
+  #   smooth_half_window: null
