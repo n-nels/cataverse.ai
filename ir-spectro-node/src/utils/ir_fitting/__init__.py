@@ -9,6 +9,8 @@ from src.utils.ir_fitting.api import (
     fit_file,
     fit_folder,
     load_measurement,
+    measurement_names,
+    resolve_folder,
     subifg_dir,
 )
 
@@ -16,5 +18,7 @@ __all__ = [
     "fit_file",
     "fit_folder",
     "load_measurement",
+    "measurement_names",
+    "resolve_folder",
     "subifg_dir",
 ]

@@ -39,7 +39,7 @@ voigt_fit:
     - 2050 # 1997?
     - 2038 # 1984?
     - 2025 # 1971?
-  unknown_peaks_base: # 12CO particle integrate 1948-1878
+  unknown_peaks_base: # 12CO particle integrate 1948-1878 [1928, 1938, 1913, 1877, 1849, 1838]
     - 2246
     - 2226
     - 2206

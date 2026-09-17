@@ -7,11 +7,32 @@ round trip through disk.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _matches(file_key: str, delta_group: str, pattern: str) -> bool:
+    """Return True if ``pattern`` selects this file.
+
+    A pattern is one of:
+
+    - an exact file key, ``"delta5.0007"``
+    - a whole delta group, ``"delta5"`` -- every index in it
+    - a glob against the file key, ``"delta5.00*"``
+
+    A bare group name never collides with a file key, since file keys always
+    carry a ``.index`` suffix.
+    """
+    if pattern == file_key or pattern == delta_group:
+        return True
+    return fnmatchcase(file_key, pattern)
 
 
 @dataclass
@@ -73,6 +94,54 @@ class MeasurementFitResult:
     merged_params: pd.DataFrame = field(default_factory=pd.DataFrame)
     output_paths: dict[str, Path] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+
+    def select(self, file_keys: list[str] | None = None) -> list[FileFitResult]:
+        """Return the files matching ``file_keys``, in measurement order.
+
+        Each entry may be an exact file key (``"delta5.0007"``), a whole delta
+        group (``"delta5"`` -- every index in it), or a glob against the file key
+        (``"delta5.00*"``). ``None`` returns every file.
+
+        Results are deduplicated, so overlapping entries such as
+        ``["delta5", "delta5.0007"]`` plot each file once.
+
+        A pattern matching nothing is logged rather than silently ignored -- a
+        typo would otherwise just produce no output.
+        """
+        if file_keys is None:
+            return list(self.files)
+        if isinstance(file_keys, str):
+            raise TypeError(
+                "file_keys must be a list of patterns, not a string; "
+                f"pass [{file_keys!r}] instead."
+            )
+
+        patterns = list(file_keys)
+        unmatched = [
+            pattern
+            for pattern in patterns
+            if not any(
+                _matches(result.file_key, result.delta_group, pattern)
+                for result in self.files
+            )
+        ]
+        if unmatched:
+            LOGGER.warning(
+                "%s: no files matched %s. Available delta groups: %s",
+                self.file_name,
+                unmatched,
+                sorted({result.delta_group for result in self.files}),
+            )
+
+        # Iterate self.files once so order is preserved and duplicates collapse.
+        return [
+            result
+            for result in self.files
+            if any(
+                _matches(result.file_key, result.delta_group, pattern)
+                for pattern in patterns
+            )
+        ]
 
     @property
     def n_fitted(self) -> int:

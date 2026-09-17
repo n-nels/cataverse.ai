@@ -8,7 +8,35 @@ compare by eye.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
+
+XLim = tuple[float, float]
+
+
+def as_windows(xlim: XLim | Sequence[XLim]) -> list[XLim]:
+    """Normalise ``xlim`` to a list of ``(high, low)`` windows.
+
+    Accepts one range, ``(1900, 1750)``, or several,
+    ``((1900, 1750), (2250, 1750))`` -- so a single call can emit both a zoomed
+    and a full-range figure per file.
+    """
+    items = list(xlim)
+    if not items:
+        raise ValueError("xlim must contain at least one (high, low) range.")
+    if len(items) == 2 and all(isinstance(value, (int, float)) for value in items):
+        return [(float(items[0]), float(items[1]))]
+
+    windows: list[XLim] = []
+    for item in items:
+        pair = tuple(item)
+        if len(pair) != 2:
+            raise ValueError(
+                f"each xlim entry must be a (high, low) pair; got {item!r}"
+            )
+        windows.append((float(pair[0]), float(pair[1])))
+    return windows
 
 
 def rescale_y_to_window(

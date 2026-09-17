@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -26,13 +27,16 @@ if str(path) not in sys.path:
 
 from src.core import config
 from src.utils.ir_fitting.result_types import FileFitResult, MeasurementFitResult
-from src.visualizations._axes import rescale_y_to_window
+from src.visualizations._axes import XLim, as_windows, rescale_y_to_window
 
 LOGGER = logging.getLogger(__name__)
 
 X_LIMITS = (2250, 1750)
 ZOOM_LIMITS = (1900, 1750)
 """Low-wavenumber window where the two candidate bands live."""
+
+DEFAULT_WINDOWS = (ZOOM_LIMITS, X_LIMITS)
+"""Emit a zoomed and a full-range figure per file unless told otherwise."""
 
 
 def figure_dir(folder_name: str) -> Path:
@@ -160,6 +164,9 @@ def plot_file_baseline(
     fig.tight_layout()
 
     if not save:
+        # Close even when not writing: a measurement holds dozens of files, and
+        # returning None leaves the caller no handle to close them with.
+        plt.close(fig)
         return None
 
     output_dir = figure_dir(folder_name)
@@ -177,39 +184,40 @@ def plot_measurement_baselines(
     *,
     file_keys: list[str] | None = None,
     compare_saved: bool = True,
-    xlim: tuple[float, float] = X_LIMITS,
+    xlim: XLim | Sequence[XLim] = DEFAULT_WINDOWS,
     save: bool = True,
     dpi: int = 300,
 ) -> list[Path]:
     """Plot baselines for every file in a measurement.
 
-    ``file_keys`` restricts output to specific files (e.g. ``["delta5.0007"]``).
+    ``file_keys`` entries may each be an exact file key (``"delta5.0007"``), a
+    whole delta group (``"delta5"`` -- every index in it), or a glob
+    (``"delta5.00*"``). ``None`` plots every file in the measurement.
     """
     written: list[Path] = []
-    for result in measurement.files:
-        if file_keys is not None and result.file_key not in file_keys:
-            continue
-        output_path = plot_file_baseline(
-            result,
-            folder_name=measurement.folder_name,
-            file_name=measurement.file_name,
-            compare_saved=compare_saved,
-            xlim=xlim,
-            save=save,
-            dpi=dpi,
-        )
-        if output_path is not None:
-            written.append(output_path)
+    for result in measurement.select(file_keys):
+        for window in as_windows(xlim):
+            output_path = plot_file_baseline(
+                result,
+                folder_name=measurement.folder_name,
+                file_name=measurement.file_name,
+                compare_saved=compare_saved,
+                xlim=window,
+                save=save,
+                dpi=dpi,
+            )
+            if output_path is not None:
+                written.append(output_path)
     LOGGER.info("Wrote %d baseline figures", len(written))
     return written
 
 
 def plot_baselines(
     folder_name: str,
-    name: str,
+    name: str | None = None,
     *,
     file_keys: list[str] | None = None,
-    xlim: tuple[float, float] = ZOOM_LIMITS,
+    xlim: XLim | Sequence[XLim] = DEFAULT_WINDOWS,
     baseline: str = "saved",
     compare_saved: bool = True,
     save: bool = True,
@@ -219,20 +227,30 @@ def plot_baselines(
 
     The entry point for looking at baselines:
 
-        plot_baselines("nn1120-3_pd_ceo2_004", "20260304_145524_pd_ceo2_004-000")
+        plot_baselines("nn1120-4_pd_ceo2_000", "20260822_193302_pd_ceo2_000-026")
+        plot_baselines("nn1120-4_pd_ceo2_000")   # every measurement in the folder
 
     Loads the measurement via :func:`~src.utils.ir_fitting.load_measurement`, so
     it does **not** depend on ``ir_fitting.extra_peaks_base`` and writes nothing
-    to the peak-fit folder -- only figures. Defaults to the low-wavenumber window
-    where the candidate bands live; pass ``xlim=X_LIMITS`` for the full ROI.
+    to the peak-fit folder -- only figures. By default emits two figures per
+    file: the low-wavenumber window where the candidate bands live, and the full
+    ROI. Pass ``xlim=ZOOM_LIMITS`` or ``xlim=X_LIMITS`` for just one.
 
     Args:
         folder_name: Dataset folder, e.g. ``"nn1120-3_pd_ceo2_004"``.
         name: Measurement base name, e.g.
-            ``"20260304_145524_pd_ceo2_004-000"``.
-        file_keys: Restrict to specific files (e.g. ``["delta5.0007"]``).
+            ``"20260822_193302_pd_ceo2_000-026"``. Pass ``None`` to loop every
+            measurement in the folder; one failing measurement is logged and
+            skipped rather than aborting the rest.
+        file_keys: Which files to plot, as a list. Each entry is an exact file
+            key (``["delta5.0007"]``), a whole delta group
+            (``["delta5"]`` -- every index in it), or a glob
+            (``["delta5.00*"]``); entries may be mixed and may overlap.
             ``None`` plots every file in the measurement.
-        xlim: Wavenumber range, high to low. y is rescaled to it.
+        xlim: One ``(high, low)`` window, or several. Defaults to
+            ``DEFAULT_WINDOWS`` -- a zoomed figure and a full-range figure per
+            file. y is rescaled to each window; the zoomed file gets a
+            ``_1750-1900`` filename suffix so the two never collide.
         baseline: ``"saved"`` or ``"recompute"``.
         compare_saved: Overlay the saved baseline when recomputing.
         save: Write figures to disk.
@@ -241,17 +259,36 @@ def plot_baselines(
     Returns:
         Paths of the figures written.
     """
-    from src.utils.ir_fitting import load_measurement, subifg_dir
+    from src.utils.ir_fitting import load_measurement, measurement_names, subifg_dir
 
-    measurement = load_measurement(subifg_dir(folder_name) / name, baseline=baseline)
-    return plot_measurement_baselines(
-        measurement,
-        file_keys=file_keys,
-        compare_saved=compare_saved,
-        xlim=xlim,
-        save=save,
-        dpi=dpi,
-    )
+    if name is None:
+        names = measurement_names(folder_name)
+        LOGGER.info("%s: %d measurements", folder_name, len(names))
+    else:
+        names = [name]
+
+    written: list[Path] = []
+    for index, base_name in enumerate(names, start=1):
+        if len(names) > 1:
+            LOGGER.info("[%d/%d] %s", index, len(names), base_name)
+        try:
+            measurement = load_measurement(
+                subifg_dir(folder_name) / base_name, baseline=baseline
+            )
+        except Exception as exc:  # one bad measurement must not abort the folder
+            LOGGER.error("%s: %s", base_name, exc)
+            continue
+        written.extend(
+            plot_measurement_baselines(
+                measurement,
+                file_keys=file_keys,
+                compare_saved=compare_saved,
+                xlim=xlim,
+                save=save,
+                dpi=dpi,
+            )
+        )
+    return written
 
 
 if __name__ == "__main__":
@@ -261,11 +298,16 @@ if __name__ == "__main__":
 
     matplotlib.use("Agg")
 
-    folder_name = "nn1120-3_pd_ceo2_004"
-    name = "20260304_145524_pd_ceo2_004-000"
+    folder_name = "nn1120-4_pd_ceo2_000"
+    name = "20260715_094622_pd_ceo2_000-007"
+
+    # folder_name = "nn1120-2_pd_ceo2_000"
+    # name = "20241126_112801_pd_ceo2_000-003"
 
     # No fitting, no dependency on ir_fitting.extra_peaks_base.
-    # Drop file_keys to plot every file; pass xlim=X_LIMITS for the full ROI.
-    paths = plot_baselines(folder_name, name, file_keys=["delta5.0007"])
+    # Drop file_keys to plot every file. Emits a zoomed and a full-range figure
+    # per file; pass xlim=ZOOM_LIMITS or xlim=X_LIMITS for just one.
+    # Pass name=None to loop every measurement in the folder.
+    paths = plot_baselines(folder_name, name, xlim=X_LIMITS, file_keys=["delta5"])
     for item in paths:
         print(item)

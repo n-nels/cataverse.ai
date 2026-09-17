@@ -467,3 +467,143 @@ So the `param_rules` need real attention before these areas mean anything --
 which is the hand-editing already planned (§4), now with specific evidence of
 what to change. The peak areas produced by this run should be treated as
 provisional until the bounds stop binding.
+
+## 14. Baseline redefinition — working notes
+
+**Status: notes only. Nothing here is implemented or decided.** Captured while
+manually inspecting `nn1120-4_pd_ceo2_000` baselines. All seven measurements
+named below were confirmed present in that dataset (35 measurements total).
+
+Where a note is an expansion rather than something observed at the microscope,
+it is marked *(inferred)* — those need checking against the data before they are
+treated as fact.
+
+### 14.1 The problem
+
+The current baseline settings (`voigt_fit.baseline`: `half_window: 10`,
+`interp_half_window: 5`, `fill_half_window: 6`, `num_std: 1.1`, fed to
+`pybaselines.classification.std_distribution`) were **tuned for the
+no-nucleation regime — "Regime 1"**. They do not generalise to spectra where
+nucleation has occurred and the carbonyl envelope has changed shape.
+
+Two constraints frame everything below:
+
+1. **The current baseline is good overall.** Only a handful of files out of many
+   are wrong. Whatever replaces it must *retain* the baselines that already work
+   — this is a fix for a minority of files, not a wholesale replacement.
+2. **The failure is not subtle where it happens.** On the `.0042` files below the
+   baseline cuts the peaks near **2050 and 1960 in half**. That is a large
+   quantitative error in exactly the region the cluster peaks occupy.
+
+### 14.2 Observed failures
+
+Current baseline is wrong on these (dataset `nn1120-4_pd_ceo2_000`):
+
+| Measurement | File | Symptom |
+|---|---|---|
+| `20260715_094622_pd_ceo2_000-007` | `delta10.0042` | peaks near 2050 and 1960 cut in half |
+| `20260717_203829_pd_ceo2_000-008` | `delta10.0042` | same |
+| `20260728_032548_pd_ceo2_000-012` | `delta10.0052` | — |
+| `20260806_105210_pd_ceo2_000-017` | `delta10.0022` | different failure mode from the `.0042` files |
+| `20260811_072450_pd_ceo2_000-021` | `delta10.0022` | same as above |
+| `20260825_052349_pd_ceo2_000-027` | `delta10.0052` | — |
+
+Two clusters by index — `.0042`/`.0052` and `.0022` — and they fail
+*differently*. Worth resolving what the `.0022` mode actually is before
+designing a fix, since a change tuned for the "cut in half" mode may not touch
+it. *(inferred: the index correlates with time through the run, so these may be
+two different physical regimes rather than two bugs.)*
+
+### 14.3 The counter-example that constrains the design
+
+`20260813_195617_pd_ceo2_000-022`, `delta10` group: the spectrum is substantially
+different here and **the current baseline is perfect**.
+
+This is the hard constraint on the isosbestic idea below: a **1940–1960 anchor
+would be actively bad on this measurement, because in some of its files that
+window is where the maximum sits** — or at least the local maximum within a
+±50 cm⁻¹ window. Anchoring a baseline to a peak maximum would be badly wrong.
+
+So any anchor rule needs a guard that detects "this window contains a maximum,
+not a background region" and falls back rather than proceeding. Any candidate
+rule must be checked against this measurement first — it is the regression test.
+
+### 14.4 Proposed approach: isosbestic-anchored two-segment baseline
+
+The idea, as sketched:
+
+1. **Widen the baseline range to 2200–1700 cm⁻¹.** Note this is *not* the current
+   ROI (1750–2250), so it interacts with §6's caveat: `half_window` and friends
+   are counts of **samples**, not cm⁻¹, so changing the range changes the
+   baseline everywhere, not just at the new edges. Measured earlier: narrowing to
+   1750–1900 moved the baseline by up to 2.8e-5 against a 4.7e-3 signal range.
+   A 2200–1700 window will shift every baseline, including the ones that
+   currently work. *(This is the main threat to constraint 1 in §14.1.)*
+2. **Normalise y at 2200 cm⁻¹.** Shift each spectrum by a constant `y0` so they
+   all share the same value at 2200. This makes spectra comparable so an
+   isosbestic point can be located across them.
+3. **Find the isosbestic point `ip`** within an adjustable tolerance window —
+   candidate lookup range **1940–1960 cm⁻¹**, chosen by eye. (1900 was
+   considered and is less preferred.)
+4. **Build two baselines from the same curve**, split at `ip`: one over
+   `[2200, ip]` and one over `[ip, 1700]`.
+
+The framing worth keeping: **the isosbestic point is a flag within an otherwise
+unknown background estimation.** It is not itself the background — it is the one
+place the spectra agree, so it is the one defensible place to anchor or split.
+
+### 14.5 Open question: the segment interface
+
+Unresolved, and flagged as the weak point. Two baselines meeting at `ip` may look
+wrong at the junction — a slope discontinuity or a visible kink, even if each
+segment is individually reasonable.
+
+Options not yet evaluated *(inferred — these are candidates to consider, not
+recommendations)*:
+
+- Enforce continuity of value at `ip` only, accepting a slope break.
+- Blend the two segments over a narrow window around `ip` so the transition is
+  smooth.
+- Fit the two segments jointly with a continuity constraint rather than
+  independently.
+- Use `ip` only as an anchor *point* the single baseline must pass through,
+  never splitting the curve at all — sidesteps the interface entirely.
+
+The last option deserves attention precisely because it removes the problem
+rather than managing it.
+
+### 14.6 Ordering: try the cheap thing first
+
+Before building any of §14.4: **try adjusting the existing baseline parameters.**
+`num_std`, `half_window`, `interp_half_window` and `fill_half_window` are already
+exposed, and §6 established that a settings change is the only thing that makes a
+recomputed baseline differ from the saved one. This is the hook the deferred
+`ir_fitting.baseline:` override (§12) was left for — adding it is a small,
+already-designed change.
+
+Sequence, cheapest first:
+
+1. Sweep the existing parameters over the six failing files, checking each
+   candidate against `...-022` (§14.3) so a fix does not break what works.
+2. If no single parameter set satisfies both, that is the evidence that a
+   structurally different baseline is needed — and the argument for §14.4.
+3. Only then build the isosbestic machinery.
+
+Step 2 is the real decision point: it converts "the current baseline is wrong on
+six files" into either "it needed tuning" or "it needs a new method", and those
+lead to very different amounts of work.
+
+### 14.7 What to settle before building
+
+- What is the `.0022` failure mode, specifically? (§14.2)
+- Does one parameter set fix all six without breaking `...-022`? (§14.6 step 1)
+- Is there actually an isosbestic point in 1940–1960 across these spectra, or is
+  that an eyeball impression that needs confirming across the folder?
+- How is "no isosbestic point found" handled — fall back to the current baseline,
+  or refuse to fit?
+- Does the widened 2200–1700 range change the currently-good baselines enough to
+  matter? This is measurable directly and should be measured before committing.
+- Does any of this reach the live path, or stay offline in `ir_fitting`? Changing
+  `voigt_fit.baseline` changes what the instrument computes live; an
+  `ir_fitting.baseline:` override does not. Default assumption: **offline only**
+  until proven.

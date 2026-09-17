@@ -37,6 +37,41 @@ def subifg_dir(folder_name: str) -> Path:
     return Path(config.get_path("utility.subtract_ifg.sub_ifg_output", folder_name))
 
 
+def resolve_folder(folder: str | Path) -> Path:
+    """Resolve a dataset folder argument to a subIFG directory.
+
+    ``folder`` may be a dataset name (resolved under
+    ``utility.subtract_ifg.sub_ifg_output``) or an absolute path.
+    """
+    folder_path = Path(folder)
+    if not folder_path.is_absolute():
+        folder_path = subifg_dir(str(folder))
+    if not folder_path.is_dir():
+        raise NotADirectoryError(folder_path)
+    return folder_path
+
+
+def measurement_names(folder: str | Path) -> list[str]:
+    """Return every measurement base name in a subIFG dataset folder.
+
+    A subIFG file is named ``<base name>_delta<N>.<index>``, so stripping the
+    trailing ``_delta...`` chunk and deduplicating gives one entry per
+    measurement.
+
+    Shared by :func:`fit_folder` and the plotting entry points, so folder
+    discovery is defined once.
+    """
+    folder_path = resolve_folder(folder)
+    return sorted(
+        {
+            "_".join(item.name.split("_")[:-1])
+            for item in folder_path.iterdir()
+            if item.is_file() and "_delta" in item.name
+        }
+        - {""}
+    )
+
+
 def _resolve_measurement(measurement: str | Path) -> tuple[str, str, Path]:
     """Resolve a measurement argument to ``(folder_name, file_name, folder)``."""
     measurement_path = Path(measurement)
@@ -271,23 +306,9 @@ def fit_folder(
     ``folder`` may be a dataset name (resolved under
     ``utility.subtract_ifg.sub_ifg_output``) or an absolute path.
     """
-    folder_path = Path(folder)
-    if not folder_path.is_absolute():
-        folder_path = subifg_dir(str(folder))
-    if not folder_path.is_dir():
-        raise NotADirectoryError(folder_path)
-
-    base_names = sorted(
-        {
-            "_".join(item.name.split("_")[:-1])
-            for item in folder_path.iterdir()
-            if item.is_file() and "_delta" in item.name
-        }
-        - {""}
-    )
-
+    folder_path = resolve_folder(folder)
     batch = BatchFitResult(folder_name=folder_path.name)
-    for base_name in base_names:
+    for base_name in measurement_names(folder_path):
         try:
             batch.measurements.append(
                 fit_file(
