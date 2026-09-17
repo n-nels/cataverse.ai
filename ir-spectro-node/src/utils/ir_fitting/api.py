@@ -28,8 +28,12 @@ from src.core import config
 from src.utils.ir_fitting import config as ir_config
 from src.utils.ir_fitting import runner, writer
 from src.utils.ir_fitting.baseline import (
+    ANCHOR_POINTS_CM1,
+    DEFAULT_WINDOW,
     JUDGED_FILES,
+    SPLIT_POINT_CM1,  # noqa: F401 -- for the commented-out split variant in __main__
     BaselineVariant,
+    band_height,
     overlap_shift,
     signal_range,
 )
@@ -43,6 +47,15 @@ from src.utils.ir_fitting.result_types import (
 from src.utils.ir_fitting.runner import ExistingPeakRowsError, fit_subifg_file
 
 LOGGER = logging.getLogger(__name__)
+
+REPORTED_BANDS_CM1: tuple[float, ...] = (2040.0, 1980.0)
+"""Bands whose height is reported per variant by :func:`compare_baselines`.
+
+These are the two the current baseline cuts in half, so "did this band stop
+being halved" is the question a variant is judged on. It is a measurement of
+two named bands, not a baseline quality score -- see ``baseline.band_height``
+and spec.md section 14.3 finding 4.
+"""
 
 
 def subifg_dir(folder_name: str) -> Path:
@@ -337,7 +350,7 @@ def compare_baselines(
         :class:`BaselineComparison` -- per-file traces, a tidy table, and the
         paths written. The table reports how far each baseline *moved*; it does
         not score quality, because no reliable score exists here (spec.md
-        section 14.8). Judge the figures.
+        section 14.3 finding 4). Judge the figures.
     """
     resolved = [BaselineVariant.coerce(item) for item in variants]
     if not resolved:
@@ -386,7 +399,8 @@ def compare_baselines(
                 comparison.warnings.append(message)
                 continue
             wavenumbers, intensity = arr[:, 0], arr[:, 1]
-            values, degenerate = variant.compute(intensity, voigt_settings)
+            outcome = variant.compute(intensity, voigt_settings, wavenumbers)
+            values, degenerate = outcome.values, outcome.degenerate
 
             trace = BaselineTrace(
                 label=variant.label,
@@ -396,10 +410,21 @@ def compare_baselines(
                 raw=intensity,
                 baseline=values,
                 degenerate=degenerate,
+                anchors_applied=outcome.anchors_applied,
+                anchors_gated=outcome.anchors_gated,
+                split_applied=outcome.split_applied,
+                split_gated=outcome.split_gated,
+                segment_edges=outcome.segment_edges,
+                seam_jump=outcome.seam_jump,
+                band_heights={
+                    center: band_height(wavenumbers, intensity, values, center)
+                    for center in REPORTED_BANDS_CM1
+                },
             )
+            variant_range = signal_range(intensity)
             if reference is None:
                 reference = trace
-                reference_range = signal_range(intensity)
+                reference_range = variant_range
             else:
                 shift, region = overlap_shift(
                     reference.wavenumbers,
@@ -411,12 +436,53 @@ def compare_baselines(
                 trace.compared_over = region
 
             item.traces.append(trace)
+            band_columns: dict[str, float] = {}
+            for center in REPORTED_BANDS_CM1:
+                height = trace.band_heights.get(center, float("nan"))
+                band_columns[f"height_{center:.0f}"] = height
+                reference_height = (
+                    reference.band_heights.get(center, float("nan"))
+                    if reference is not None
+                    else float("nan")
+                )
+                # A ratio is only meaningful when the reference height is
+                # positive. Where the band sits *below* the current baseline the
+                # reference is negative and "x N" would read as an improvement
+                # while meaning nothing; the raw height column carries it instead.
+                band_columns[f"height_{center:.0f}_x_ref"] = (
+                    height / reference_height
+                    if reference_height and reference_height > 0
+                    else float("nan")
+                )
             rows.append(
                 {
                     "file": file_stem,
                     "verdict": verdict,
                     "variant": variant.label,
                     "window": f"{variant.window[0]:.0f}-{variant.window[1]:.0f}",
+                    "anchors": "/".join(f"{a:.0f}" for a in outcome.anchors_applied),
+                    "anchors_gated": "/".join(
+                        f"{a:.0f}" for a, _, _ in outcome.anchors_gated
+                    ),
+                    "split": (
+                        ""
+                        if outcome.split_applied is None
+                        else f"{outcome.split_applied:.0f}"
+                    ),
+                    "split_gated": (
+                        ""
+                        if outcome.split_gated is None
+                        else f"{outcome.split_gated[0]:.0f}"
+                    ),
+                    # The seam discontinuity as a percentage of this file's
+                    # signal range, so it reads on the same scale as
+                    # moved_pct_of_range and the band heights.
+                    "seam_pct_of_range": (
+                        float("nan")
+                        if outcome.split_applied is None
+                        else 100 * outcome.seam_jump / variant_range
+                    ),
+                    **band_columns,
                     "moved_pct_of_range": trace.moved_pct_of_range,
                     "compared_over": (
                         ""
@@ -565,17 +631,35 @@ if __name__ == "__main__":
         #
         # Window is (high, low) in cm-1 and changes which slice of the
         # spectrum the algorithm sees -- which changes the baseline
-        # everywhere, not just at the edges (spec.md section 14.8).
+        # everywhere, not just at the edges (spec.md section 14.3 finding 2).
+        #
+        # A 4th tuple element is the anchor list: wavenumbers the baseline is
+        # forced to pass through, applied after create_baseline as an affine
+        # correction. ANCHOR_POINTS_CM1 is the calibrated (2006, 1955) pair.
+        # An anchor with a dominant band within +/-25 cm-1 is dropped by the
+        # guard and reported in the anchors_gated column (spec.md 14.7).
+        #
+        # A 5th element is the split wavenumber: the ROI is cut there and each
+        # side gets its own baseline -- upper with this variant's settings and
+        # anchors, lower with the current baseline's settings and none. The
+        # same guard gates the cut, independently of the anchors (spec.md 14.8).
         # ------------------------------------------------------------------
         folder_name = "nn1120-4_pd_ceo2_000"
-        run_name = "sweep"  # change per experiment so runs do not overwrite
+        run_name = "anchored_3"  # change per experiment so runs do not overwrite
 
         variants = [
             ("current", {}),
+            # Anchored: same settings, same full ROI, baseline pinned to the
+            # data at ANCHOR_POINTS_CM1 where the guard allows it. This is the
+            # recommended form (spec.md 14.7).
+            ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
+            # Splitting the array at the crossing was tried and is worse than
+            # the anchors alone (spec.md 14.8); split_cm1 stays available:
+            # ("split 1955", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1, SPLIT_POINT_CM1),
             # ("num_std 1.4", {"num_std": 1.4}),
             # ("half_window 20", {"half_window": 20}),
             # # Window change: same settings, top edge at 2200 instead of 2250.
-            ("window 2200", {}, (2225.0, 1775.0)),
+            # ("window 2200", {}, (2225.0, 1775.0)),
         ]
 
         # files=None uses JUDGED_FILES: 8 files -- 6 judged wrong, plus 2
@@ -599,8 +683,18 @@ if __name__ == "__main__":
             "was an improvement -- judge the figures.\n"
         )
         print(
+            "'height_2040' / 'height_1980' are those bands' heights "
+            "above the baseline; '_x_ref' is the ratio to the first variant. "
+            "The current baseline cuts these two in half, so a variant that "
+            "fixes that shows a ratio near 2. This measures two named bands "
+            "-- it is NOT a baseline quality score (spec.md 14.3 finding 4)."
+        )
+        # Keep the raw height_* columns beside the ratios: where a band sits
+        # below the current baseline the ratio is NaN, and the raw height is
+        # then the only thing carrying the result.
+        print(
             comparison.table.drop(columns=["settings"]).to_string(
-                index=False, float_format=lambda v: f"{v:7.2f}"
+                index=False, float_format=lambda v: f"{v:9.4f}"
             )
         )
 

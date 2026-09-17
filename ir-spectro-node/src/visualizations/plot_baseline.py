@@ -184,6 +184,24 @@ def plot_file_baseline(
     return output_path
 
 
+def _anchor_label(trace) -> str:
+    """Legend fragment describing what the split and anchor guards did."""
+    parts = []
+    if trace.split_applied is not None:
+        parts.append(f"split {trace.split_applied:.0f} (seam {trace.seam_jump:+.1e})")
+    if trace.split_gated is not None:
+        split, where, fraction = trace.split_gated
+        parts.append(f"SPLIT GATED {split:.0f}<-{where:.0f} p={fraction:.2f}")
+    if trace.anchors_applied:
+        parts.append("@" + "/".join(f"{a:.0f}" for a in trace.anchors_applied))
+    for anchor, where, fraction in trace.anchors_gated:
+        if np.isfinite(where):
+            parts.append(f"GATED {anchor:.0f}<-{where:.0f} p={fraction:.2f}")
+        else:
+            parts.append(f"GATED {anchor:.0f} (outside window)")
+    return ", ".join(parts)
+
+
 def plot_baseline_comparison(
     comparison: FileBaselineComparison,
     *,
@@ -258,6 +276,13 @@ def plot_baseline_comparison(
             label += f"  [{trace.window[0]:.0f}-{trace.window[1]:.0f}]"
         if trace.degenerate:
             label += "  DEGENERATE"
+        if (
+            trace.anchors_applied
+            or trace.anchors_gated
+            or trace.split_applied is not None
+            or trace.split_gated is not None
+        ):
+            label += f"  [{_anchor_label(trace)}]"
 
         ax_raw.plot(
             trace.wavenumbers,
@@ -275,6 +300,45 @@ def plot_baseline_comparison(
             linestyle=style,
             label=label,
         )
+
+    # Anchor markers: filled where the baseline was pinned, hollow with an x
+    # where the guard rejected the anchor. Drawn once per distinct wavenumber,
+    # since variants sharing an anchor would otherwise stack markers.
+    drawn: set[tuple[float, bool]] = set()
+    for trace in traces:
+        for anchor in trace.anchors_applied:
+            if (anchor, True) in drawn:
+                continue
+            drawn.add((anchor, True))
+            value = float(
+                np.interp(
+                    anchor,
+                    trace.wavenumbers[::-1],
+                    trace.baseline[::-1],
+                )
+            )
+            ax_raw.plot(
+                anchor, value, "o", color="black", markersize=5,
+                markerfacecolor="black", zorder=10,
+            )
+        for anchor, where, _ in trace.anchors_gated:
+            if (anchor, False) in drawn:
+                continue
+            drawn.add((anchor, False))
+            ax_raw.axvline(anchor, color="0.5", linestyle=":", linewidth=1.0)
+            if np.isfinite(where):
+                ax_raw.axvline(where, color="tab:red", linestyle=":", linewidth=1.0)
+
+    # The seam of a split baseline, on both panels: the interface is where a
+    # two-segment baseline is most likely to be wrong (spec.md section 14.4),
+    # and it is judged by eye like everything else here.
+    for split in sorted(
+        {trace.split_applied for trace in traces if trace.split_applied is not None}
+    ):
+        for axis in (ax_raw, ax_sub):
+            axis.axvline(
+                split, color="tab:purple", linestyle="-.", linewidth=1.0, alpha=0.7
+            )
 
     ax_raw.set_ylabel("Log Reflectance")
     title = comparison.subifg_path.name

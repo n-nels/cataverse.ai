@@ -181,7 +181,7 @@ class BaselineTrace:
 
     Percentage of the reference's signal range over the region the two share.
     It says the baseline *moved*, not that moving it was an improvement -- no
-    quality score is available here (see ``spec.md`` section 14.8).
+    quality score is available here (see ``spec.md`` section 14.3 finding 4).
     """
 
     compared_over: tuple[float, float] | None = None
@@ -189,6 +189,45 @@ class BaselineTrace:
 
     Not always the full window: variants with different windows are compared on
     their overlap, and the number is uninterpretable without knowing which.
+    """
+
+    anchors_applied: tuple[float, ...] = ()
+    """Anchor wavenumbers this baseline was forced through."""
+
+    anchors_gated: tuple[tuple[float, float, float], ...] = ()
+    """``(anchor, extremum wavenumber, prominence)`` per anchor the guard rejected.
+
+    Kept on the trace so the legend can say the guard fired. An anchored
+    baseline that was silently left unanchored is indistinguishable from one
+    where anchoring did nothing.
+    """
+
+    split_applied: float | None = None
+    """Wavenumber this baseline was cut at, or ``None`` for a single segment."""
+
+    split_gated: tuple[float, float, float] | None = None
+    """``(split, extremum wavenumber, prominence)`` when the guard refused the cut.
+
+    Kept for the same reason as :attr:`anchors_gated`: a baseline that fell back
+    to one segment is otherwise indistinguishable from one that was never asked
+    to split.
+    """
+
+    segment_edges: tuple[float, float] | None = None
+    """``(lowest wavenumber above the cut, highest below it)`` -- the seam."""
+
+    seam_jump: float = float("nan")
+    """Discontinuity across the seam, in raw units.
+
+    The segment interface is the known weak point of a split baseline (spec.md
+    section 14.4); it is measured and drawn, not blended away.
+    """
+
+    band_heights: dict[float, float] = field(default_factory=dict)
+    """``{center: max(raw - baseline) near center}`` for the reported bands.
+
+    2040 and 1980 are the bands being cut in half. Not a baseline quality
+    score -- see ``baseline.band_height``.
     """
 
     @property
