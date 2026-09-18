@@ -18,6 +18,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 path = Path(__file__).resolve().parents[3]
@@ -31,9 +32,13 @@ from src.utils.ir_fitting.baseline import (
     ANCHOR_POINTS_CM1,
     DEFAULT_WINDOW,
     JUDGED_FILES,
+    LOWER_ANCHOR_MID_CM1,
+    LOWER_ANCHOR_POINTS_CM1,
+    LOWER_SPLIT_POINT_CM1,
     SPLIT_POINT_CM1,  # noqa: F401 -- for the commented-out split variant in __main__
     BaselineVariant,
     band_height,
+    gating_extremum,
     overlap_shift,
     signal_range,
 )
@@ -309,6 +314,54 @@ def load_measurement(
     return result
 
 
+def _recipe_key(variant: BaselineVariant) -> tuple:
+    """Everything about a variant except which cut, if any, it makes.
+
+    Two variants share a key when they hand ``create_baseline`` the same array
+    with the same settings and ask for the same anchors. That is what makes one
+    of them the other's "same recipe, no cut" twin.
+    """
+    return (
+        tuple(sorted(variant.settings.items(), key=lambda kv: kv[0])),
+        tuple(variant.window),
+        tuple(variant.anchors),
+    )
+
+
+def _twin_max_abs_diff(
+    trace: BaselineTrace,
+    twin: BaselineTrace | None,
+    cut: float,
+    side: str,
+) -> float:
+    """Largest ``|trace - twin|`` on one side of ``cut``.
+
+    Two questions, one measurement, and they are asymmetric on purpose:
+
+    - ``"upper"`` is a **check**. The lower-only split of spec.md section 14.9
+      keeps the full-ROI anchored baseline at and above the cut, so this is
+      **0.0 exactly** or the implementation is wrong -- not "small", not
+      "within tolerance". A float tolerance would hide precisely the bug the
+      check exists to catch, which is a truncated array reaching
+      ``create_baseline`` and moving the upper baseline a little.
+    - ``"lower"`` is the **result**. Below the cut is the only region the
+      variant touches, so this is how much it did.
+
+    Returns ``nan`` when no twin was run: an unperformed check, which must not
+    read as a passed one.
+    """
+    if twin is None:
+        return float("nan")
+    if twin.wavenumbers.shape != trace.wavenumbers.shape or not np.array_equal(
+        twin.wavenumbers, trace.wavenumbers
+    ):
+        return float("nan")
+    mask = trace.wavenumbers >= cut if side == "upper" else trace.wavenumbers < cut
+    if not mask.any():
+        return float("nan")
+    return float(np.abs(trace.baseline[mask] - twin.baseline[mask]).max())
+
+
 def compare_baselines(
     variants: Sequence[BaselineVariant | tuple],
     *,
@@ -390,6 +443,10 @@ def compare_baselines(
 
         reference: BaselineTrace | None = None
         reference_range = float("nan")
+        # Traces for variants that make no cut, keyed by recipe. A lower-only
+        # split (spec.md 14.9) claims to leave everything above the cut
+        # untouched; its twin here is what that claim is measured against.
+        unsplit_twins: dict[tuple, BaselineTrace] = {}
         for variant in resolved:
             try:
                 arr = runner.load_subifg_roi(subifg_path, window=variant.window)
@@ -412,8 +469,11 @@ def compare_baselines(
                 degenerate=degenerate,
                 anchors_applied=outcome.anchors_applied,
                 anchors_gated=outcome.anchors_gated,
+                lower_anchors_applied=outcome.lower_anchors_applied,
+                lower_anchors_gated=outcome.lower_anchors_gated,
                 split_applied=outcome.split_applied,
                 split_gated=outcome.split_gated,
+                split_form=outcome.split_form,
                 segment_edges=outcome.segment_edges,
                 seam_jump=outcome.seam_jump,
                 band_heights={
@@ -421,6 +481,31 @@ def compare_baselines(
                     for center in REPORTED_BANDS_CM1
                 },
             )
+            recipe = _recipe_key(variant)
+            if variant.split_cm1 is None and variant.lower_split_cm1 is None:
+                unsplit_twins.setdefault(recipe, trace)
+            elif variant.lower_split_cm1 is not None:
+                twin = unsplit_twins.get(recipe)
+                cut = variant.lower_split_cm1
+                if twin is None:
+                    # A nan here is an unperformed check, and a programmatic
+                    # caller never sees the __main__ block's summary -- so say
+                    # so, for the reason BaselineOutcome gives about a silently
+                    # un-anchored baseline looking like an anchored no-op.
+                    LOGGER.warning(
+                        "variant %r cuts at %.0f but no variant with the same "
+                        "settings, window and anchors and no cut was run; "
+                        "upper_max_abs_diff and lower_moved_pct are nan. Add the "
+                        "unsplit twin (e.g. the 'anchored' variant) to check that "
+                        "the region above the cut did not move (spec.md 14.9).",
+                        variant.label, cut,
+                    )
+                trace.upper_max_abs_diff = _twin_max_abs_diff(
+                    trace, twin, cut, "upper"
+                )
+                lower_shift = _twin_max_abs_diff(trace, twin, cut, "lower")
+                trace.lower_moved_pct = 100 * lower_shift / signal_range(intensity)
+
             variant_range = signal_range(intensity)
             if reference is None:
                 reference = trace
@@ -464,6 +549,15 @@ def compare_baselines(
                     "anchors_gated": "/".join(
                         f"{a:.0f}" for a, _, _ in outcome.anchors_gated
                     ),
+                    # The lower segment's own correction, reported separately
+                    # from the full-ROI one: two lines on two arrays (spec.md
+                    # 14.10). Blank on every variant that makes no lower cut.
+                    "lower_anchors": "/".join(
+                        f"{a:.0f}" for a in outcome.lower_anchors_applied
+                    ),
+                    "lower_anchors_gated": "/".join(
+                        f"{a:.0f}" for a, _, _ in outcome.lower_anchors_gated
+                    ),
                     "split": (
                         ""
                         if outcome.split_applied is None
@@ -474,6 +568,16 @@ def compare_baselines(
                         if outcome.split_gated is None
                         else f"{outcome.split_gated[0]:.0f}"
                     ),
+                    "split_form": outcome.split_form,
+                    # Must be exactly 0.0 for a lower-only split: above the cut
+                    # it is the unsplit anchored baseline by construction
+                    # (spec.md 14.9). Blank where there is nothing to check.
+                    "upper_max_abs_diff": trace.upper_max_abs_diff,
+                    # How far the cut moved the baseline below itself, against
+                    # the same anchored twin -- the variant's entire effect,
+                    # since height_2040/height_1980 sit above the cut and cannot
+                    # move (spec.md 14.9).
+                    "lower_moved_pct": trace.lower_moved_pct,
                     # The seam discontinuity as a percentage of this file's
                     # signal range, so it reads on the same scale as
                     # moved_pct_of_range and the band heights.
@@ -643,18 +747,61 @@ if __name__ == "__main__":
         # side gets its own baseline -- upper with this variant's settings and
         # anchors, lower with the current baseline's settings and none. The
         # same guard gates the cut, independently of the anchors (spec.md 14.8).
+        #
+        # A 6th element is the LOWER-ONLY split wavenumber, and it excludes the
+        # 5th. Same cut point, different operation: create_baseline runs once on
+        # the full window, the anchors are fitted to that full-ROI result, and
+        # only below the cut is a second baseline substituted. Above the cut the
+        # result is bit-for-bit the unsplit anchored baseline, which the
+        # upper_max_abs_diff column checks (spec.md 14.9).
+        #
+        # A 7th element is the LOWER anchor list -- anchors for the second
+        # baseline the 6th element creates, and it requires it. Its own affine
+        # correction on its own array, so it cannot reach above the cut;
+        # LOWER_ANCHOR_POINTS_CM1 is both segment endpoints plus 1800 cm-1
+        # (spec.md 14.10). Reported in the lower_anchors / lower_anchors_gated
+        # columns, separately from the full-ROI ones.
         # ------------------------------------------------------------------
         folder_name = "nn1120-4_pd_ceo2_000"
-        run_name = "anchored_3"  # change per experiment so runs do not overwrite
+        run_name = "lower_anchored_1955"  # change per experiment so runs do not overwrite
 
         variants = [
             ("current", {}),
             # Anchored: same settings, same full ROI, baseline pinned to the
             # data at ANCHOR_POINTS_CM1 where the guard allows it. This is the
             # recommended form (spec.md 14.7).
+            #
+            # Not optional while a split variant is present: it is the middle
+            # term that attributes a change to the *cut* rather than to the
+            # anchors, and it is the twin upper_max_abs_diff is measured
+            # against. Drop it and that check silently reports nan.
             ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
-            # Splitting the array at the crossing was tried and is worse than
-            # the anchors alone (spec.md 14.8); split_cm1 stays available:
+            # Lower-only split: the anchored baseline above 1955 untouched, a
+            # second create_baseline below it (spec.md 14.9).
+            (
+                "lower split 1955",
+                {},
+                DEFAULT_WINDOW,
+                ANCHOR_POINTS_CM1,
+                None,
+                LOWER_SPLIT_POINT_CM1,
+            ),
+            # Lower-only split WITH the lower segment anchored at both its
+            # endpoints plus 1800 (spec.md 14.10). The unanchored lower split
+            # above it is not optional: without it a change cannot be
+            # attributed to the lower anchors rather than to the cut, one
+            # level deeper than the reason 14.8 gives for keeping `anchored`.
+            (
+                "lower split 1955 + lower anchors",
+                {},
+                DEFAULT_WINDOW,
+                ANCHOR_POINTS_CM1,
+                None,
+                LOWER_SPLIT_POINT_CM1,
+                LOWER_ANCHOR_POINTS_CM1,
+            ),
+            # Truncating both sides was tried and is worse than the anchors
+            # alone (spec.md 14.8); split_cm1 stays available:
             # ("split 1955", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1, SPLIT_POINT_CM1),
             # ("num_std 1.4", {"num_std": 1.4}),
             # ("half_window 20", {"half_window": 20}),
@@ -693,10 +840,87 @@ if __name__ == "__main__":
         # below the current baseline the ratio is NaN, and the raw height is
         # then the only thing carrying the result.
         print(
-            comparison.table.drop(columns=["settings"]).to_string(
+            comparison.table.drop(
+                columns=["settings", "upper_max_abs_diff", "lower_moved_pct"]
+            ).to_string(
                 index=False, float_format=lambda v: f"{v:9.4f}"
             )
         )
+
+        # Printed apart from the table because the table's float format rounds
+        # to 4 decimals, which would render 1e-9 as 0.0000 -- and "is it
+        # exactly zero" is the whole question here (spec.md 14.9).
+        checked = comparison.table[comparison.table["split_form"] == "lower_only"]
+        if not checked.empty:
+            print(
+                "\nupper_max_abs_diff -- max |lower-split - anchored| ABOVE the cut.\n"
+                "Must be exactly 0.0: above the cut the lower-only split IS the\n"
+                "anchored baseline by construction. Anything else, or nan (no\n"
+                "'anchored' twin in this run), means the check did not pass.\n"
+            )
+            for _, row in checked.iterrows():
+                print(f"  {row['upper_max_abs_diff']:.3e}  {row['file']}")
+            print(
+                "\nlower_moved_pct -- max |lower-split - anchored| BELOW the cut, "
+                "as %\nof signal range. This is what the cut actually did; the "
+                "band-height\ncolumns cannot show it, because 2040 and 1980 are "
+                "both above the cut.\n"
+            )
+            for _, row in checked.iterrows():
+                print(f"  {row['lower_moved_pct']:8.3f}  {row['file']}")
+            worst = checked["upper_max_abs_diff"].max()
+            print(
+                f"\n  worst: {worst:.3e} -- "
+                + ("PASS" if worst == 0.0 else "FAIL")
+            )
+
+            # The seam is the metric for spec.md 14.10: 1955 is in BOTH anchor
+            # sets, so both sides are pulled toward the same data value there,
+            # and 14.9's only cost over 14.7 was a seam of 0% -> up to 5.6% of
+            # range. The band-height columns cannot score this -- 2040 and 1980
+            # sit above the cut and are guaranteed equal to `anchored`.
+            print(
+                "\nseam_pct_of_range -- the jump across the cut, as % of signal\n"
+                "range. This is the column 14.10 is judged on: anchoring the\n"
+                "lower segment at 1955 pulls it toward the same data value the\n"
+                "full-ROI correction was pulled toward, so the seam should\n"
+                "shrink. Pulled, not pinned -- with three anchors the correction\n"
+                "is least-squares and no anchor is hit exactly.\n"
+            )
+            for label in checked["variant"].unique():
+                print(f"  {label}")
+                for _, row in checked[checked["variant"] == label].iterrows():
+                    print(
+                        f"    seam {row['seam_pct_of_range']:8.3f}  "
+                        f"lower_moved {row['lower_moved_pct']:7.3f}  "
+                        f"lo@{row['lower_anchors'] or '-':<16} "
+                        f"gated {row['lower_anchors_gated'] or '-':<12} "
+                        f"{row['file']}"
+                    )
+
+        # The guard's verdict at 1800, measured rather than assumed. 1800 sits
+        # ~5 cm-1 from the 1795 band at the default 13CO isotope -- well inside
+        # ANCHOR_GUARD_CM1 -- but ANCHOR_PROMINENCE_FRAC is scaled to the FULL
+        # ROI range and the low bands are ~1e-5 to 1e-4 against ~2e-3 for 2040,
+        # so the guard may pass it. Passing is not reassurance: it means the
+        # anchor reads a region where a small band lives, and this number is
+        # what that judgement rests on (spec.md 14.10, LOWER_ANCHOR_MID_CM1).
+        print(
+            f"\nguard probe at {LOWER_ANCHOR_MID_CM1:.0f} and 1795 -- prominence "
+            "as a fraction of\nfull-ROI signal range, against the "
+            "ANCHOR_PROMINENCE_FRAC = 0.5 threshold.\n'-' means no extremum "
+            "within +/-25 cm-1 clears it: the anchor is NOT gated.\n"
+        )
+        for item in comparison.files:
+            probe = item.traces[0]
+            cells = []
+            for where in (LOWER_ANCHOR_MID_CM1, 1795.0):
+                hit = gating_extremum(probe.wavenumbers, probe.raw, where)
+                cells.append("-" if hit is None else f"{hit[1]:.2f}@{hit[0]:.0f}")
+            print(
+                f"  1800 {cells[0]:<12} 1795 {cells[1]:<12} "
+                f"{item.subifg_path.name}"
+            )
 
     else:
         folder_name = "nn1120-3_pd_ceo2_004"

@@ -202,6 +202,22 @@ class BaselineTrace:
     where anchoring did nothing.
     """
 
+    lower_anchors_applied: tuple[float, ...] = ()
+    """Anchors the **lower segment's** baseline was corrected at (spec.md 14.10).
+
+    Separate from :attr:`anchors_applied`: two least-squares lines on two
+    arrays, and a legend that merged them could not say which line dropped a
+    gated point.
+    """
+
+    lower_anchors_gated: tuple[tuple[float, float, float], ...] = ()
+    """``(anchor, extremum wavenumber, prominence)`` per rejected lower anchor.
+
+    The first thing to read on a section 14.10 run: 1800 sits ~5 cm-1 from the
+    1795 band, so whether the guard fired there decides whether the anchor ran
+    at all.
+    """
+
     split_applied: float | None = None
     """Wavenumber this baseline was cut at, or ``None`` for a single segment."""
 
@@ -213,6 +229,14 @@ class BaselineTrace:
     to split.
     """
 
+    split_form: str = ""
+    """Which cut this was -- ``""``, ``"truncate"`` (spec.md 14.8) or
+    ``"lower_only"`` (14.9).
+
+    Both cut at a wavenumber and both report through :attr:`split_applied`, so
+    without this a table carrying the two forms cannot be read.
+    """
+
     segment_edges: tuple[float, float] | None = None
     """``(lowest wavenumber above the cut, highest below it)`` -- the seam."""
 
@@ -221,6 +245,31 @@ class BaselineTrace:
 
     The segment interface is the known weak point of a split baseline (spec.md
     section 14.4); it is measured and drawn, not blended away.
+    """
+
+    upper_max_abs_diff: float = float("nan")
+    """Largest ``|this - unsplit twin|`` above the cut, or ``nan``.
+
+    The claim the lower-only form of spec.md section 14.9 rests on is that it
+    changes *nothing* above the cut. That is checkable rather than arguable, so
+    it is checked: the twin is the variant in the same comparison with
+    identical settings, window and anchors but no cut, and this must come out
+    **exactly 0.0**. Anything else means a truncated array reached
+    ``create_baseline``, or the anchors were fitted to a subset.
+
+    ``nan`` when the comparison holds no such twin -- the check could not be
+    run, which is not the same as it passing.
+    """
+
+    lower_moved_pct: float = float("nan")
+    """``max |this - unsplit twin|`` **below** the cut, as % of signal range.
+
+    The companion to :attr:`upper_max_abs_diff`, and the one that carries the
+    result. Above the cut a lower-only split is defined to change nothing; below
+    it is the only thing it does. Without this the comparison table measures the
+    variant's effect nowhere, because both reported bands (2040, 1980) sit above
+    the cut -- ``height_2040`` and ``height_1980`` are *guaranteed* to equal the
+    anchored variant's and say nothing about whether the cut helped.
     """
 
     band_heights: dict[float, float] = field(default_factory=dict)

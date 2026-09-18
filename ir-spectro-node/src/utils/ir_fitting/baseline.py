@@ -7,11 +7,15 @@ never calls ``create_baseline`` itself.
 
 **This is the expansion point.** A new baseline behaviour gets a field on
 :class:`BaselineVariant` and a branch in :meth:`BaselineVariant.compute`, not a
-parallel module. Four knobs are wired up: the ``std_distribution`` settings, the
+parallel module. Five knobs are wired up: the ``std_distribution`` settings, the
 wavenumber window, the anchor points of ``spec.md`` section 14.7, and the split
 point of section 14.8 -- the two readings of section 14.4 step 3, both built.
-The anchor is the one that is recommended; the split is measured and kept as a
-knob.
+The anchor is the one that is recommended; the truncating split is measured and
+kept as a knob. ``lower_split_cm1`` is a third form -- section 14.9's
+lower-only cut, which leaves the anchored full-ROI baseline untouched above the
+cut and only replaces it below. ``lower_anchors`` pins *that* second baseline
+-- section 14.10's anchors on the lower half, which only mean anything under
+``lower_split_cm1``.
 """
 
 from __future__ import annotations
@@ -153,6 +157,72 @@ are separate consequences of one test -- a file that loses its 1955 anchor
 keeps 2240/2006, and a file that cannot be split still gets anchored.
 """
 
+LOWER_SPLIT_POINT_CM1 = SPLIT_POINT_CM1
+"""Default cut for the *lower-only* split of spec.md section 14.9.
+
+The same wavenumber as :data:`SPLIT_POINT_CM1`; a separate name because the two
+splits are different operations at the same point, and a reader who sees only
+the number cannot tell which one is meant.
+
+Under :attr:`BaselineVariant.split_cm1` the array is cut and **both** segments
+are recomputed on their own shortened arrays, which is what section 14.8
+measured and rejected: the upper segment's ``std_distribution`` sees a
+different array, and the 1955 anchor then reads the corrupted truncation edge,
+tilting the least-squares line so the 2006 anchor lands -8.2% off instead of
+-2.1%. Under :attr:`BaselineVariant.lower_split_cm1` the upper side is never
+recomputed at all -- the full-ROI anchored baseline is kept above the cut, so
+that region provably does not move, and only the region below gets a second
+``create_baseline``.
+"""
+
+LOWER_ANCHOR_MID_CM1 = 1800.0
+"""Interior anchor for the lower segment (spec.md section 14.10).
+
+Chosen by the user. It is **close to a band**: at the default 13CO isotope the
+low peaks sit at 1795/1775 (section 4), so 1795 is ~5 cm-1 away -- well inside
+:data:`ANCHOR_GUARD_CM1`. Whether that matters is an empirical question the
+guard answers per file, and the run reports it: :data:`ANCHOR_PROMINENCE_FRAC`
+is a fraction of the **full ROI** range, and the low bands are ~1e-5 to 1e-4
+against ~2e-3 for the 2040 band, so the guard may well pass 1800 rather than
+gate it. Passing is not reassurance -- it means the anchor is reading a region
+where a small band lives, and the measured prominence is the number to judge
+that on. The nearest clearly clear alternative is >= 1820.
+"""
+
+LOWER_ANCHOR_POINTS_CM1: tuple[float, ...] = (
+    LOWER_SPLIT_POINT_CM1,
+    LOWER_ANCHOR_MID_CM1,
+    DEFAULT_WINDOW[1],
+)
+"""Default anchors for the lower segment: both endpoints plus 1800 cm-1.
+
+Only meaningful with :attr:`BaselineVariant.lower_split_cm1` -- there is no
+"lower segment" without a cut, and :class:`BaselineVariant` raises rather than
+ignore them.
+
+**Structurally different from :data:`ANCHOR_POINTS_CM1`, not a variant of it.**
+The full-ROI set pins only the top (2240) and fits the other two below it, so
+everything under 1955 is extrapolation -- which is the 205 cm-1 excursion
+section 14.9 finding 14 measured as the anchored baseline's single largest.
+This set pins **both ends of its own 205 cm-1 segment**, so nothing in it is
+extrapolated.
+
+**This is not section 14.7.1 being re-litigated.** That subsection removed a
+*fourth* anchor at 1854 because one least-squares line cannot satisfy four
+points over 400 cm-1 of curved residuals, and the brake it applied cost 2040
+band recovery. Here the lower segment carries its own line, fitted to its own
+three points, over its own 205 cm-1; the full-ROI correction above the cut is
+untouched and provably so (section 14.9 finding 13). It is the third answer to
+section 14.7.1's closing "a non-affine correction or per-anchor weights" --
+a separate line on a separate segment.
+
+The two outer values track :data:`LOWER_SPLIT_POINT_CM1` and
+:data:`DEFAULT_WINDOW` so "both endpoints" stays true if either moves;
+:meth:`BaselineVariant.__post_init__` re-checks it per variant, because a
+variant with its own window or cut would otherwise silently anchor at a point
+that is no longer an endpoint.
+"""
+
 
 @dataclass
 class BaselineOutcome:
@@ -196,24 +266,61 @@ class BaselineOutcome:
     """
 
     degenerate_segments: tuple[str, ...] = ()
-    """Which segments reported no baseline points -- ``"upper"`` / ``"lower"``.
+    """Which segments reported no baseline points.
+
+    ``"upper"`` / ``"lower"`` under :attr:`BaselineVariant.split_cm1`;
+    ``"full"`` / ``"lower"`` under :attr:`BaselineVariant.lower_split_cm1`,
+    where the upper side is not a segment at all but the whole ROI.
 
     A single flag for the pair would lose which side broke, and the lower
-    segment is the one at risk: it is ~106 samples, so the sample-count
-    settings (``half_window`` and friends) are ~2.4x larger relative to the
-    array than the values they were tuned at.
+    segment is the one at risk under either form: it is ~106 samples, so the
+    sample-count settings (``half_window`` and friends) are ~2.4x larger
+    relative to the array than the values they were tuned at.
+    """
+
+    lower_anchors_applied: tuple[float, ...] = ()
+    """Anchor wavenumbers the **lower segment's** baseline was corrected at.
+
+    Separate from :attr:`anchors_applied` because the two corrections are two
+    least-squares lines on two arrays, and one merged tuple could not say which
+    line a gated 1955 was dropped from (spec.md section 14.10). Empty unless
+    :attr:`BaselineVariant.lower_anchors` was asked for.
+    """
+
+    lower_anchors_gated: tuple[tuple[float, float, float], ...] = ()
+    """``(anchor, extremum wavenumber, prominence fraction)`` per rejected
+    lower-segment anchor. Reported for the reason this class exists: 1800 sits
+    ~5 cm-1 from the 1795 band (:data:`LOWER_ANCHOR_MID_CM1`), so whether the
+    guard fired there is the first thing a reader needs to know."""
+
+    split_form: str = ""
+    """Which cut produced this baseline -- ``""``, ``"truncate"`` or ``"lower_only"``.
+
+    Both forms report through :attr:`split_applied`, :attr:`segment_edges` and
+    :attr:`seam_jump`, because a cut at 1955 is a cut at 1955 either way. They
+    are not the same operation, though (see :data:`LOWER_SPLIT_POINT_CM1`), and
+    a comparison table carrying both is unreadable without a column saying
+    which is which.
     """
 
     @property
     def anchor_note(self) -> str:
         """One-line summary for a legend, empty when nothing was requested."""
         if not any(
-            (self.anchors_applied, self.anchors_gated, self.split_applied, self.split_gated)
+            (
+                self.anchors_applied,
+                self.anchors_gated,
+                self.split_applied,
+                self.split_gated,
+                self.lower_anchors_applied,
+                self.lower_anchors_gated,
+            )
         ):
             return ""
         parts = []
         if self.split_applied is not None:
-            parts.append(f"split {self.split_applied:.0f}")
+            form = f" {self.split_form}" if self.split_form else ""
+            parts.append(f"split {self.split_applied:.0f}{form}")
         if self.split_gated is not None:
             split, where, prominence = self.split_gated
             parts.append(
@@ -223,6 +330,15 @@ class BaselineOutcome:
             parts.append("anchored " + "/".join(f"{a:.0f}" for a in self.anchors_applied))
         for anchor, where, prominence in self.anchors_gated:
             parts.append(f"GATED {anchor:.0f} (band at {where:.0f}, p={prominence:.2f})")
+        if self.lower_anchors_applied:
+            parts.append(
+                "lower-anchored "
+                + "/".join(f"{a:.0f}" for a in self.lower_anchors_applied)
+            )
+        for anchor, where, prominence in self.lower_anchors_gated:
+            parts.append(
+                f"LOWER GATED {anchor:.0f} (band at {where:.0f}, p={prominence:.2f})"
+            )
         return "; ".join(parts)
 
 
@@ -262,6 +378,28 @@ class BaselineVariant:
             anchors, so below the cut the file keeps the baseline it has today
             in recipe, though not in value -- the algorithm sees a shorter
             array (spec.md section 14.8). See :data:`SPLIT_POINT_CM1`.
+        lower_split_cm1: Wavenumber below which the baseline is replaced by a
+            second, independently computed one -- or ``None``, the default.
+            Mutually exclusive with ``split_cm1``: both cut at a wavenumber,
+            but only this one leaves the region *above* the cut alone.
+            ``create_baseline`` runs on the full window and ``anchors`` are
+            applied to that full-ROI result, so above the cut this variant is
+            equal to the unsplit anchored baseline by construction -- bit for
+            bit, which is the check spec.md section 14.9 is built on. Below the
+            cut a second ``create_baseline`` runs with the **unmodified**
+            ``voigt_fit.baseline`` settings and no anchors. See
+            :data:`LOWER_SPLIT_POINT_CM1` for why this is a separate field
+            rather than a mode of ``split_cm1``.
+        lower_anchors: Wavenumbers the **lower segment's** own baseline is
+            corrected at, under ``lower_split_cm1`` -- ``()``, the default,
+            leaves it unanchored as spec.md sections 14.8/14.9 measured it. Its
+            own affine correction, fitted to its own residuals; the full-ROI
+            correction above the cut is untouched, so ``upper_max_abs_diff``
+            stays 0.0 exactly. Requires ``lower_split_cm1``: without a cut
+            there is no lower segment, and a silently ignored anchor list is the
+            same failure mode as an unknown ``settings`` key. Use
+            :data:`LOWER_ANCHOR_POINTS_CM1` for the endpoints-plus-1800 set of
+            section 14.10.
     """
 
     label: str
@@ -269,6 +407,8 @@ class BaselineVariant:
     window: Window = DEFAULT_WINDOW
     anchors: tuple[float, ...] = ()
     split_cm1: float | None = None
+    lower_split_cm1: float | None = None
+    lower_anchors: tuple[float, ...] = ()
 
     @classmethod
     def coerce(cls, item: BaselineVariant | tuple) -> BaselineVariant:
@@ -280,11 +420,11 @@ class BaselineVariant:
         """
         if isinstance(item, cls):
             return item
-        if not isinstance(item, (tuple, list)) or not 2 <= len(item) <= 5:
+        if not isinstance(item, (tuple, list)) or not 2 <= len(item) <= 7:
             raise TypeError(
                 "each variant must be a BaselineVariant or a "
-                f"(label, settings[, window[, anchors[, split_cm1]]]) tuple; "
-                f"got {item!r}"
+                "(label, settings[, window[, anchors[, split_cm1"
+                f"[, lower_split_cm1[, lower_anchors]]]]]) tuple; got {item!r}"
             )
         return cls(*item)
 
@@ -307,13 +447,54 @@ class BaselineVariant:
                     "does not cover"
                 )
 
-        if self.split_cm1 is not None:
-            object.__setattr__(self, "split_cm1", float(self.split_cm1))
-            if not low < self.split_cm1 < high:
+        object.__setattr__(
+            self, "lower_anchors", tuple(float(a) for a in self.lower_anchors)
+        )
+        if self.lower_anchors and self.lower_split_cm1 is None:
+            raise ValueError(
+                f"variant {self.label!r} declares lower_anchors "
+                f"{self.lower_anchors} but no lower_split_cm1. There is no lower "
+                "segment to anchor without a cut, and silently ignoring them "
+                "would look exactly like anchors that did nothing -- pass "
+                "lower_split_cm1=LOWER_SPLIT_POINT_CM1, or put these in "
+                "`anchors` if the full-ROI correction was meant."
+            )
+
+        if self.split_cm1 is not None and self.lower_split_cm1 is not None:
+            raise ValueError(
+                f"variant {self.label!r} sets both split_cm1 and lower_split_cm1. "
+                "They are two different cuts at a wavenumber -- split_cm1 "
+                "recomputes both sides on truncated arrays (spec.md 14.8), "
+                "lower_split_cm1 leaves the anchored full-ROI baseline standing "
+                "above the cut (14.9) -- so combining them has no meaning. "
+                "Declare them as two variants and compare."
+            )
+
+        for name in ("split_cm1", "lower_split_cm1"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            object.__setattr__(self, name, float(value))
+            value = getattr(self, name)
+            if not low < value < high:
                 raise ValueError(
-                    f"split_cm1 {self.split_cm1:.0f} must lie strictly inside this "
-                    f"variant's window {self.window!r}; a cut at the edge leaves one "
-                    "segment empty"
+                    f"{name} {value:.0f} must lie strictly inside this variant's "
+                    f"window {self.window!r}; a cut at the edge leaves one segment "
+                    "empty"
+                )
+
+        for anchor in self.lower_anchors:
+            if not low <= anchor <= high:
+                raise ValueError(
+                    f"lower anchor {anchor:.0f} cm-1 lies outside this variant's "
+                    f"window {self.window!r}"
+                )
+            if self.lower_split_cm1 is not None and anchor > self.lower_split_cm1:
+                raise ValueError(
+                    f"lower anchor {anchor:.0f} cm-1 sits above this variant's cut "
+                    f"at {self.lower_split_cm1:.0f}; the lower segment does not "
+                    "cover it. Anchors above the cut belong in `anchors`, which "
+                    "corrects the full-ROI baseline."
                 )
 
     @property
@@ -352,9 +533,29 @@ class BaselineVariant:
         anchor rejects the cut, and the two consequences are independent: a
         gated split falls back to one segment while the anchors are still
         applied where they survive.
+
+        When :attr:`lower_split_cm1` is set instead, the anchored full-ROI
+        baseline is computed first and kept unchanged above the cut; only below
+        it is a second baseline substituted, carrying its own
+        :attr:`lower_anchors` if any were asked for. See
+        :meth:`_compute_lower_split`.
         """
         settings = self.resolved_settings(voigt_settings)
         intensity = np.asarray(intensity, dtype=float)
+
+        if self.lower_split_cm1 is not None:
+            if wavenumbers is None:
+                raise ValueError(
+                    f"variant {self.label!r} declares "
+                    f"lower_split_cm1={self.lower_split_cm1} but compute() was "
+                    "called without wavenumbers"
+                )
+            return self._compute_lower_split(
+                np.asarray(wavenumbers, dtype=float),
+                intensity,
+                settings,
+                voigt_settings,
+            )
 
         if self.split_cm1 is None:
             values, degenerate = self._segment_baseline(intensity, settings, "")
@@ -409,6 +610,7 @@ class BaselineVariant:
                 float(split_hit[0]),
                 float(split_hit[1]),
             )
+            outcome.split_form = "truncate"
             return outcome
 
         # Split by wavenumber value, never by position: wavenumbers descend, so
@@ -472,11 +674,155 @@ class BaselineVariant:
             anchors_applied=upper_outcome.anchors_applied,
             anchors_gated=upper_outcome.anchors_gated,
             split_applied=float(self.split_cm1),
+            split_form="truncate",
             segment_edges=(
                 float(wavenumbers[upper_edge]),
                 float(wavenumbers[lower_edge]),
             ),
             seam_jump=float(values[upper_edge] - values[lower_edge]),
+            degenerate_segments=segments,
+        )
+
+    def _compute_lower_split(
+        self,
+        wavenumbers: np.ndarray,
+        intensity: np.ndarray,
+        settings: dict,
+        voigt_settings: dict | None,
+    ) -> BaselineOutcome:
+        """The lower-only cut of spec.md section 14.9.
+
+        Every failure section 14.8 measured traces to the *upper* segment being
+        computed on a shortened array, so this form never shortens it:
+
+        1. ``create_baseline`` on the full window, this variant's settings;
+        2. :func:`apply_anchors` on the **full** wavenumbers and intensity;
+        3. ``create_baseline`` on the sub-array below the cut, with the
+           unmodified ``voigt_fit.baseline`` settings;
+        3b. :func:`apply_anchors` on that lower baseline at
+           :attr:`lower_anchors`, if any -- its own least-squares line, on its
+           own array, fitted before the splice (spec.md section 14.10);
+        4. splice -- step 2's values at and above the cut, step 3b's below.
+
+        Step 2 must precede step 4. Anchoring the *spliced* curve would fit the
+        least-squares line to a mixture of two baselines, which is the premise
+        of this form collapsing: the point is that no anchor ever reads a
+        truncation edge, and that above the cut the result is bit-for-bit the
+        unsplit anchored baseline. Step 3b obeys the same rule from the other
+        side -- it corrects the lower segment alone, never the spliced curve, so
+        it cannot reach above the cut and ``upper_max_abs_diff`` stays 0.0.
+
+        The cut is gated by the same test as an anchor at that wavenumber. A
+        gated cut returns the plain anchored full-ROI baseline -- which is
+        steps 1 and 2 alone, so the fallback is the section 14.7 path exactly,
+        not a re-derivation of it. :attr:`lower_anchors` go with it: there is no
+        lower segment to anchor, so ``lower_anchors_applied`` comes back empty
+        rather than reporting anchors that were never fitted.
+        """
+        cut = float(self.lower_split_cm1)
+
+        # Steps 1-2: full ROI throughout. No guard_* override is needed or
+        # wanted here -- unlike the truncating split, the array being corrected
+        # *is* the full ROI, so the guard and anchor_data_value already read it.
+        values, degenerate = self._segment_baseline(intensity, settings, "")
+        if self.anchors:
+            outcome = apply_anchors(
+                wavenumbers,
+                intensity,
+                values,
+                self.anchors,
+                degenerate=degenerate,
+                label=self.label,
+            )
+        else:
+            outcome = BaselineOutcome(values=values, degenerate=degenerate)
+
+        split_hit = gating_extremum(wavenumbers, intensity, cut)
+        if split_hit is not None:
+            LOGGER.debug(
+                "variant %r: lower split at %.0f gated by a band at %.0f "
+                "(prominence %.2f of signal range); returning the anchored "
+                "full-ROI baseline unchanged",
+                self.label, cut, split_hit[0], split_hit[1],
+            )
+            outcome.split_gated = (cut, float(split_hit[0]), float(split_hit[1]))
+            outcome.split_form = "lower_only"
+            return outcome
+
+        # Split by wavenumber value, never by position: wavenumbers descend, so
+        # a positional slice takes the wrong end of the array.
+        upper = wavenumbers >= cut
+        lower = ~upper
+        if upper.sum() < 2 or lower.sum() < 2:
+            raise ValueError(
+                f"variant {self.label!r}: splitting at {cut:.0f} leaves "
+                f"{int(upper.sum())} / {int(lower.sum())} samples; each segment "
+                "needs at least two"
+            )
+
+        # Step 3. The lower segment takes the current baseline's own parameters
+        # -- get_baseline_settings with no override -- not this variant's.
+        lower_values, lower_degenerate = self._segment_baseline(
+            intensity[lower], ir_config.get_baseline_settings(voigt_settings), "lower"
+        )
+
+        # Step 3b. The lower segment's own anchors, on the lower segment's own
+        # array. Unanchored by default, which is what sections 14.8 and 14.9
+        # measured.
+        if self.lower_anchors:
+            # The guard and the data estimate read the FULL ROI, as under the
+            # truncating split and for the same two reasons:
+            # ANCHOR_PROMINENCE_FRAC is calibrated against the whole ROI signal
+            # range, so measuring it on a ~106-sample segment would rescale the
+            # threshold; and anchor_data_value's +/-10 cm-1 window would go
+            # one-sided at the anchor sitting on the cut. At the ROI floor it is
+            # one-sided regardless -- there is no data below 1750 -- so that
+            # residual is the noisiest of the three, and for the same reason the
+            # guard cannot see an extremum peaking at the array's own edge.
+            lower_outcome = apply_anchors(
+                wavenumbers[lower],
+                intensity[lower],
+                lower_values,
+                self.lower_anchors,
+                guard_wavenumbers=wavenumbers,
+                guard_intensity=intensity,
+                degenerate=lower_degenerate,
+                label=self.label,
+            )
+            lower_values = lower_outcome.values
+            lower_anchors_applied = lower_outcome.anchors_applied
+            lower_anchors_gated = lower_outcome.anchors_gated
+        else:
+            lower_anchors_applied = ()
+            lower_anchors_gated = ()
+
+        # Step 4. Assign through the boolean masks so the result comes back in
+        # the order it was loaded in -- overlap_shift and the plots index the
+        # baseline against the wavenumbers positionally.
+        spliced = np.array(outcome.values, dtype=float, copy=True)
+        spliced[lower] = lower_values
+
+        upper_edge = int(np.argmin(np.where(upper, wavenumbers, np.inf)))
+        lower_edge = int(np.argmax(np.where(lower, wavenumbers, -np.inf)))
+        segments = tuple(
+            name
+            for name, flag in (("full", degenerate), ("lower", lower_degenerate))
+            if flag
+        )
+        return BaselineOutcome(
+            values=spliced,
+            degenerate=bool(segments),
+            anchors_applied=outcome.anchors_applied,
+            anchors_gated=outcome.anchors_gated,
+            lower_anchors_applied=lower_anchors_applied,
+            lower_anchors_gated=lower_anchors_gated,
+            split_applied=cut,
+            split_form="lower_only",
+            segment_edges=(
+                float(wavenumbers[upper_edge]),
+                float(wavenumbers[lower_edge]),
+            ),
+            seam_jump=float(spliced[upper_edge] - spliced[lower_edge]),
             degenerate_segments=segments,
         )
 

@@ -213,7 +213,7 @@ def process_all_area_vs_time(
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     process_all_area_vs_time(
-        folder="nn1120-2_pd_ceo2_000/_test",
+        folder="nn1120-4_pd_ceo2_000",
         isotope=None,
         include_unknown=False,
         time_unit="s",

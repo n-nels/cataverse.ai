@@ -188,7 +188,13 @@ def _anchor_label(trace) -> str:
     """Legend fragment describing what the split and anchor guards did."""
     parts = []
     if trace.split_applied is not None:
-        parts.append(f"split {trace.split_applied:.0f} (seam {trace.seam_jump:+.1e})")
+        # The form matters in a legend showing both: a truncating split and a
+        # lower-only split cut at the same wavenumber and mean different
+        # things (spec.md 14.8 vs 14.9).
+        form = f" {trace.split_form}" if trace.split_form else ""
+        parts.append(
+            f"split {trace.split_applied:.0f}{form} (seam {trace.seam_jump:+.1e})"
+        )
     if trace.split_gated is not None:
         split, where, fraction = trace.split_gated
         parts.append(f"SPLIT GATED {split:.0f}<-{where:.0f} p={fraction:.2f}")
@@ -199,6 +205,17 @@ def _anchor_label(trace) -> str:
             parts.append(f"GATED {anchor:.0f}<-{where:.0f} p={fraction:.2f}")
         else:
             parts.append(f"GATED {anchor:.0f} (outside window)")
+    # The lower segment's own anchors, marked "lo@" because they are a second
+    # correction on a second array, not more points on the same line (spec.md
+    # 14.10). A legend that merged the two could not say which line lost a
+    # gated point.
+    if trace.lower_anchors_applied:
+        parts.append("lo@" + "/".join(f"{a:.0f}" for a in trace.lower_anchors_applied))
+    for anchor, where, fraction in trace.lower_anchors_gated:
+        if np.isfinite(where):
+            parts.append(f"LOW GATED {anchor:.0f}<-{where:.0f} p={fraction:.2f}")
+        else:
+            parts.append(f"LOW GATED {anchor:.0f} (outside segment)")
     return ", ".join(parts)
 
 
@@ -281,6 +298,8 @@ def plot_baseline_comparison(
             or trace.anchors_gated
             or trace.split_applied is not None
             or trace.split_gated is not None
+            or trace.lower_anchors_applied
+            or trace.lower_anchors_gated
         ):
             label += f"  [{_anchor_label(trace)}]"
 
@@ -304,7 +323,7 @@ def plot_baseline_comparison(
     # Anchor markers: filled where the baseline was pinned, hollow with an x
     # where the guard rejected the anchor. Drawn once per distinct wavenumber,
     # since variants sharing an anchor would otherwise stack markers.
-    drawn: set[tuple[float, bool]] = set()
+    drawn: set[tuple[float, object]] = set()
     for trace in traces:
         for anchor in trace.anchors_applied:
             if (anchor, True) in drawn:
@@ -326,6 +345,28 @@ def plot_baseline_comparison(
                 continue
             drawn.add((anchor, False))
             ax_raw.axvline(anchor, color="0.5", linestyle=":", linewidth=1.0)
+            if np.isfinite(where):
+                ax_raw.axvline(where, color="tab:red", linestyle=":", linewidth=1.0)
+        # Lower-segment anchors: squares, not circles. They sit on a different
+        # curve fitted by a different line, and at 1955 the two sets share a
+        # wavenumber -- two markers at one x is the point, so they key on a
+        # separate tag rather than colliding in `drawn`.
+        for anchor in trace.lower_anchors_applied:
+            if (anchor, "lower") in drawn:
+                continue
+            drawn.add((anchor, "lower"))
+            value = float(
+                np.interp(anchor, trace.wavenumbers[::-1], trace.baseline[::-1])
+            )
+            ax_raw.plot(
+                anchor, value, "s", color="tab:green", markersize=5,
+                markerfacecolor="tab:green", zorder=10,
+            )
+        for anchor, where, _ in trace.lower_anchors_gated:
+            if (anchor, "lower_gated") in drawn:
+                continue
+            drawn.add((anchor, "lower_gated"))
+            ax_raw.axvline(anchor, color="tab:green", linestyle=":", linewidth=1.0)
             if np.isfinite(where):
                 ax_raw.axvline(where, color="tab:red", linestyle=":", linewidth=1.0)
 
