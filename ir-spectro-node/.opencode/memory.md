@@ -28,6 +28,22 @@
 - [open] Figures and a breadth check still need visual/scientific judgement;
   no production ROI or configuration default changed.
 
+- [superseded] The lower-split five-anchor run above was replaced for the next
+  comparison by an uncut full `(2250, 1750)` run.
+- [decided] Keep the established `(2240, 2006, 1955)` anchor trace second in
+  the active variant list (orange); compare it against a single full-ROI
+  least-squares correction with four added points `(1790, 1800, 1810, 1820)`.
+- [measured] The new run produced 8 figures from 8 files with 0 degenerate
+  baselines. Both `...-022` guard files gated only `1955`; the four additional
+  lower anchors still applied. On six ungated files, the green-vs-orange
+  maximum displacement was 5.8--15.5% of signal range.
+- [measured] The 1800 lower-region probe moved from the orange trace's large
+  ±6.5--15.2% / −10.4--10.8% offsets to about +1.0--1.7% on post-crossing and
+  −1.1--1.2% on pre-crossing files. This is a visual/scientific trade, not an
+  automatic quality score; no production default changed.
+- [open] Decide from the generated figures and a breadth check whether the
+  seven-anchor full-ROI curve should remain an experiment-only form.
+
 ## Violations
 
 - Rule: Ruff's `BLE001` forbids broad `except Exception` handlers.

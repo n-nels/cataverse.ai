@@ -31,11 +31,11 @@ from src.utils.ir_fitting import runner, writer
 from src.utils.ir_fitting.baseline import (
     ANCHOR_POINTS_CM1,
     DEFAULT_WINDOW,
+    FULL_ROI_ANCHOR_POINTS_SEVEN_CM1,
     INT_SHARED_WINDOW_CM1,
     INT_WINDOW_CM1,
     JUDGED_FILES,
     LOWER_ANCHOR_POINTS_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
-    LOWER_ANCHOR_POINTS_FIVE_CM1,
     LOWER_CONTINUATION_LAM,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_CONTINUATION_SETTINGS,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_FLOOR_POINT_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
@@ -855,9 +855,7 @@ if __name__ == "__main__":
         # with lower_settings, whose keys belong to std_distribution.
         # ------------------------------------------------------------------
         folder_name = "nn1120-4_pd_ceo2_000"
-        run_name = (
-            "lower_anchors_1955"  # change per experiment so runs do not overwrite
-        )
+        run_name = "full_roi_anchors_2250_1750"
 
         variants = [
             ("current", {}),
@@ -865,20 +863,15 @@ if __name__ == "__main__":
             # data at ANCHOR_POINTS_CM1 where the guard allows it. This is the
             # recommended form (spec.md 14.7).
             #
-            # Not optional while a split variant is present: it is the middle
-            # term that attributes a change to the *cut* rather than to the
-            # anchors, and it is the twin upper_max_abs_diff is measured
-            # against. Drop it and that check silently reports nan.
+            # Keep this second so it remains the ORANGE trace in the figures.
             ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
-            # Lower-only split: the anchored baseline above 1955 untouched, a
-            # second create_baseline below it (spec.md 14.9). Still built and
-            # still measured in spec.md. It is the comparison twin for the
-            # lower-anchor variant below, so movement can be attributed to the
-            # added lower anchors rather than to the cut itself.
+            # Same full ROI and settings, with the four additional lower points
+            # from the last iteration added to the three established anchors.
+            # This is a single affine correction over 2250-1750: no split and
+            # no second lower baseline.
             BaselineVariant(
-                label="lower split 1955",
-                anchors=ANCHOR_POINTS_CM1,
-                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+                label="anchored + four lower anchors",
+                anchors=FULL_ROI_ANCHOR_POINTS_SEVEN_CM1,
             ),
             # The C1 continuation of spec.md 14.14: no second baseline below
             # the cut at all. The anchored curve is continued downward from it
@@ -889,10 +882,9 @@ if __name__ == "__main__":
             # samples over 205 cm-1 on ...-021), not a misclassified one, which
             # is why every mask-style fix was a bit-for-bit no-op.
             #
-            # The variants above are all load-bearing against it: `anchored`
-            # for the containment twin (drop it and upper_max_abs_diff is nan),
-            # and `lower split 1955` because it is the standing preferred form
-            # this has to beat.
+            # The historical continuation comparison used `anchored` as its
+            # full-ROI containment twin. No continuation or lower split is
+            # active in the current seven-anchor run.
             #
             # lower_settings here configures the CLASSIFIER, not a second
             # baseline -- there is none. It is on because at the unmodified
@@ -919,37 +911,22 @@ if __name__ == "__main__":
             #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
             #     lower_continuation_lam=LOWER_CONTINUATION_LAM,
             # ),
-            # ---- lower anchors under the 1955 cut ----
-            # Colours, since an earlier note here had them wrong: raw is black,
-            # then the variants take tab10 IN LIST ORDER -- traces[0] blue,
-            # traces[1] orange, traces[2] green. So with the list as it now
-            # stands, `current` is blue and `anchored` is ORANGE. The user's
-            # "go back to 3 anchor points, no split (the orange trace)" names
-            # `anchored`; adding or commenting out a variant above this line
-            # re-colours everything below it.
+            # ---- previous lower-split experiments ----
+            # Colours: raw is black, then variants take tab10 in list order --
+            # `current` is blue and the established three-anchor `anchored`
+            # curve is ORANGE. The active comparison above deliberately keeps
+            # that ordering so the extra full-ROI anchors are green.
             #
             # The two-endpoint lower anchors of 14.10.1, the pspline_arpls of
             # 14.12, the 1800 floor of 14.13 and the continuation of 14.15 are
             # still built and measured in spec.md; they are out of these
             # figures, not out of the package.
             #
-            # The five anchors are one at the cut and four in the lower
-            # portion, as requested. Unlike the established two-endpoint
-            # constant, this line is a least-squares correction and no point
-            # is expected to be hit exactly.
-            BaselineVariant(
-                label="lower split 1955 + five lower anchors",
-                anchors=ANCHOR_POINTS_CM1,
-                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-                lower_anchors=LOWER_ANCHOR_POINTS_FIVE_CM1,
-            ),
             # ---- a different ALGORITHM below the cut (spec.md 14.12) ----
             # No anchors below 1955: the correction is gone and the curve is
-            # whatever the algorithm produces. The three variants above are all
-            # load-bearing against it -- `anchored` for the containment twin,
-            # the unanchored split to separate the algorithm from the cut, and
-            # the active five-anchor form because it is the lower form being
-            # displaced.
+            # whatever the algorithm produces. These historical lower-split
+            # variants remain commented out because this run is intentionally
+            # the full-ROI three-anchor versus seven-anchor comparison.
             # BaselineVariant(
             #     label="lower pspline_arpls",
             #     anchors=ANCHOR_POINTS_CM1,
@@ -1123,7 +1100,7 @@ if __name__ == "__main__":
                         f"{row['file']}"
                     )
 
-        # The three targets the user stated for the region below the cut
+        # The three targets the user stated for the lower region
         # (spec.md 14.12), rebuilt as real columns in 14.14 because 14.12 and
         # 14.13 each re-derived them in a scratchpad probe that was not kept.
         #
@@ -1133,7 +1110,7 @@ if __name__ == "__main__":
         # judgement -- 0 on post-crossing files, `pre` on pre-crossing ones --
         # so both are shown and neither is subtracted.
         print(
-            "\nthe three stated targets below the cut, all as % of signal range:\n"
+            "\nthe three stated lower-region targets, all as % of signal range:\n"
             "  mid  baseline(1850) - midpoint of the 1866-1838 trough/peak\n"
             "       target 0 on POST-crossing files; on PRE-crossing ones the\n"
             "       target is the 'pre' column beside it (the baseline sitting\n"
@@ -1212,12 +1189,10 @@ if __name__ == "__main__":
                         f"{row['file']}"
                     )
 
-        # What the two-endpoint comparison gives up: the middle of the lower
-        # segment. With exactly two the correction is the unique line through
-        # both endpoints, so nothing constrains 1800 -- and on the .0022 files
-        # the lower residuals are curved by 4-6% of range (spec.md 14.10
-        # finding 20). The five-anchor variant adds that interior constraint;
-        # this probe keeps the comparison visible for every trace.
+        # What the three-anchor comparison gives up: the lower region is only
+        # extrapolated from its 1955 residual. The seven-anchor variant adds
+        # four lower constraints, including 1800; this probe keeps that
+        # comparison visible for every trace.
         #
         # The guard's verdict is printed beside it because it is the standing
         # limit it documents: 1800 sits ~5 cm-1 from the 1795 band and the
@@ -1226,8 +1201,8 @@ if __name__ == "__main__":
         print(
             f"\nmid-segment probe at {LOWER_MID_PROBE_CM1:.0f} -- "
             "data(1800) - baseline(1800), as % of\nsignal range. It is "
-            "unconstrained under the two-endpoint set and constrained by the "
-            "five-anchor variant. 'guard' is its prominence if gated.\n"
+            "extrapolated under the three-anchor set and constrained by the "
+            "seven-anchor variant. 'guard' is its prominence if gated.\n"
         )
         for item in comparison.files:
             cells = []

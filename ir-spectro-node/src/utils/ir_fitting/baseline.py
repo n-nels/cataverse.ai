@@ -305,6 +305,18 @@ points turns the lower correction into a least-squares pull rather than an
 exactly pinned line.
 """
 
+FULL_ROI_ANCHOR_POINTS_SEVEN_CM1: tuple[float, ...] = (
+    *ANCHOR_POINTS_CM1,
+    *LOWER_ANCHOR_POINTS_FIVE_CM1[1:],
+)
+"""Experiment-only full-ROI anchor set with four added lower points.
+
+This combines the established ``(2240, 2006, 1955)`` anchors with
+``(1790, 1800, 1810, 1820)`` while keeping the array at the full
+2250--1750 cm-1 window. It is deliberately separate from
+:data:`ANCHOR_POINTS_CM1`; no production or default baseline changes.
+"""
+
 LOWER_METHOD_CANDIDATE = "pspline_arpls"
 """The lower-segment algorithm spec.md section 14.12 measured, at its defaults.
 
