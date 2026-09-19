@@ -3505,3 +3505,34 @@ earlier `1838–1800` values in §14.16 remain historical measurements.
 This section records an experiment request, not a result. The plots and the
 comparison table must be regenerated before interpreting the effect; the
 historical 1800 measurements above remain the reference for comparison.
+
+### 14.19 Five lower anchors under the 1955 cut — measured, not selected
+
+The 1790 truncation trial is superseded for the active experiment. The run is
+back on the full `DEFAULT_WINDOW = (2250, 1750)`, with the established three
+upper anchors `(2240, 2006, 1955)` and a lower-only cut at `1955`. The lower
+experiment adds the separate five-point set `(1955, 1790, 1800, 1810, 1820)`.
+The two-endpoint `LOWER_ANCHOR_POINTS_CM1` default remains unchanged; this is
+an experiment-only alternative.
+
+The active comparison is `current`, `anchored`, `lower split 1955`, and
+`lower split 1955 + five lower anchors`, written to
+`C:\Figures\nn1120-4_pd_ceo2_000\baseline_experiments\lower_anchors_1955`.
+All eight judged files ran with no degenerate baselines. The lower-only split
+left the region at and above the cut identical to `anchored`:
+`upper_max_abs_diff = 0.0e+00` on every row. Both `...-022` guard files gated
+1955, so the lower-anchor variant fell back to `anchored` there and applied no
+lower anchors.
+
+On the six ungated files, the five-point lower correction changed the seam from
+the unanchored lower split's `(-2.870, -1.775, -5.639, +2.018, +0.846,
+-0.530)` to `(-1.899, -0.818, -2.945, +1.789, +1.430, -0.723)` % of signal
+range, in judged-file order `...-007`, `...-008`, `...-012`, `...-017`,
+`...-021`, `...-027`. Its absolute seam is smaller on the first four and larger
+on `...-021` and `...-027`. This is a measurement, not a quality score.
+
+With five lower anchors the correction is least-squares, so the two-anchor
+identity that predicts the seam from the upper residual at 1955 no longer
+applies. The run prints that quantity only as a reference. Visual judgement
+and, if this form remains of interest, a breadth check are still open; no
+production ROI, configuration default, or recommendation changed.

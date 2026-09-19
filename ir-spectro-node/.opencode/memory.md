@@ -12,20 +12,21 @@
 
 ## Current Session
 
-- [decided] The latest IR baseline experiment remains the single anchored baseline
-  on the truncated `(2250, 1800)` window; no split, second baseline, or production
-  ROI change was introduced.
-- [decided] The truncated experiment now adds an edge anchor at 1800 through
-  `TRUNCATED_ANCHOR_POINTS_1800_CM1`; the full-ROI `ANCHOR_POINTS_CM1` remains
-  `(2240, 2006, 1955)`.
-- [measured] A no-write comparison on all 8 judged files applied the 1800 anchor
-  on every truncated trace; the existing 1955 guard still gated the two `...-022`
-  files. Compilation and a synthetic edge-anchor check passed.
-- [assumed] The new edge anchor should be judged visually and against the saved
-  comparison output before being treated as a preferred scientific baseline.
-- [decided] For the next trial, move the live cutoff and edge anchor together to
-  1790; use the renamed `anchored_1790` output so it cannot be confused with the
-  historical 1800 experiment.
+- [decided] Supersede the 1790 truncation trial for the active baseline run.
+  Restore the full `(2250, 1750)` window, the three upper anchors
+  `(2240, 2006, 1955)`, and a lower-only cut at `1955`.
+- [decided] Add an experiment-only lower anchor set at
+  `(1955, 1790, 1800, 1810, 1820)`. Preserve the established two-endpoint
+  `LOWER_ANCHOR_POINTS_CM1` constant as the default.
+- [measured] The judged run produced 4 variants × 8 files with no degenerate
+  baselines. `upper_max_abs_diff` was exactly zero throughout; both `...-022`
+  guard files gated at 1955 and applied no lower anchors.
+- [measured] On the six ungated files, five lower anchors reduced absolute seam
+  on the first four and increased it on `...-021` and `...-027`, relative to the
+  unanchored lower split. The five-point seam is not governed by the old
+  two-anchor prediction identity.
+- [open] Figures and a breadth check still need visual/scientific judgement;
+  no production ROI or configuration default changed.
 
 ## Violations
 

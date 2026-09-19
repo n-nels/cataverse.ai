@@ -290,6 +290,21 @@ with its own window or cut would otherwise silently anchor at a point that is no
 longer an endpoint.
 """
 
+LOWER_ANCHOR_POINTS_FIVE_CM1: tuple[float, ...] = (
+    LOWER_SPLIT_POINT_CM1,
+    1790.0,
+    1800.0,
+    1810.0,
+    1820.0,
+)
+"""Five lower-segment anchors for the active 1955 cm-1 experiment.
+
+This is an experiment-only alternative to :data:`LOWER_ANCHOR_POINTS_CM1`.
+The established two-endpoint set remains the default because adding interior
+points turns the lower correction into a least-squares pull rather than an
+exactly pinned line.
+"""
+
 LOWER_METHOD_CANDIDATE = "pspline_arpls"
 """The lower-segment algorithm spec.md section 14.12 measured, at its defaults.
 
