@@ -18,6 +18,8 @@ cut and only replaces it below. ``lower_anchors`` pins *that* second baseline
 ``lower_split_cm1``. ``lower_method`` replaces the lower segment's *algorithm*
 -- section 14.12: any ``pybaselines.Baseline`` method instead of
 ``std_distribution``, which is the one knob no earlier section turned.
+``lower_floor_cm1`` ties that second baseline off above the ROI floor --
+section 14.13's answer to the edge artefact 14.12 left at 1750.
 """
 
 from __future__ import annotations
@@ -261,6 +263,37 @@ Its cost is the seam, which no longer has an anchor holding it: ~1.5x the
 two-anchor form of section 14.10.1 on both samples measured.
 """
 
+LOWER_FLOOR_POINT_CM1 = 1800.0
+"""Default floor for :attr:`BaselineVariant.lower_floor_cm1` (spec.md 14.13).
+
+**The lower segment's lowest wavenumber, not the ROI's.** Under
+:attr:`BaselineVariant.lower_split_cm1` alone the second baseline runs
+1955-1750 and its algorithm therefore sees the ROI's own edge, where
+section 14.12's figures found the cost of that form: on
+``...-012_delta10.0052`` the spline flattens below ~1790 while the data climbs
+to the floor, leaving the subtracted trace at +0.0005 at 1750 -- that file's
+``int`` of +1.11, the largest of the judged six, and the end behaviour of an
+unanchored spline at an array edge rather than anything about the spectrum.
+Tying the segment off here removes that edge from the fit.
+
+Two consequences, both deliberate and both measured rather than assumed:
+
+- **Below the floor the anchored full-ROI baseline stands.** There is no
+  extrapolation and no hold -- the splice simply does not reach there, so that
+  region is section 14.7 exactly, the same fallback a gated cut gets. The price
+  is a *second* seam, at the floor; :attr:`BaselineOutcome.floor_seam_jump`
+  reports it next to the first.
+- **The 1795/1775 bands leave the fit.** They sit below the floor, which is
+  the reading section 14.12 confirmed with the user -- *"Include the bands at
+  1795/1775. There is a reason these are no longer in production."* -- and
+  section 4's two dormant peaks are on that same path out.
+
+The same number as :data:`LOWER_MID_PROBE_CM1`, and **not the same thing**: the
+probe asks how far the segment drifted in its middle, and under a floor here
+1800 is no longer its middle but its end, where the correction (if any anchors
+are asked for) is exact. Do not read one for the other.
+"""
+
 
 @dataclass
 class BaselineOutcome:
@@ -359,6 +392,32 @@ class BaselineOutcome:
     asking reads exactly like one that was checked.
     """
 
+    lower_floor_applied: float | None = None
+    """Wavenumber the lower segment was tied off at, or ``None``.
+
+    ``None`` means it ran to the ROI floor, which is every variant before
+    spec.md section 14.13. Reported rather than inferred from the variant for
+    :attr:`lower_method_applied`'s reason: a gated cut leaves no lower segment
+    and therefore no floor either.
+    """
+
+    floor_edges: tuple[float, float] | None = None
+    """``(lowest wavenumber of the lower segment, highest below the floor)``.
+
+    The second seam, sitting between two samples exactly as
+    :attr:`segment_edges` does. ``None`` when no floor was applied.
+    """
+
+    floor_seam_jump: float = float("nan")
+    """``lower(floor edge) - anchored(floor edge)``: the jump at the floor.
+
+    The direct price of :attr:`lower_floor_applied` and the thing to weigh the
+    edge artefact against, so it is reported on the same terms as
+    :attr:`seam_jump` -- measured, not blended away. Below the floor the curve
+    is the anchored full-ROI baseline, so this is also the size of the
+    disagreement between the two forms at that point.
+    """
+
     split_form: str = ""
     """Which cut produced this baseline -- ``""``, ``"truncate"`` or ``"lower_only"``.
 
@@ -381,6 +440,7 @@ class BaselineOutcome:
                 self.lower_anchors_applied,
                 self.lower_anchors_gated,
                 self.lower_method_applied,
+                self.lower_floor_applied,
             )
         ):
             return ""
@@ -390,6 +450,8 @@ class BaselineOutcome:
             parts.append(f"split {self.split_applied:.0f}{form}")
         if self.lower_method_applied:
             parts.append(f"lower {self.lower_method_applied}")
+        if self.lower_floor_applied is not None:
+            parts.append(f"floor {self.lower_floor_applied:.0f}")
         if self.split_gated is not None:
             split, where, prominence = self.split_gated
             parts.append(
@@ -459,6 +521,27 @@ class BaselineVariant:
             ``voigt_fit.baseline`` settings and no anchors. See
             :data:`LOWER_SPLIT_POINT_CM1` for why this is a separate field
             rather than a mode of ``split_cm1``.
+        lower_floor_cm1: Wavenumber the **lower segment is tied off at**, or
+            ``None`` -- the default -- to run it to the bottom of the window,
+            which is what every section through 14.12 measured. Requires
+            ``lower_split_cm1``, and must lie strictly between the window's low
+            edge and the cut: at the edge it is a no-op that reads like a
+            setting, which is the silent-no-op failure the other fields raise
+            for.
+
+            The second baseline then covers ``lower_split_cm1`` down to here
+            and **nothing below**, where the anchored full-ROI baseline stands
+            unchanged -- the same fallback a gated cut gets, reached by the
+            splice not reaching rather than by a rule. Its price is a second
+            seam, at the floor, reported in
+            :attr:`BaselineOutcome.floor_seam_jump`.
+
+            The knob exists because ``create_baseline`` and a ``pybaselines``
+            method alike see *only* the array handed to them (spec.md section
+            0), so the segment's lowest wavenumber is an array edge with
+            whatever end behaviour the algorithm has there -- section 14.12's
+            figures caught a spline flattening against it. See
+            :data:`LOWER_FLOOR_POINT_CM1`.
         lower_anchors: Wavenumbers the **lower segment's** own baseline is
             corrected at, under ``lower_split_cm1`` -- ``()``, the default,
             leaves it unanchored as spec.md sections 14.8/14.9 measured it. Its
@@ -524,6 +607,7 @@ class BaselineVariant:
     lower_settings: dict | None = None
     lower_method: str | None = None
     lower_method_kwargs: dict = field(default_factory=dict)
+    lower_floor_cm1: float | None = None
 
     @classmethod
     def coerce(cls, item: BaselineVariant | tuple) -> BaselineVariant:
@@ -535,12 +619,13 @@ class BaselineVariant:
         """
         if isinstance(item, cls):
             return item
-        if not isinstance(item, (tuple, list)) or not 2 <= len(item) <= 10:
+        if not isinstance(item, (tuple, list)) or not 2 <= len(item) <= 11:
             raise TypeError(
                 "each variant must be a BaselineVariant or a "
                 "(label, settings[, window[, anchors[, split_cm1"
                 "[, lower_split_cm1[, lower_anchors[, lower_settings"
-                "[, lower_method[, lower_method_kwargs]]]]]]]]) "
+                "[, lower_method[, lower_method_kwargs"
+                "[, lower_floor_cm1]]]]]]]]]) "
                 f"tuple; got {item!r}. Past the 5th slot the keyword form "
                 "BaselineVariant(label=..., lower_split_cm1=...) reads better "
                 "-- positional tuples were for the two-element case."
@@ -620,6 +705,27 @@ class BaselineVariant:
                 "nothing to pass them to."
             )
 
+        if self.lower_floor_cm1 is not None:
+            if self.lower_split_cm1 is None:
+                raise ValueError(
+                    f"variant {self.label!r} declares "
+                    f"lower_floor_cm1={self.lower_floor_cm1:.0f} but no "
+                    "lower_split_cm1. There is no lower segment to tie off "
+                    "without a cut, and silently ignoring the floor would look "
+                    "exactly like a floor that changed nothing -- pass "
+                    "lower_split_cm1=LOWER_SPLIT_POINT_CM1."
+                )
+            object.__setattr__(self, "lower_floor_cm1", float(self.lower_floor_cm1))
+            if not low < self.lower_floor_cm1 < float(self.lower_split_cm1):
+                raise ValueError(
+                    f"lower_floor_cm1 {self.lower_floor_cm1:.0f} must lie "
+                    f"strictly between this variant's window floor {low:.0f} "
+                    f"and its cut at {float(self.lower_split_cm1):.0f}. At the "
+                    "window floor it is the unfloored form written as if it "
+                    "were a setting -- pass None for that; at or above the cut "
+                    "it leaves no segment to fit."
+                )
+
         if self.lower_anchors and self.lower_split_cm1 is None:
             raise ValueError(
                 f"variant {self.label!r} declares lower_anchors "
@@ -665,6 +771,15 @@ class BaselineVariant:
                     f"at {self.lower_split_cm1:.0f}; the lower segment does not "
                     "cover it. Anchors above the cut belong in `anchors`, which "
                     "corrects the full-ROI baseline."
+                )
+            if self.lower_floor_cm1 is not None and anchor < self.lower_floor_cm1:
+                raise ValueError(
+                    f"lower anchor {anchor:.0f} cm-1 sits below this variant's "
+                    f"floor at {self.lower_floor_cm1:.0f}; the lower segment "
+                    "stops there and does not cover it. The both-endpoints pair "
+                    "of LOWER_ANCHOR_POINTS_CM1 ends at the ROI floor, so a "
+                    "floored variant wanting the same idea asks for "
+                    "(lower_split_cm1, lower_floor_cm1) instead."
                 )
 
     def resolved_lower_settings(self, voigt_settings: dict | None = None) -> dict:
@@ -880,13 +995,22 @@ class BaselineVariant:
 
         1. ``create_baseline`` on the full window, this variant's settings;
         2. :func:`apply_anchors` on the **full** wavenumbers and intensity;
-        3. ``create_baseline`` on the sub-array below the cut, with the
+        3. ``create_baseline`` on the sub-array below the cut -- and at or
+           above :attr:`lower_floor_cm1` where one is set -- with the
            unmodified ``voigt_fit.baseline`` settings, or
            :attr:`lower_settings` where given;
         3b. :func:`apply_anchors` on that lower baseline at
            :attr:`lower_anchors`, if any -- its own least-squares line, on its
            own array, fitted before the splice (spec.md section 14.10);
         4. splice -- step 2's values at and above the cut, step 3b's below.
+
+        Under a floor, step 4 splices into ``[floor, cut)`` only, so *below* the
+        floor step 2's anchored full-ROI baseline stands untouched. That is the
+        section 14.7 curve exactly, for the same reason the gated path returns
+        it: it is what was already there, not a fallback constructed here. The
+        cost is a second discontinuity at the floor, reported separately in
+        ``floor_seam_jump`` -- the floor cannot move the first seam, which sits
+        at the cut and is fixed by the two curves meeting there.
 
         Step 2 must precede step 4. Anchoring the *spliced* curve would fit the
         least-squares line to a mixture of two baselines, which is the premise
@@ -936,10 +1060,17 @@ class BaselineVariant:
         # Split by wavenumber value, never by position: wavenumbers descend, so
         # a positional slice takes the wrong end of the array.
         upper = wavenumbers >= cut
-        lower = ~upper
+        floor = self.lower_floor_cm1
+        # The lower segment is [floor, cut) where a floor is set, so what falls
+        # below it is neither segment and keeps the anchored full-ROI values
+        # the splice never writes over (spec.md 14.13).
+        lower = ~upper if floor is None else (~upper) & (wavenumbers >= floor)
         if upper.sum() < 2 or lower.sum() < 2:
+            where = f"splitting at {cut:.0f}"
+            if floor is not None:
+                where += f" with a floor at {floor:.0f}"
             raise ValueError(
-                f"variant {self.label!r}: splitting at {cut:.0f} leaves "
+                f"variant {self.label!r}: {where} leaves "
                 f"{int(upper.sum())} / {int(lower.sum())} samples; each segment "
                 "needs at least two"
             )
@@ -998,6 +1129,21 @@ class BaselineVariant:
 
         upper_edge = int(np.argmin(np.where(upper, wavenumbers, np.inf)))
         lower_edge = int(np.argmax(np.where(lower, wavenumbers, -np.inf)))
+
+        # The floor's own seam, on the same terms as the cut's: the value just
+        # inside the fitted segment minus the anchored value just below it.
+        below = (~upper) & (~lower)
+        floor_edges = None
+        floor_seam = float("nan")
+        if floor is not None and bool(below.any()):
+            floor_top = int(np.argmin(np.where(lower, wavenumbers, np.inf)))
+            below_top = int(np.argmax(np.where(below, wavenumbers, -np.inf)))
+            floor_edges = (
+                float(wavenumbers[floor_top]),
+                float(wavenumbers[below_top]),
+            )
+            floor_seam = float(spliced[floor_top] - spliced[below_top])
+
         segments = tuple(
             name
             for name, flag in (("full", degenerate), ("lower", lower_degenerate))
@@ -1020,6 +1166,9 @@ class BaselineVariant:
             degenerate_segments=segments,
             lower_method_applied=method_applied,
             lower_method_degeneracy_checked=degeneracy_checked,
+            lower_floor_applied=floor,
+            floor_edges=floor_edges,
+            floor_seam_jump=floor_seam,
         )
 
     def _segment_pybaselines(

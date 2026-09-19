@@ -215,6 +215,11 @@ def _anchor_label(trace) -> str:
     # correction on a second array, not more points on the same line (spec.md
     # 14.10.1). A legend that merged the two could not say which one lost a
     # gated point -- 1955 is in both sets.
+    if trace.lower_floor_applied is not None:
+        parts.append(
+            f"floor {trace.lower_floor_applied:.0f} "
+            f"(seam {trace.floor_seam_jump:+.1e})"
+        )
     if trace.lower_anchors_applied:
         parts.append("lo@" + "/".join(f"{a:.0f}" for a in trace.lower_anchors_applied))
     for anchor, where, fraction in trace.lower_anchors_gated:
@@ -306,6 +311,7 @@ def plot_baseline_comparison(
             or trace.split_gated is not None
             or trace.lower_anchors_applied
             or trace.lower_anchors_gated
+            or trace.lower_floor_applied is not None
         ):
             label += f"  [{_anchor_label(trace)}]"
 
@@ -385,6 +391,21 @@ def plot_baseline_comparison(
         for axis in (ax_raw, ax_sub):
             axis.axvline(
                 split, color="tab:purple", linestyle="-.", linewidth=1.0, alpha=0.7
+            )
+
+    # The floor is the lower segment's other interface (spec.md section 14.13).
+    # Dotted rather than dash-dot, because what meets there is one fitted curve
+    # and one inherited -- not two fitted ones as at the split.
+    for floor in sorted(
+        {
+            trace.lower_floor_applied
+            for trace in traces
+            if trace.lower_floor_applied is not None
+        }
+    ):
+        for axis in (ax_raw, ax_sub):
+            axis.axvline(
+                floor, color="tab:purple", linestyle=":", linewidth=1.0, alpha=0.7
             )
 
     ax_raw.set_ylabel("Log Reflectance")

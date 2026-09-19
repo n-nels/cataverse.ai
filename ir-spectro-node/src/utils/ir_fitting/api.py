@@ -32,8 +32,9 @@ from src.utils.ir_fitting.baseline import (
     ANCHOR_POINTS_CM1,
     DEFAULT_WINDOW,
     JUDGED_FILES,
-    LOWER_ANCHOR_POINTS_CM1,
-    LOWER_METHOD_CANDIDATE,
+    LOWER_ANCHOR_POINTS_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
+    LOWER_FLOOR_POINT_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
+    LOWER_METHOD_CANDIDATE,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_MID_PROBE_CM1,
     LOWER_SPLIT_POINT_CM1,
     SPLIT_POINT_CM1,  # noqa: F401 -- for the commented-out split variant in __main__
@@ -478,6 +479,9 @@ def compare_baselines(
                 split_form=outcome.split_form,
                 segment_edges=outcome.segment_edges,
                 seam_jump=outcome.seam_jump,
+                lower_floor_applied=outcome.lower_floor_applied,
+                floor_edges=outcome.floor_edges,
+                floor_seam_jump=outcome.floor_seam_jump,
                 band_heights={
                     center: band_height(wavenumbers, intensity, values, center)
                     for center in REPORTED_BANDS_CM1
@@ -565,6 +569,14 @@ def compare_baselines(
                     # variant that asked for a method but had its cut gated, so
                     # this says what ran rather than what was requested.
                     "lower_method": outcome.lower_method_applied,
+                    # Where the lower segment stopped (spec.md 14.13). Blank
+                    # means it ran to the ROI floor, which is every variant
+                    # through 14.12.
+                    "lower_floor": (
+                        ""
+                        if outcome.lower_floor_applied is None
+                        else f"{outcome.lower_floor_applied:.0f}"
+                    ),
                     "split": (
                         ""
                         if outcome.split_applied is None
@@ -592,6 +604,15 @@ def compare_baselines(
                         float("nan")
                         if outcome.split_applied is None
                         else 100 * outcome.seam_jump / variant_range
+                    ),
+                    # The floor's own seam, on the same scale. Not summed with
+                    # the cut's: below the floor the curve is the anchored
+                    # baseline, so this measures how far the two forms disagree
+                    # there, which is a different question from the cut's.
+                    "floor_seam_pct_of_range": (
+                        float("nan")
+                        if outcome.lower_floor_applied is None
+                        else 100 * outcome.floor_seam_jump / variant_range
                     ),
                     **band_columns,
                     "moved_pct_of_range": trace.moved_pct_of_range,
@@ -789,7 +810,7 @@ if __name__ == "__main__":
         # with lower_settings, whose keys belong to std_distribution.
         # ------------------------------------------------------------------
         folder_name = "nn1120-4_pd_ceo2_000"
-        run_name = "lower_pspline_arpls"  # change per experiment so runs do not overwrite
+        run_name = "four_trace"  # change per experiment so runs do not overwrite
 
         variants = [
             ("current", {}),
@@ -809,30 +830,59 @@ if __name__ == "__main__":
                 anchors=ANCHOR_POINTS_CM1,
                 lower_split_cm1=LOWER_SPLIT_POINT_CM1,
             ),
+            # ---- everything below is OFF at the user's instruction ----
+            # "i don't want the splice. remove it from consideration. only plot
+            # the black, blue, green, orange" -- which is raw / current /
+            # anchored / lower split 1955, the four above. The lower anchors of
+            # 14.10.1, the pspline_arpls of 14.12 and the 1800 floor of 14.13
+            # are all still built and still measured in spec.md; they are out of
+            # the figures, not out of the package.
+            #
             # Lower-only split WITH the lower segment anchored at both its
             # endpoints (spec.md 14.10.1). The unanchored lower split above it
-            # is not optional: without it a change cannot be attributed to the
-            # lower anchors rather than to the cut, one level deeper than the
-            # reason 14.8 gives for keeping `anchored`.
-            BaselineVariant(
-                label="lower split 1955 + lower anchors",
-                anchors=ANCHOR_POINTS_CM1,
-                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-                lower_anchors=LOWER_ANCHOR_POINTS_CM1,
-            ),
+            # is not optional when this is on: without it a change cannot be
+            # attributed to the lower anchors rather than to the cut, one level
+            # deeper than the reason 14.8 gives for keeping `anchored`.
+            # BaselineVariant(
+            #     label="lower split 1955 + lower anchors",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_anchors=LOWER_ANCHOR_POINTS_CM1,
+            # ),
             # ---- a different ALGORITHM below the cut (spec.md 14.12) ----
             # No anchors below 1955: the correction is gone and the curve is
-            # whatever the algorithm produces, which is the form asked for. The
-            # three variants above are all load-bearing against it -- `anchored`
-            # for the containment twin, the unanchored split to separate the
-            # algorithm from the cut, and the two-anchor form because it is
-            # today's default and the thing being displaced.
-            BaselineVariant(
-                label="lower pspline_arpls",
-                anchors=ANCHOR_POINTS_CM1,
-                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-                lower_method=LOWER_METHOD_CANDIDATE,
-            ),
+            # whatever the algorithm produces. The three variants above are all
+            # load-bearing against it -- `anchored` for the containment twin,
+            # the unanchored split to separate the algorithm from the cut, and
+            # the two-anchor form because it was the default being displaced.
+            # BaselineVariant(
+            #     label="lower pspline_arpls",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_method=LOWER_METHOD_CANDIDATE,
+            # ),
+            # ---- the same method, tied off at 1800 (spec.md 14.13) ----
+            # The lower segment stops above the ROI floor, so the algorithm no
+            # longer sees the array edge 14.12's figures faulted on
+            # ...-012_delta10.0052. Below 1800 the anchored baseline stands --
+            # the second interface that made this the form the user removed.
+            # BaselineVariant(
+            #     label="lower pspline_arpls floor 1800",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_method=LOWER_METHOD_CANDIDATE,
+            #     lower_floor_cm1=LOWER_FLOOR_POINT_CM1,
+            # ),
+            # The two other methods that clear all three stated targets once the
+            # floor is in (spec.md 14.13 finding 38). mixture_model has the
+            # smallest cut seam of the three; cwt_br has the worst.
+            # BaselineVariant(
+            #     label="lower mixture_model floor 1800",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_method="mixture_model",
+            #     lower_floor_cm1=LOWER_FLOOR_POINT_CM1,
+            # ),
             # Other methods measured in 14.12; loess is the seam's best showing,
             # irsqr the case for why a near-zero low-window residual is not on
             # its own a good baseline (it is a strict lower envelope and misses

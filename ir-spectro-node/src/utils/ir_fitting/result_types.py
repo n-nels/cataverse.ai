@@ -238,6 +238,21 @@ class BaselineTrace:
     without this a table carrying the two forms cannot be read.
     """
 
+    lower_floor_applied: float | None = None
+    """Wavenumber the lower segment was tied off at, or ``None`` for the ROI
+    floor (spec.md section 14.13). Below it the curve is the anchored full-ROI
+    baseline, so a reader who does not know the floor cannot tell which of two
+    baselines a point down there came from."""
+
+    floor_edges: tuple[float, float] | None = None
+    """``(lowest wavenumber of the lower segment, highest below the floor)``."""
+
+    floor_seam_jump: float = float("nan")
+    """Discontinuity at the floor, in raw units -- the price of tying the lower
+    segment off early, reported beside :attr:`seam_jump` rather than merged with
+    it. They are two different interfaces: the cut has a fitted curve on both
+    sides, the floor has one fitted and one inherited."""
+
     segment_edges: tuple[float, float] | None = None
     """``(lowest wavenumber above the cut, highest below it)`` -- the seam."""
 

@@ -16,7 +16,7 @@ dormant.**
 
 | Workstream | State |
 |---|---|
-| **Baseline investigation** (§14) | Active. Tuning and bare truncation ruled out (§14.3, §14.6). The isosbestic point is measured (~1957) and an **anchored baseline is built and calibrated** (§14.7). It recovers the halved bands on the post-crossing files and is a no-op on the pre-crossing ones. **Splitting at the crossing is built and rejected** (§14.8) — though the post-mortem shows it was tested in its worst form, and names the variant worth trying — **that variant is now built and measured (§14.9)**: it keeps all of the anchor's band recovery, verified, and replaces the anchored baseline's unconstrained 205 cm⁻¹ extrapolation below the lowest anchor, at the cost of a seam §14.7 does not have. **Whether to prefer it over §14.7 alone is open — the visual call has not been made.** A fourth anchor at 1854 was tried and removed (§14.7.1). **The lower segment now has anchors of its own — both its endpoints, `(1955, 1750)` (§14.10, §14.10.1)**: containment above the cut still verified at exactly zero, and the seam improved against the unanchored split on five of six files. An interior third anchor at 1800 was built, measured and **removed by the user on the figures** (§14.10.1); with two anchors the correction is exact at both ends, so the seam is now *predicted* by the upper anchor's residual at 1955 and confirmed to 0.05% of range. The `.0022` regime is still unfixed — §14.10's apparent movement there was measured on a proxy that §14.10.1 finding 24 withdraws. `lower_settings` now exposes the lower segment's own `std_distribution` parameters (no default changed). **The settings are now re-swept under the anchor (§14.11)**: the three anchor residuals are one scalar, `lower_settings` provably cannot move the seam, and tuning the *upper* side halves both that scalar and the seam — while making the 2040 recovery slightly worse and ranking differently on a 60-file sample. **Then the algorithm itself was changed (§14.12), which is the knob no earlier section turned**: below the cut, with `lower_anchors` removed on the user's instruction, `pspline_arpls` at its defaults is the only one of 44 `pybaselines` methods that hits all three targets the user stated this session — baseline through the midpoint of the dispersive ~1850 feature on post-crossing files, under the base of the 1850/1870-1880 bands on pre-crossing ones, near-zero mean residual over 1838-1750. **It is the first thing in §14 to fix the `.0022` regime.** Containment above the cut is still exactly 0.0 and the `...-022` gate still a no-op; the cost is a seam ~1.5x the two-anchor form. **The visual call on that trade is the user's and has not been made.**|
+| **Baseline investigation** (§14) | Active. Tuning and bare truncation ruled out (§14.3, §14.6). The isosbestic point is measured (~1957) and an **anchored baseline is built and calibrated** (§14.7). It recovers the halved bands on the post-crossing files and is a no-op on the pre-crossing ones. **Splitting at the crossing is built and rejected** (§14.8) — though the post-mortem shows it was tested in its worst form, and names the variant worth trying — **that variant is now built and measured (§14.9)**: it keeps all of the anchor's band recovery, verified, and replaces the anchored baseline's unconstrained 205 cm⁻¹ extrapolation below the lowest anchor, at the cost of a seam §14.7 does not have. **Whether to prefer it over §14.7 alone is open — the visual call has not been made.** A fourth anchor at 1854 was tried and removed (§14.7.1). **The lower segment now has anchors of its own — both its endpoints, `(1955, 1750)` (§14.10, §14.10.1)**: containment above the cut still verified at exactly zero, and the seam improved against the unanchored split on five of six files. An interior third anchor at 1800 was built, measured and **removed by the user on the figures** (§14.10.1); with two anchors the correction is exact at both ends, so the seam is now *predicted* by the upper anchor's residual at 1955 and confirmed to 0.05% of range. The `.0022` regime is still unfixed — §14.10's apparent movement there was measured on a proxy that §14.10.1 finding 24 withdraws. `lower_settings` now exposes the lower segment's own `std_distribution` parameters (no default changed). **The settings are now re-swept under the anchor (§14.11)**: the three anchor residuals are one scalar, `lower_settings` provably cannot move the seam, and tuning the *upper* side halves both that scalar and the seam — while making the 2040 recovery slightly worse and ranking differently on a 60-file sample. **Then the algorithm itself was changed (§14.12), which is the knob no earlier section turned**: below the cut, with `lower_anchors` removed on the user's instruction, `pspline_arpls` at its defaults is the only one of 44 `pybaselines` methods that hits all three targets the user stated this session — baseline through the midpoint of the dispersive ~1850 feature on post-crossing files, under the base of the 1850/1870-1880 bands on pre-crossing ones, near-zero mean residual over 1838-1750. **It is the first thing in §14 to fix the `.0022` regime.** Containment above the cut is still exactly 0.0 and the `...-022` gate still a no-op; the cost is a seam ~1.5x the two-anchor form. **The user judged that form's lower segment no good on the figures, and named the fix: tie the second baseline off at 1800 rather than 1750 (§14.13)** — built and measured. Over the region it now fits, the artefact is gone: `...-012`'s residual drops from +1.11 to +0.19 and all six judged files land inside ±0.22, `und` improves on every one, and the 1955 seam improves on five of six. The 44-method ranking was re-derived on the shortened array and does not move. **The cost moved rather than went away** — below 1800 the anchored baseline stands, and the jump there is 6.5–16.6% of range, the largest discontinuity in §14. **The user then removed the floored form, and the splice with it, from consideration on the figures (§14.13.1)** — the comparison is back to four traces and nothing below 1955 is recommended.|
 | **Two extra low-wavenumber peaks** (§4) | Dormant — `ir_fitting.extra_peaks_base` is `[]`, so nothing fits them. The machinery works; the peaks are simply not configured. |
 
 ### The open question — answered, and replaced by a harder one
@@ -48,9 +48,10 @@ the cut gave up the only thing holding it (§14.12 finding 36) — and whether t
 `.0022` depression below 1838 was baseline error at all, which the `int ≈ 0`
 target asserts rather than measures.
 
-**The current recommendation above 1955 is the single anchored baseline of
-§14.7; below it, §14.12's `pspline_arpls` is the only form that meets the stated
-targets, pending the visual call on its seam.** §14.8
+**The current recommendation is the single anchored baseline of §14.7, and
+below 1955 there is now nothing recommended.** §14.12's `pspline_arpls` and
+§14.13's floor at 1800 met the three stated targets and were **removed from
+consideration by the user** (§14.13.1); they remain built, measured, and off. §14.8
 tried the other reading of §14.4 step 3 — `ip` as a split point rather than a
 pass-through point — and measured it as worse. §14.9, §14.10 and §14.10.1 build
 the form that is *not* worse and is not obviously better either; it is a trade
@@ -108,7 +109,19 @@ CLI.
   §14.12 uses `mid` / `und` / `int` instead, which come from the user rather than
   from the data, and reports all three together: `irsqr` is best of 44 methods on
   `int` and is a strict lower envelope sitting 9% of range below where it belongs
-  (finding 33). Never sum them, never quote one.
+  (finding 33). Never sum them, never quote one. §14.13 finding 38 re-ran the
+  sweep on a shorter array and `irsqr` failed the same way, so the floor does not
+  retire this.
+- **Under a floor, `int` over 1838-1750 straddles two baselines.** The lower
+  segment stops at `lower_floor_cm1` and the anchored full-ROI baseline stands
+  below it, so the user's own `int` window covers one fitted curve and one
+  inherited one. Score the fitted segment over 1838-1800 (`int>fl`) and read the
+  full-window number as what it is: mostly a measurement of the anchored
+  baseline down there (§14.13 findings 37 and 40).
+- **A floored variant has two interfaces, not one.** `seam_jump` is the cut's and
+  `floor_seam_jump` is the floor's; they are different kinds of join — two
+  fitted curves at the cut, one fitted and one inherited at the floor — so they
+  are reported separately and never summed. The floor's is the larger by 3-5x.
 - **The three anchor residuals are one number.** A least-squares line through
   three points leaves a 1-D residual, so `(r2240, r2006, r1955)` is always
   proportional to `(+0.218, −1.218, +1)` — measured std 0.000000 over 174 rows
@@ -570,9 +583,11 @@ they are not interchangeable:
 | `lower_split_cm1` | Keeps the anchored full-ROI baseline above the cut untouched, replaces it only below. Recommended. | §14.9 |
 | `lower_anchors` | A *second* affine correction, on the lower segment alone — its own line, its own residuals. Requires `lower_split_cm1`, and raises without it. Two by default, so both are hit exactly. | §14.10.1 |
 | `lower_settings` | `std_distribution` overrides for the lower segment only. Requires a cut of either kind. `None` keeps the current baseline's parameters, which is what every measurement used. | §14.10.1 |
+| `lower_method` | Replaces the lower segment's **algorithm** — any `pybaselines.Baseline` method instead of `std_distribution`. Requires `lower_split_cm1`; mutually exclusive with `lower_settings`, whose keys belong to `std_distribution`. Arguments go in `lower_method_kwargs`. | §14.12 |
+| `lower_floor_cm1` | Ties the lower segment off **above** the ROI floor, so its algorithm never sees the array edge. Requires `lower_split_cm1`, and must sit strictly between the window floor and the cut. Below it the anchored full-ROI baseline stands, at the price of a second seam. | §14.13 |
 
-The last two are mutually exclusive and raise if both are set — they cut at the
-same wavenumber and mean different things. A comparison that includes either
+`split_cm1` and `lower_split_cm1` are mutually exclusive and raise if both are
+set — they cut at the same wavenumber and mean different things. A comparison that includes either
 should also include the plain `anchored` variant, so a change is attributable to
 the cut rather than to the anchors; for `lower_split_cm1` that variant is also
 what the `upper_max_abs_diff` check is measured against.
@@ -587,6 +602,13 @@ The returned table reports `moved_pct_of_range` — how far each baseline sits
 from the reference, as a percentage of that file's signal range. **It says the
 baseline moved, not that moving it helped.** There is no quality score; see
 §14.3 finding 4.
+
+`lower_method` adds `lower_method`, saying which algorithm actually ran below
+the cut — blank on a gated cut, where none did. `lower_floor_cm1` adds
+`lower_floor` and `floor_seam_pct_of_range`; read the latter next to
+`seam_pct_of_range` rather than merged with it, and read `int`-style residuals
+over 1838-1800 rather than the full 1838-1750 window, which under a floor spans
+two different baselines (§14.13 finding 37).
 
 A `lower_split_cm1` variant adds two more: `upper_max_abs_diff`, which must be
 **exactly 0.0** because above the cut the baseline is the anchored one by
@@ -708,6 +730,9 @@ Deferred, to revisit:
 | `lower_anchors` without `lower_split_cm1` | rejected at variant construction with `ValueError`; there is no lower segment to anchor. A `lower_anchors` entry above the cut is rejected the same way. |
 | `lower_split_cm1` unchanged by the §14.10 branch | the unanchored `lower split 1955` variant reproduces §14.9's seams exactly in the same run (−2.87/−1.77/−5.64/+2.02/+0.85/−0.53) and its local-step ratios to the reported precision (2.2/1.2/5.3/10.7/9.8/0.4). |
 | `lower_anchors` with the cut gated | `...-022`, both files: `lower_anchors_applied` empty, `lower_moved_pct` 0.0, result identical to `anchored` — the anchors go with the cut rather than being fitted to a segment that was never made. |
+| `lower_floor_cm1` confines the lower method to `[floor, cut)` | with `pspline_arpls` floored at 1800: `upper_max_abs_diff` **0.0e+00** on all 8 judged files, and max abs diff vs `anchored` **below** 1800 is **0.0e+00** as well — asserted per file in `floor_per_file_table.py`, not inferred (§14.13 finding 39). |
+| `lower_floor_cm1` goes with the cut when the guard fires | `...-022`, both files: cut gated at 1955, `lower_floor` blank in the CSV, `lower_moved_pct` 0.0, result identical to `anchored` — as for `lower_method` and `lower_anchors`. |
+| `lower_floor_cm1` without `lower_split_cm1`, at the window floor, or at/above the cut | rejected at variant construction with `ValueError`; a floor at the ROI floor is the unfloored form written as a setting. A `lower_anchors` entry below the floor is rejected the same way. |
 | `split_cm1` unchanged by the §14.9 branch | §14.8 finding 11's six seam values reproduced to the reported precision (−7.86/−2.53/−6.05/+1.86/+1.10/−0.61 against its −7.9/−2.5/−6.1/+1.9/+1.1/−0.6) after `split_form` was threaded through that path. |
 
 ## 14. Baseline investigation
@@ -2464,3 +2489,207 @@ throwaway probes the tables come from -- `method_sweep_44.py` (finding 32's
 `method_breadth_60files.py` with `breadth_files.txt` (finding 35), and
 `per_file_table.py` -- kept beside their output rather than promoted into the
 package, on section 14.11's precedent.
+
+### 14.13 The lower segment tied off at 1800 — built and measured; the cost moved rather than went away
+
+Section 14.12's figures faulted one thing and it was not the method: on
+`...-012_delta10.0052` the spline flattened below ~1790 while the data climbed
+to the ROI floor. That is **end behaviour at an array edge**, not a statement
+about the spectrum — `create_baseline` and a `pybaselines` method alike see only
+the array handed to them (§0) — and the lower segment's lowest wavenumber had
+been 1750 in every section since 14.9 because nobody had chosen it.
+
+**The scope is the user's:** *"tighten the data range. Tie it off at 1800, not
+1750, for the second baseline only."* The full-ROI anchored baseline of §14.7 is
+untouched, the 1955 cut is untouched, and the ROI itself is still 2250–1750 —
+only the second baseline's own array is shortened, to 1955–1800.
+
+`BaselineVariant.lower_floor_cm1` (default `None` — nothing here moved a
+default; see `LOWER_FLOOR_POINT_CM1`). Below the floor **the anchored full-ROI
+baseline stands**, because the splice simply stops reaching there. That is not a
+fill rule invented for this section — it is the same curve a gated cut falls
+back to, the one already in the array, which is the only option that survives
+*"no rules or guardrail tricks"*. Its price is a second interface, at the floor,
+reported separately as `floor_seam_pct_of_range`.
+
+#### Finding 37. Over the region it fits, the floor removes the artefact outright
+
+`int` is the mean residual `data − baseline`, % of range. It is reported twice
+because under a floor the user's window 1838–1750 **straddles two baselines**:
+`int` over 1838–1750 is no longer a statement about the fitted segment, and
+`int>fl` over 1838–1800 is.
+
+| file | form | `mid` | target | `und` | `int` 1838–1750 | `int>fl` 1838–1800 | seam @1955 | seam @1800 |
+|---|---|---|---|---|---|---|---|---|
+| `...-007` `.0042` | pspline 1750 | −0.17 | 0 | +3.82 | +0.14 | +0.52 | −2.41 | — |
+| | **floor 1800** | −0.92 | 0 | **+3.03** | +5.11 | **+0.18** | **−1.78** | +10.62 |
+| `...-008` `.0042` | pspline 1750 | −1.24 | 0 | +4.14 | +0.37 | +0.46 | −1.92 | — |
+| | **floor 1800** | −2.07 | 0 | **+3.26** | +3.15 | **+0.22** | **−1.28** | +6.58 |
+| `...-012` `.0052` | pspline 1750 | +0.26 | 0 | +3.69 | +1.11 | +0.45 | −4.26 | — |
+| | **floor 1800** | −0.54 | 0 | **+2.89** | +8.12 | **+0.19** | **−3.54** | +16.62 |
+| `...-017` `.0022` | pspline 1750 | −4.41 | −4.23 | +0.79 | +0.04 | +0.12 | +1.74 | — |
+| | **floor 1800** | **−4.12** | −4.23 | **+0.71** | −3.90 | **+0.06** | +1.86 | −11.25 |
+| `...-021` `.0022` | pspline 1750 | −4.41 | −4.76 | +0.21 | +0.18 | +0.09 | +1.03 | — |
+| | **floor 1800** | **−4.40** | −4.76 | **+0.08** | −4.20 | **+0.21** | **+0.97** | −12.21 |
+| `...-027` `.0052` | pspline 1750 | −0.50 | 0 | +3.72 | +0.76 | +0.35 | −1.33 | — |
+| | **floor 1800** | −1.03 | 0 | **+3.17** | +3.03 | **+0.20** | **−0.47** | +6.50 |
+
+| form | post \|mid\| | pre \|mid − target\| | `und` max | \|`int>fl`\| max | \|seam\| max |
+|---|---|---|---|---|---|
+| `anchored`, no cut (§14.7) | 5.34 | 7.32 | 6.15 | 8.94 | — |
+| pspline_arpls to 1750 (§14.12) | **0.54** | 0.27 | 4.14 | 0.52 | 4.26 |
+| **pspline_arpls, floor 1800** | 1.14 | **0.23** | **3.26** | **0.22** | **3.54** |
+
+`int>fl` more than halves and its spread collapses — 0.06 to 0.22 across all six
+against 0.09 to 0.52 — which is the artefact leaving: the largest residual of the
+judged six was `...-012`'s +1.11, and over the region now fitted it is +0.19.
+`und` improves on every file and the cut seam on five of six. **The one column
+that gets worse is post `mid`**, 0.54 → 1.14, because dropping 26 samples of
+lever arm lets the spline sit a little lower at 1850; it is still an order below
+`anchored`'s 5.34, and the pre-crossing side improves slightly.
+
+#### Finding 38. The method ranking was re-derived, not inherited — and does not move
+
+The same 44 methods of finding 32, re-run on the floored segment (80 samples,
+not 106) and scored on all six ungated judged files rather than the two named
+ones. `pspline_arpls` still clears all three stated targets, and **two methods
+that did not clear them at 1750 now do**:
+
+| method (floor 1800) | post \|mid\| | pre \|d\| | `und` max | \|`int>fl`\| max | \|seam\| max |
+|---|---|---|---|---|---|
+| `mixture_model` | 1.07 | 0.38 | 3.40 | 0.36 | **2.05** |
+| `cwt_br` | 1.09 | 0.98 | 3.32 | 0.50 | 6.48 |
+| **`pspline_arpls`** | 1.14 | **0.23** | **3.26** | **0.22** | 3.54 |
+| `std_distribution` (the incumbent) | 1.43 | 0.48 | 7.25 | 0.54 | 5.64 |
+| `irsqr` | 2.77 | **8.94** | 0.00 | 0.00 | 2.45 |
+
+Three things worth reading off it. `irsqr` fails exactly as finding 33 predicted,
+on a floored segment as on an unfloored one — near-perfect `int` and `und`, 8.94
+on `mid`, the strict lower envelope again — so **the floor did not retire finding
+33's warning**. `std_distribution`, the thing all of §14.3–§14.11 was tuning,
+improves markedly under the floor alone and still does not clear `und` at 7.25.
+And `mixture_model` is now the seam's best showing among the three that clear,
+2.05 against `pspline_arpls`'s 3.54 — it is left commented out in `api.py`'s
+variant list rather than recommended, because the visual call on it has not been
+made.
+
+#### Finding 39. Containment, the gate and the anchor path are unchanged — verified
+
+- `upper_max_abs_diff` is **0.0e+00** on all eight judged files. The floor is
+  below the cut, so it cannot reach above it, and the `anchored` twin is still
+  bit-for-bit — `height_2040` / `height_1980` are untouched and all of §14.7
+  finding 9's band recovery is intact.
+- **Below the floor is 0.0 against `anchored` too**, asserted per file in the
+  probe rather than argued: the splice does not write there.
+- **Both `...-022` files are still gated at 1955**, so no lower segment exists,
+  no floor is applied, `lower_floor` comes back blank and `lower_moved_pct` is
+  0.000000. Nothing here reaches them, as in 14.12.
+- `lower_floor_cm1` is **not** part of `_recipe_key`, on `lower_method`'s and
+  `lower_anchors`' precedent, so `anchored` stays the zero-diff twin.
+- A lower anchor below the floor now raises rather than being silently fitted on
+  an array that stops above it. `LOWER_ANCHOR_POINTS_CM1` ends at the ROI floor,
+  so the default pair and a floor are deliberately incompatible.
+
+#### Finding 40. The cost did not go away — it moved to 1800, and it is the largest in §14
+
+| file | seam @1955 | **seam @1800** |
+|---|---|---|
+| `...-007` `.0042` | −1.78 | **+10.62** |
+| `...-008` `.0042` | −1.28 | **+6.58** |
+| `...-012` `.0052` | −3.54 | **+16.62** |
+| `...-017` `.0022` | +1.86 | **−11.25** |
+| `...-021` `.0022` | +0.97 | **−12.21** |
+| `...-027` `.0052` | −0.47 | **+6.50** |
+
+6.5 to 16.6% of range, against 2.75 for the two-anchor form and 4.26 for §14.12
+— **bigger than any seam measured anywhere in §14** — and it is the reason `int`
+over the user's own 1838–1750 window gets *worse* (+0.14 → +5.11 on `...-007`,
++1.11 → +8.12 on `...-012`).
+
+**This is not a property of the method.** The sweep's floor-jump column sits at
+11.6–17.5% for nearly all 44 methods, because the jump measures the gap between
+whatever was fitted above 1800 and the **anchored baseline below it** — and
+§14.12 finding 32 already measured that curve as 6 to 14% off down there. The
+floor did not create the error; it made it visible by removing the curve that
+was papering over it.
+
+Two ways to close it, neither built and neither free:
+
+1. **Take 1750–1800 out of the ROI**, so there is nothing below the floor to
+   disagree with. Clean, and it is where the user's own reading points — the
+   1795/1775 bands *are* below the floor, and *"there is a reason these are no
+   longer in production"*. It is **not** a no-op on the rest, though:
+   `create_baseline` classifies globally, so a window of 2250–1800 changes the
+   full-ROI baseline **everywhere, including above 1955** (§0's second trap), and
+   §14.7's containment guarantee would have to be re-established rather than
+   inherited.
+2. **Run the lower method over the full 1955–1750 and use it only above the
+   floor** — the fit sees the ROI edge again, which is the artefact this section
+   removed, so this trades finding 37 back for finding 40.
+
+#### What the figures show
+
+Author's read, not a user judgement. `lower_floor_1800`, six variants, all eight
+judged files.
+
+- `...-012` (.0052), the file this was for: the flattening is gone. The baseline
+  tracks the data down to 1800 and the subtracted trace sits on zero from ~1900
+  to the floor, where §14.12 had it drifting to +0.0005. At 1800 it steps to
+  +0.0008 and follows the anchored curve to 1750.
+- `...-021` (.0022): everything §14.12 won is kept — the 1850 and ~1876 bands
+  still stand above a baseline running under their feet, +0.0009 and +0.0004
+  against a flat zero — and 1838–1800 is now flat on zero rather than drifting
+  low. The step at 1800 is −1.2e-03, the largest of the six in raw units.
+- The floor is drawn as a dotted purple line and the cut as dash-dot, on both
+  panels of every figure, so the two interfaces are not read as one.
+
+#### What this settles, and what it does not
+
+- **Settled:** the `...-012` residual was the array edge and not the spectrum —
+  over the fitted region it drops from +1.11 to +0.19, and every file's
+  `int>fl` lands inside ±0.22 (37); the method ranking survives the change of
+  array, with two additions (38); containment, the `...-022` gate and the
+  `anchored` twin are untouched, asserted rather than assumed (39).
+- **Not settled — and this is the open question now:** what happens below 1800.
+  The anchored baseline standing there is the only choice that adds no rule, and
+  it costs the largest discontinuity in §14 (40). **Whether that matters is a
+  question about the analysis, not about the baseline**: if 1750–1800 is leaving
+  the ROI along with the 1795/1775 bands, the jump sits in a region nobody reads
+  and the answer is option 1. That call has not been made.
+- **Also not settled:** `mixture_model` vs `pspline_arpls` under the floor (38)
+  — the former has a 40% smaller cut seam and is marginally worse on `mid` and
+  `int`; and everything §14.12 left open, including the continuity constraint of
+  its finding 36, which this section does not touch.
+- **Unchanged:** no default moved. `lower_floor_cm1` is `None` unless a variant
+  asks for it, `LOWER_METHOD_CANDIDATE` is still `pspline_arpls`,
+  `LOWER_ANCHOR_POINTS_CM1` is still `(1955, 1750)`, `voigt_fit.baseline` is
+  untouched, and everything here is offline.
+
+Figures: `C:\Figures\nn1120-4_pd_ceo2_000\baseline_experiments\lower_floor_1800\`,
+with the probes beside them — `floor_per_file_table.py` (findings 37 and 40) and
+`method_sweep_floored.py` (finding 38, which imports finding 32's own
+`CANDIDATES` list rather than restating it).
+
+#### 14.13.1 Removed on the figures — the user's call
+
+*"i don't want the splice. remove it from consideration. only plot the black,
+blue, green, orange."* Read against the figure those colours are in: raw,
+`current`, `anchored`, `lower split 1955`. So the variants now **off** in
+`api.py`'s `__main__` are the lower anchors of §14.10.1, the `pspline_arpls` of
+§14.12 and the 1800 floor of this section — commented out with their comments
+intact rather than deleted, and every number above still stands as measured.
+Figures: `four_trace`.
+
+**What this decides and what it does not.** It ends the §14.12/§14.13 line: the
+three stated targets were met, the cost was a discontinuity, and the
+discontinuity was judged the worse of the two. It does **not** retire §14.9's own
+cut — `lower split 1955` is still drawn, is still a spliced baseline and still
+carries a seam (−2.8e−4 on `...-012`) — so if *"the splice"* was meant to cover
+that one too, the comparison drops to three traces. That reading was not taken
+here, because the colour named includes it.
+
+**What survives, and is what a next attempt builds on:** §14.7's anchored
+full-ROI baseline, untouched by any of this, and the measurement underneath the
+whole line — finding 31, that the two regimes want opposite signs at 1850, so no
+fixed correction below 1955 can serve both. That still has to be answered, and
+now without a second segment to answer it in.
