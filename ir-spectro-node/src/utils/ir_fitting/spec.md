@@ -16,7 +16,7 @@ dormant.**
 
 | Workstream | State |
 |---|---|
-| **Baseline investigation** (§14) | Active. Tuning and bare truncation ruled out (§14.3, §14.6). The isosbestic point is measured (~1957) and an **anchored baseline is built and calibrated** (§14.7). It recovers the halved bands on the post-crossing files and is a no-op on the pre-crossing ones. **Splitting at the crossing is built and rejected** (§14.8) — though the post-mortem shows it was tested in its worst form, and names the variant worth trying — **that variant is now built and measured (§14.9)**: it keeps all of the anchor's band recovery, verified, and replaces the anchored baseline's unconstrained 205 cm⁻¹ extrapolation below the lowest anchor, at the cost of a seam §14.7 does not have. **Whether to prefer it over §14.7 alone is open — the visual call has not been made.** A fourth anchor at 1854 was tried and removed (§14.7.1). **The lower segment now has anchors of its own — both its endpoints, `(1955, 1750)` (§14.10, §14.10.1)**: containment above the cut still verified at exactly zero, and the seam improved against the unanchored split on five of six files. An interior third anchor at 1800 was built, measured and **removed by the user on the figures** (§14.10.1); with two anchors the correction is exact at both ends, so the seam is now *predicted* by the upper anchor's residual at 1955 and confirmed to 0.05% of range. The `.0022` regime is still unfixed — §14.10's apparent movement there was measured on a proxy that §14.10.1 finding 24 withdraws. `lower_settings` now exposes the lower segment's own `std_distribution` parameters (no default changed). **The settings are now re-swept under the anchor (§14.11)**: the three anchor residuals are one scalar, `lower_settings` provably cannot move the seam, and tuning the *upper* side halves both that scalar and the seam — while making the 2040 recovery slightly worse and ranking differently on a 60-file sample. **Then the algorithm itself was changed (§14.12), which is the knob no earlier section turned**: below the cut, with `lower_anchors` removed on the user's instruction, `pspline_arpls` at its defaults is the only one of 44 `pybaselines` methods that hits all three targets the user stated this session — baseline through the midpoint of the dispersive ~1850 feature on post-crossing files, under the base of the 1850/1870-1880 bands on pre-crossing ones, near-zero mean residual over 1838-1750. **It is the first thing in §14 to fix the `.0022` regime.** Containment above the cut is still exactly 0.0 and the `...-022` gate still a no-op; the cost is a seam ~1.5x the two-anchor form. **The user judged that form's lower segment no good on the figures, and named the fix: tie the second baseline off at 1800 rather than 1750 (§14.13)** — built and measured. Over the region it now fits, the artefact is gone: `...-012`'s residual drops from +1.11 to +0.19 and all six judged files land inside ±0.22, `und` improves on every one, and the 1955 seam improves on five of six. The 44-method ranking was re-derived on the shortened array and does not move. **The cost moved rather than went away** — below 1800 the anchored baseline stands, and the jump there is 6.5–16.6% of range, the largest discontinuity in §14. **The user then removed the floored form, and the splice with it, from consideration on the figures (§14.13.1)** — the comparison is back to four traces and nothing below 1955 is recommended. **§14.14 then resolves what §14.13.1 could not: *"the splice"* meant `pspline_arpls`, not the 1955 cut.** The cut stays, its seam is tolerated, and `lower split 1955` is the preferred form. `pspline_arpls` is rejected on a third ground (*"caused major problems elsewhere"*), a full-ROI algorithm swap is out of scope (historical datasets), and a cross-file/stack estimate is shelved. Three new measurements say why the region below the cut is wrong and what will not fix it: `weights` — the sixth setting §14.3 finding 1 never swept — is **bit-for-bit a no-op** on the `.0022` files (finding 41), because `std_distribution` classified **0 of 17** samples in 1870–1836 as background and, on `…-021`, only **3 of 106** in the whole lower segment (finding 42); it is neither degenerate nor an endpoint line (finding 43). So the band is not being mistaken for background — the curve is **under-constrained**, which retires every mask-style fix and points at a **C¹ continuation** of the anchored baseline below the cut. **That continuation is now built — as the continuation **plus** `num_std: 3.0` on the lower classifier, which is load-bearing and is the one knob the rest of §14 leaves alone — swept and checked on both samples (§14.15), and it is the best-measured form in §14.** Everything §14.14 required is exact — containment 0.0 over 688 rows, band heights bit-identical, the `…-022` gate a no-op — and the property §14.14 called a prediction holds: one construction serves both regimes, **the first time without `pspline_arpls`**. Post `mid` 0.25 and pre `und` 0.54 beat every earlier form including the rejected one; the seam, measured properly for the first time as `seam_excess`, is **0.36 against the splice's 5.58**. Two things make it work that §14.14 did not foresee: finding 44 — the classified points are not sparse but **confined above ~1910** on the pre-crossing files, so the `int` window has *nothing* in it and no `lam` over seven decades can help — and finding 45, that `lower_settings` under a continuation configures the **classifier**, which is the one lever that fixes it (`num_std` 3.0 reaches to ~1807). The 60-file breadth sample **agrees with the judged six** for once (51/53), where §14.11 finding 30 warned it would not. Costs: pre `int` +3.3/+3.7, unfixed; and `num_std` 3.0 works through a **regime coincidence** in where the threshold falls, which is the section's largest risk. **The visual call has not been made and nothing is recommended.**|
+| **Baseline investigation** (§14) | Active. Tuning and bare truncation ruled out (§14.3, §14.6). The isosbestic point is measured (~1957) and an **anchored baseline is built and calibrated** (§14.7). It recovers the halved bands on the post-crossing files and is a no-op on the pre-crossing ones. **Splitting at the crossing is built and rejected** (§14.8) — though the post-mortem shows it was tested in its worst form, and names the variant worth trying — **that variant is now built and measured (§14.9)**: it keeps all of the anchor's band recovery, verified, and replaces the anchored baseline's unconstrained 205 cm⁻¹ extrapolation below the lowest anchor, at the cost of a seam §14.7 does not have. **Whether to prefer it over §14.7 alone is open — the visual call has not been made.** A fourth anchor at 1854 was tried and removed (§14.7.1). **The lower segment now has anchors of its own — both its endpoints, `(1955, 1750)` (§14.10, §14.10.1)**: containment above the cut still verified at exactly zero, and the seam improved against the unanchored split on five of six files. An interior third anchor at 1800 was built, measured and **removed by the user on the figures** (§14.10.1); with two anchors the correction is exact at both ends, so the seam is now *predicted* by the upper anchor's residual at 1955 and confirmed to 0.05% of range. The `.0022` regime is still unfixed — §14.10's apparent movement there was measured on a proxy that §14.10.1 finding 24 withdraws. `lower_settings` now exposes the lower segment's own `std_distribution` parameters (no default changed). **The settings are now re-swept under the anchor (§14.11)**: the three anchor residuals are one scalar, `lower_settings` provably cannot move the seam, and tuning the *upper* side halves both that scalar and the seam — while making the 2040 recovery slightly worse and ranking differently on a 60-file sample. **Then the algorithm itself was changed (§14.12), which is the knob no earlier section turned**: below the cut, with `lower_anchors` removed on the user's instruction, `pspline_arpls` at its defaults is the only one of 44 `pybaselines` methods that hits all three targets the user stated this session — baseline through the midpoint of the dispersive ~1850 feature on post-crossing files, under the base of the 1850/1870-1880 bands on pre-crossing ones, near-zero mean residual over 1838-1750. **It is the first thing in §14 to fix the `.0022` regime.** Containment above the cut is still exactly 0.0 and the `...-022` gate still a no-op; the cost is a seam ~1.5x the two-anchor form. **The user judged that form's lower segment no good on the figures, and named the fix: tie the second baseline off at 1800 rather than 1750 (§14.13)** — built and measured. Over the region it now fits, the artefact is gone: `...-012`'s residual drops from +1.11 to +0.19 and all six judged files land inside ±0.22, `und` improves on every one, and the 1955 seam improves on five of six. The 44-method ranking was re-derived on the shortened array and does not move. **The cost moved rather than went away** — below 1800 the anchored baseline stands, and the jump there is 6.5–16.6% of range, the largest discontinuity in §14. **The user then removed the floored form, and the splice with it, from consideration on the figures (§14.13.1)** — the comparison is back to four traces and nothing below 1955 is recommended. **§14.14 then resolves what §14.13.1 could not: *"the splice"* meant `pspline_arpls`, not the 1955 cut.** The cut stays, its seam is tolerated, and `lower split 1955` is the preferred form. `pspline_arpls` is rejected on a third ground (*"caused major problems elsewhere"*), a full-ROI algorithm swap is out of scope (historical datasets), and a cross-file/stack estimate is shelved. Three new measurements say why the region below the cut is wrong and what will not fix it: `weights` — the sixth setting §14.3 finding 1 never swept — is **bit-for-bit a no-op** on the `.0022` files (finding 41), because `std_distribution` classified **0 of 17** samples in 1870–1836 as background and, on `…-021`, only **3 of 106** in the whole lower segment (finding 42); it is neither degenerate nor an endpoint line (finding 43). So the band is not being mistaken for background — the curve is **under-constrained**, which retires every mask-style fix and points at a **C¹ continuation** of the anchored baseline below the cut. **That continuation is now built — as the continuation **plus** `num_std: 3.0` on the lower classifier, which is load-bearing and is the one knob the rest of §14 leaves alone — swept and checked on both samples (§14.15), and it is the best-measured form in §14.** Everything §14.14 required is exact — containment 0.0 over 688 rows, band heights bit-identical, the `…-022` gate a no-op — and the property §14.14 called a prediction holds: one construction serves both regimes, **the first time without `pspline_arpls`**. Post `mid` 0.25 and pre `und` 0.54 beat every earlier form including the rejected one; the seam, measured properly for the first time as `seam_excess`, is **0.36 against the splice's 5.58**. Two things make it work that §14.14 did not foresee: finding 44 — the classified points are not sparse but **confined above ~1910** on the pre-crossing files, so the `int` window has *nothing* in it and no `lam` over seven decades can help — and finding 45, that `lower_settings` under a continuation configures the **classifier**, which is the one lever that fixes it (`num_std` 3.0 reaches to ~1807). The 60-file breadth sample **agrees with the judged six** for once (51/53), where §14.11 finding 30 warned it would not. Costs: pre `int` +3.3/+3.7, unfixed; and `num_std` 3.0 works through a **regime coincidence** in where the threshold falls, which is the section's largest risk. **The visual call has not been made and nothing is recommended.** **§14.16 then goes back to §14.7's form — three anchors, no split, no continuation — on an array truncated to 2250–1800, at the user's instruction.** It moves the pre-crossing `.0022` regime **without a cut**: against `anchored`, `mid` crosses to the correct side of zero on both files, `und` falls from +5.2/+6.2 to +2.4/+2.5, and `int_shared` improves by 7.4/7.5 points — with no seam, no second curve and no `num_std` change, so none of §14.15's classifier risk. **It is nonetheless a clear third: §14.12's `pspline_arpls` and §14.15's continuation beat it on all three targets on both pre-crossing files** (finding 50, whose first draft claimed the opposite before the comparison had been run). On the post-crossing regime it is very nearly a **no-op**: band heights bit-identical on three of four files, `mid`/`und` identical on three of four (finding 49). The denominator confound truncation could have introduced is measured and **confined to the two guard files** (finding 48), which do degrade (finding 51). `int_shared` is a new column because plain `int` is **not comparable across a window change**. **Breadth has not been checked and the visual call has not been made; no default is changed and the production ROI is untouched.**|
 | **Two extra low-wavenumber peaks** (§4) | Dormant — `ir_fitting.extra_peaks_base` is `[]`, so nothing fits them. The machinery works; the peaks are simply not configured. |
 
 ### The open question — answered, and replaced by a harder one
@@ -3231,3 +3231,240 @@ session scratchpad and not preserved, on §14.14's precedent. What they produced
 is above; `mid` / `und` / `int`, `seam_excess_jump` and
 `lower_continuation_points` are now table columns, so findings 46 and 47 are
 re-derivable from `uv run python src\utils\ir_fitting\api.py` alone.
+
+---
+
+### 14.16 The anchored baseline truncated at 1800 — built and measured; a near-no-op on one regime, a real but third-place move on the other
+
+The user's instruction was exact: *"Let's go back to 3 anchor points, no split
+(the orange trace). But this time, let's truncate at 1800. So 2250-1800. Yes, I
+know that will cause reprocessing, but just do it."*
+
+So: **§14.7's form, unchanged, on a shorter array.** No cut, no second baseline,
+no continuation, no seam. The split forms of §14.9 and §14.15 are commented out
+of the figures — still built, still measured above, out of the comparison.
+
+**"The orange trace" is `anchored`.** Worth stating because a comment in
+`api.py` had the colours wrong and would have sent a reader to the split form:
+`plot_baseline_comparison` draws raw in black and then the variants in `tab10`
+*list order*, so `traces[0]` = `current` is blue and `traces[1]` = `anchored` is
+orange. The comment is corrected.
+
+#### What was built
+
+`TRUNCATED_WINDOW_1800 = (2250.0, 1800.0)` — a value for the existing `window`
+field, not a new mechanism. The variant is one line:
+
+```python
+("anchored 1800", {}, TRUNCATED_WINDOW_1800, ANCHOR_POINTS_CM1),
+```
+
+`DEFAULT_WINDOW` is **not** changed: `("current", {})` reads it, and truncating
+the reference would move `reference_range` and make every
+`moved_pct_of_range` in the table meaningless. Untruncated `anchored` stays in
+the run for the same reason it stays in for the split forms — it is the middle
+term that attributes a change to the *truncation* rather than to the anchors.
+
+All three anchors (2240 / 2006 / 1955) sit above 1800, so `__post_init__`'s
+anchor-in-window check passes and the `…-022` gate behaves exactly as in §14.7.
+
+**This is not §14.13's floor and not §14.6 finding 7's truncation.** Three
+things in §14 sit at 1800 or at truncation and this is none of them:
+
+- §14.13's `lower_floor_cm1` is also 1800, but is a floor on a *split* form: the
+  second baseline stops there and the anchored full-ROI curve — computed over
+  the whole 2250–1750 array — stands below it. Here nothing is computed below
+  1800 at all.
+- `LOWER_MID_PROBE_CM1` is also 1800. Under this window it lands on the array
+  edge, so that probe's number is no longer an interior measurement **for this
+  variant**; read it accordingly.
+- Finding 7's rejected truncation was **bare** — no anchors — and at **1955**,
+  205 cm⁻¹ higher. Anchors plus truncation at 1800 is a combination §14 had not
+  run, and finding 7 does not rule it out.
+
+Because `create_baseline` receives only `y` (§0), the window *is* the array:
+`std_distribution` reclassifies over it and the baseline moves **above** 1800
+too. That is the experiment, and it is why this cannot be read off §14.13's
+figures.
+
+#### The `int` window is cut in half, so it was re-measured like-for-like
+
+`INT_WINDOW_CM1` is 1838–1750. On this window only 1838–1800 survives — **20
+samples against the full-ROI variants' 46**. `int` under the same column name is
+therefore a *different statistic*, and the run now prints its sample count and
+the per-trace signal range beside it so this cannot be read past.
+
+The comparison below is consequently made on the **same 20 samples for every
+variant**, scaled by the **reference** file's range, so the only thing differing
+between the rows is the baseline:
+
+| file | regime | `current` | `anchored` | `anchored 1800` |
+|---|---|---|---|---|
+| `…-007` `.0042` | post | −0.61 | +8.94 | **+8.80** |
+| `…-008` `.0042` | post | −2.23 | +4.48 | **+4.39** |
+| `…-012` `.0052` | post | +0.16 | +14.88 | **+14.71** |
+| `…-027` `.0052` | post | −0.32 | +5.76 | **+5.73** |
+| `…-017` `.0022` | **pre** | −7.30 | −9.67 | **−2.27** |
+| `…-021` `.0022` | **pre** | −7.80 | −10.31 | **−2.77** |
+| `…-022` `.0022` | guard | −0.46 | +29.11 | +29.36 |
+| `…-022` `.0042` | guard | +0.26 | +12.26 | +12.61 |
+
+#### Finding 48. The denominator moves only on the two guard files — measured, not assumed
+
+Dropping 1800–1750 removes the 1795/1775 bands from the array, so
+`signal_range` — which every percentage in §14 divides by — could shift for a
+reason that has nothing to do with the baseline. It does not, on the files that
+matter: the range is **identical to five significant figures on all six judged
+files** (100.0% of the reference). It moves only on the two `…-022` guard files,
+to **88.2%** and **79.8%**, where the removed region carried the extremum that
+set the range.
+
+So the judged six are directly comparable and the guard pair's percentages are
+inflated by 1/0.88 and 1/0.80 respectively. Their numbers below are read with
+that in mind rather than at face value.
+
+#### Finding 49. On the post-crossing regime, truncation is very nearly a no-op
+
+The property §14.7 exists for is untouched. Band heights, as a ratio to
+`current`:
+
+| file | `anchored` 2040 / 1980 | `anchored 1800` 2040 / 1980 |
+|---|---|---|
+| `…-007` | 1.428 / 1.706 | **1.428 / 1.706** |
+| `…-008` | 1.234 / 1.213 | 1.233 / 1.213 |
+| `…-012` | 2.053 / n/a | **2.053 / n/a** |
+| `…-027` | 1.663 / 1.205 | **1.663 / 1.205** |
+
+Bit-identical on three of four and equal to three decimals on the fourth. `mid`
+and `und` are likewise identical on `…-007`, `…-012` and `…-027`
+(−4.9876 / −0.7831, −12.9747 / −9.4694, −3.0993 / +1.2252 in both rows) and move
+in the second decimal on `…-008`. Like-for-like `int` moves by ≤ 0.17.
+
+**Removing the bottom 50 cm⁻¹ does not disturb the region the anchors fixed.**
+That is not obvious in advance — the window is the array — and it is the result
+that makes the next finding usable rather than a trade.
+
+#### Finding 50. On the pre-crossing `.0022` regime it moves every target the right way — and still finishes behind §14.12 and §14.15 on all three
+
+This is the regime §14.10 through §14.15 kept failing to fix, and the one
+§14.10.1 finding 24 withdrew a claimed fix for.
+
+**This finding first claimed the move was the largest in §14. That was written
+before it was measured, and it is wrong** — the run behind it contained only
+`current`, `anchored` and `anchored 1800`, so the comparison the claim made was
+never performed. It has since been run (`plot=False`, numbers only, the two
+forms read back out of `__main__`), and both §14.12's `pspline_arpls` and
+§14.15's continuation beat this form on **all three targets on both files**:
+
+| `…-017` | target | `current` | `anchored` | `anchored 1800` | `pspline_arpls` §14.12 | continuation §14.15 |
+|---|---|---|---|---|---|---|
+| `mid` | −4.23 (pre) | +0.35 | +2.48 | −2.55 | −4.41 | **−4.96** |
+| `und` | 0 from below | +3.17 | +5.19 | +2.43 | +0.79 | **+0.54** |
+| `int_shared` | 0 | −7.30 | −9.67 | −2.27 | **+0.12** | +0.13 |
+
+| `…-021` | target | `current` | `anchored` | `anchored 1800` | `pspline_arpls` §14.12 | continuation §14.15 |
+|---|---|---|---|---|---|---|
+| `mid` | −4.76 (pre) | +0.97 | +3.17 | −2.02 | **−4.41** | −5.08 |
+| `und` | 0 from below | +4.08 | +6.15 | +2.48 | +0.21 | **−0.19** |
+| `int_shared` | 0 | −7.80 | −10.31 | −2.77 | **+0.09** | +0.26 |
+
+So the honest reading is a **clear third**. Against `anchored` — the form the
+user asked to go back to, and the only baseline this variant actually modifies —
+every target improves, and `mid` crosses from the wrong side of zero to the
+right one: `und` falls from cutting 5–6% of range into the 1850/1870–1880 bands
+to 2.4–2.5%, and `int_shared` improves by 7.4 and 7.5 points. Against the two
+forms §14 already has on record, it is not close: the continuation lands `mid`
+within 0.3–0.7 of target and `und` at ±0.5, where this sits 1.7–2.7 and 2.4–2.5
+away.
+
+What remains true and is the only reason to keep it in view: it gets there
+**with no cut** — no seam, no second curve, no second algorithm, no classifier
+change. §14.15 buys its result with `num_std: 3.0`, which its own *"what is not
+settled"* calls the section's largest risk and a regime coincidence; §14.12's
+algorithm is rejected on a third ground. This buys a smaller result with a
+window and nothing else. Whether a smaller, structurally simpler move is worth
+more than a larger one carrying those risks is a judgement, and it is the
+user's, not this document's.
+
+**`probe@1800` is deliberately not in the tables above.** Under this window 1800
+is the array edge — the lowest sample is 1801 — so `np.interp(1800, …)` returns
+the edge value rather than an interior measurement, and it carries roughly the
+same information as `int_shared`'s bottom end. It is reported by the run, and it
+is not a fourth independent target. For the record it reads −2.48 (`…-017`) and
+−1.99 (`…-021`) against `anchored`'s −10.40 and −10.83.
+
+The figure for `…-021` shows the mechanism plainly: below ~1900 the orange
+(`anchored`) curve lifts off the raw trace while the green (`anchored 1800`)
+stays on it, and above ~1950 the two are indistinguishable.
+
+#### Finding 51. The cost is the guard files, and it is real
+
+`…-022` is the regression gate — the file whose 1942 band costs it the 1955
+anchor. Truncation makes it worse on every column:
+
+| | `anchored` | `anchored 1800` |
+|---|---|---|
+| `…-022` `.0022` `mid` | −23.11 | −26.19 |
+| `…-022` `.0022` `und` | −6.54 | −7.39 |
+| `…-022` `.0042` `mid` | −12.11 | −15.65 |
+| `…-022` `.0042` `und` | +4.96 | +5.85 |
+
+Part of that is finding 48's denominator — deflate by 0.88 / 0.80 and `mid` on
+`.0022` is ≈ −23.1 against −23.1, i.e. roughly flat, while `.0042` is ≈ −12.5
+against −12.1, still worse. So the guard files degrade, by less than the raw
+numbers say and by more than nothing. The gate itself still fires correctly:
+`anchors_gated` is `1955` on both, exactly as in §14.7.
+
+#### What this settles, and what it does not
+
+- **Settled:** anchoring plus a 1800 window is very nearly a no-op on the
+  post-crossing regime (finding 49) and moves every pre-crossing target the
+  right way against `anchored`, with no seam, no second curve and no classifier
+  change — while finishing **behind both §14.12 and §14.15 on all three targets
+  on both pre-crossing files** (finding 50). The denominator confound is
+  measured and confined to the guard pair (finding 48).
+- **Settled — the ranking, this time by measurement.** The first draft of
+  finding 50 asserted this was the largest improvement in §14 without having run
+  the comparison. It has now been run and the assertion was false. The
+  `int_shared` column exists so that this particular mistake cannot be repeated
+  silently: plain `int` is not comparable across a window change, which is what
+  made the wrong claim look plausible.
+- **Not settled — the visual call.** As everywhere in §14, nothing is
+  recommended and no default is changed. `DEFAULT_WINDOW`, `config/analysis.yaml`
+  and `io.py`'s production ROI are all untouched; this is the experiment's
+  `window` knob only. The user's *"I know that will cause reprocessing"*
+  authorises the experiment, not a change to the production ROI.
+- **Not settled — `int` on the post-crossing files.** It is +4.4 to +14.7 under
+  both anchored forms. That is §14.7's pre-existing problem, the one §14.12 built
+  `pspline_arpls` for; truncation neither fixes nor worsens it.
+- **Not settled — breadth.** This is the judged eight only. Every earlier
+  section that mattered was checked against the 60-file sample, and §14.11
+  finding 30 is the standing warning that the wider sample can disagree. **That
+  check has not been run here.**
+- **Not settled — what happens below 1800.** Nothing is computed there, so the
+  1795/1775 bands and §4's two dormant peaks have no baseline at all under this
+  form. Under §14.13's floor they at least had the full-ROI curve. Whether that
+  matters depends on whether those peaks are ever fitted, which §14.12 recorded
+  the user as leaving open.
+
+#### Where the figures are
+
+`...\baseline_experiments\anchored_1800` — three traces plus raw, on the judged
+eight. The `continuation` and `four_trace` runs are unchanged beside it.
+
+#### Probes
+
+**Nothing here rests on an unpreserved probe.** §14.15 had to rebuild
+`mid`/`und`/`int` because §14.12, §14.13 and §14.14 each re-derived them in a
+scratchpad that was not kept, and finding 50's load-bearing number would have
+been the fourth — so `int_shared` is a **column**, not a probe:
+`INT_SHARED_WINDOW_CM1` and `baseline.int_shared`, printed per trace and written
+to `baseline_comparison.csv`. Findings 48–51 are all re-derivable from
+`uv run python src\utils\ir_fitting\api.py`, which now prints `int`'s sample
+count, `int_shared`, and each trace's own signal range.
+
+The one thing that needs a code change to reproduce is finding 50's ranking
+columns, because §14.12's and §14.15's forms are commented out of `__main__` at
+the user's *"no split"* instruction. Uncomment those two variants and re-run
+with `plot=False` to get the two right-hand columns back; the figures are
+deliberately left as the three traces plus raw that were asked for.

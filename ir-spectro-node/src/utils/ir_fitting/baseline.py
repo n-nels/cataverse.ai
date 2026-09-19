@@ -55,6 +55,38 @@ Written high-to-low because that is the order the instrument writes and the
 order the plots display.
 """
 
+TRUNCATED_WINDOW_1800: Window = (2250.0, 1800.0)
+"""``(high, low)`` cm-1 -- the full ROI with its bottom 50 cm-1 removed.
+
+A **window**, so it reaches the one thing a floor cannot: ``create_baseline``
+receives only ``y`` (spec.md section 0), so the window *is* the array and
+``std_distribution`` classifies background over it globally. Truncating here
+therefore changes the baseline *everywhere*, not just below 1800 -- which is
+the point, and is why this cannot be read off section 14.13's figures.
+
+**Three earlier things sit at 1800 or at truncation, and this is none of them.**
+Confusing them is the likeliest misreading of section 14.16:
+
+- :data:`LOWER_FLOOR_POINT_CM1` is also 1800, but is a *floor on a split form*
+  (section 14.13): the second baseline stops there and the anchored full-ROI
+  curve -- computed over the whole 2250-1750 array -- stands below it. Here
+  there is no second baseline and nothing below 1800 at all.
+- :data:`LOWER_MID_PROBE_CM1` is also 1800 and is a diagnostic readout
+  (section 14.10.1). Under this window it lands on the array edge, so the
+  probe's number stops being an interior measurement for this variant.
+- Section 14.6 finding 7's rejected truncation was **bare** and at **1955** --
+  no anchors, and 205 cm-1 lower. Anchors plus truncation at 1800 is a
+  combination section 14 has not run, and finding 7 does not rule it out.
+
+**The 1795/1775 bands leave the array**, as they do under the floor -- the
+reading section 14.12 confirmed with the user. One measurement consequence
+follows and is reported rather than assumed: :data:`INT_WINDOW_CM1` is
+1838-1750, so a variant on this window has ``int`` over 1838-1800 only, ~40% of
+the samples the full-ROI variants average over. It is a different statistic
+under the same column name -- the run prints its sample count beside it, and
+section 14.16 does not rank it against the others.
+"""
+
 DEGENERATE_WARNING = "no baseline points"
 """Substring of the ``pybaselines`` warning that means the fit found nothing.
 
@@ -384,6 +416,28 @@ INT_WINDOW_CM1: Window = (1838.0, 1750.0)
 this out of section 14.10.1 finding 24's trap -- a signed residual over a window
 containing a negative-going band rewards a baseline pulled down onto it. The
 1795/1775 bands are counted *in*, on the user's instruction (spec.md 14.12).
+"""
+
+INT_SHARED_WINDOW_CM1: Window = (1838.0, 1800.0)
+"""``(high, low)`` -- :data:`INT_WINDOW_CM1` clipped to what a 1800-truncated
+variant also covers.
+
+Exists because ``int`` is otherwise **not comparable across a window change**
+(spec.md 14.16). A variant on :data:`TRUNCATED_WINDOW_1800` keeps only 1838-1800
+of the ``int`` window, so its ``int`` averages ~20 samples where a full-ROI
+variant averages ~46: the same column name over a different statistic, which is
+exactly the kind of silent mismatch section 0's trap list is about.
+
+``int_shared`` is that number on the **same samples for every variant**, so a
+truncated form and a full-ROI form can be ranked against each other directly. It
+is a real column rather than a probe on section 14.15's precedent -- that
+section had to rebuild ``mid``/``und``/``int`` because 14.12, 14.13 and 14.14
+each re-derived them in a scratchpad that was not kept, and section 14.16's
+load-bearing comparison would have been the fourth.
+
+Read it *beside* ``int``, never instead of it: it says nothing about 1800-1750,
+which is where section 14.12's edge artefact lived and where a truncated variant
+has no baseline at all.
 """
 
 
@@ -1791,6 +1845,34 @@ def signal_range(y: np.ndarray) -> float:
     """
     span = float(np.nanmax(y) - np.nanmin(y))
     return span if span > 0 else float("nan")
+
+
+def int_shared(
+    wavenumbers: np.ndarray,
+    raw: np.ndarray,
+    baseline: np.ndarray,
+    scale: float,
+) -> float:
+    """``mean(data - baseline)`` over :data:`INT_SHARED_WINDOW_CM1`, as % of ``scale``.
+
+    The window-change-proof twin of ``lower_target_metrics``'s ``int``
+    (spec.md 14.16). Target 0, like ``int``, and subject to the same warning:
+    a signed mean alone ranks a strict lower envelope first (14.12 finding 33).
+
+    ``scale`` is passed in rather than taken from ``raw`` deliberately. Callers
+    hand it the **reference** variant's ``signal_range`` so that a truncated
+    variant -- whose own range can differ where the dropped region held the
+    extremum, as it does on ``...-022`` (14.16 finding 48) -- is not measured
+    against a different denominator than the form it is being compared to.
+
+    Returns ``nan`` when the variant does not cover the window at all.
+    """
+    mask = (wavenumbers <= INT_SHARED_WINDOW_CM1[0]) & (
+        wavenumbers >= INT_SHARED_WINDOW_CM1[1]
+    )
+    if not mask.any():
+        return float("nan")
+    return 100 * float(np.mean(raw[mask] - baseline[mask])) / scale
 
 
 def band_height(

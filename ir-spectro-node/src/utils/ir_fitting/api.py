@@ -31,19 +31,23 @@ from src.utils.ir_fitting import runner, writer
 from src.utils.ir_fitting.baseline import (
     ANCHOR_POINTS_CM1,
     DEFAULT_WINDOW,
+    INT_SHARED_WINDOW_CM1,
+    INT_WINDOW_CM1,
     JUDGED_FILES,
     LOWER_ANCHOR_POINTS_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
-    LOWER_CONTINUATION_LAM,
-    LOWER_CONTINUATION_SETTINGS,
+    LOWER_CONTINUATION_LAM,  # noqa: F401  (used by the commented-out variants in __main__)
+    LOWER_CONTINUATION_SETTINGS,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_FLOOR_POINT_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_METHOD_CANDIDATE,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_MID_PROBE_CM1,
     LOWER_SPLIT_POINT_CM1,
     SPLIT_POINT_CM1,  # noqa: F401 -- for the commented-out split variant in __main__
+    TRUNCATED_WINDOW_1800,
     BaselineVariant,
     anchor_data_value,
     band_height,
     gating_extremum,
+    int_shared,
     lower_target_metrics,
     overlap_shift,
     signal_range,
@@ -588,6 +592,13 @@ def compare_baselines(
                     # to (14.14 finding 42). -1 = no continuation; 0 = the
                     # straight extrapolation of the anchored slope.
                     "lower_cont_pts": outcome.lower_continuation_points,
+                    # `int` restricted to the samples EVERY variant covers, so
+                    # a window-truncated form can be ranked against a full-ROI
+                    # one (spec.md 14.16). Scaled by the REFERENCE range, not
+                    # this trace's, for the reason int_shared's docstring gives.
+                    "int_shared": int_shared(
+                        wavenumbers, intensity, values, reference_range
+                    ),
                     # Where the lower segment stopped (spec.md 14.13). Blank
                     # means it ran to the ROI floor, which is every variant
                     # through 14.12.
@@ -845,7 +856,7 @@ if __name__ == "__main__":
         # with lower_settings, whose keys belong to std_distribution.
         # ------------------------------------------------------------------
         folder_name = "nn1120-4_pd_ceo2_000"
-        run_name = "continuation"  # change per experiment so runs do not overwrite
+        run_name = "anchored_1800"  # change per experiment so runs do not overwrite
 
         variants = [
             ("current", {}),
@@ -858,13 +869,30 @@ if __name__ == "__main__":
             # anchors, and it is the twin upper_max_abs_diff is measured
             # against. Drop it and that check silently reports nan.
             ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
+            # The same three anchors and no cut, on an array that stops at 1800
+            # (spec.md 14.16). This is `anchored` with 50 cm-1 taken off the
+            # bottom -- NOT 14.13's floor, which left the full-ROI curve
+            # standing below 1800. A window changes the array create_baseline
+            # sees, so std_distribution reclassifies and the baseline moves
+            # ABOVE 1800 too; that is the whole experiment, and it is why the
+            # untruncated `anchored` above it is not optional. It is the middle
+            # term that attributes a change to the truncation rather than to the
+            # anchors, exactly as it is for the split forms.
+            #
+            # All three anchors (2240/2006/1955) sit above 1800, so none is lost
+            # to the window check. `int` is not comparable across this boundary
+            # -- see TRUNCATED_WINDOW_1800 and the sample counts printed below.
+            ("anchored 1800", {}, TRUNCATED_WINDOW_1800, ANCHOR_POINTS_CM1),
+            # ---- the split forms are OFF: "no split", the user's call ----
             # Lower-only split: the anchored baseline above 1955 untouched, a
-            # second create_baseline below it (spec.md 14.9).
-            BaselineVariant(
-                label="lower split 1955",
-                anchors=ANCHOR_POINTS_CM1,
-                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            ),
+            # second create_baseline below it (spec.md 14.9). Still built and
+            # still measured in spec.md; out of the figures, not out of the
+            # package.
+            # BaselineVariant(
+            #     label="lower split 1955",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            # ),
             # The C1 continuation of spec.md 14.14: no second baseline below
             # the cut at all. The anchored curve is continued downward from it
             # -- value and slope pinned at the two nodes above the cut, the
@@ -886,13 +914,13 @@ if __name__ == "__main__":
             # `int` window and misses it at every lam (14.15 findings 44/45).
             # Read LOWER_CONTINUATION_SETTINGS before changing it: what makes
             # it work is a regime coincidence, not a design property.
-            BaselineVariant(
-                label="lower continuation 1955",
-                anchors=ANCHOR_POINTS_CM1,
-                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-                lower_continuation_lam=LOWER_CONTINUATION_LAM,
-                lower_settings=dict(LOWER_CONTINUATION_SETTINGS),
-            ),
+            # BaselineVariant(
+            #     label="lower continuation 1955",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_continuation_lam=LOWER_CONTINUATION_LAM,
+            #     lower_settings=dict(LOWER_CONTINUATION_SETTINGS),
+            # ),
             # The literal form spec.md 14.14 proposed -- same continuation, the
             # classifier left alone. Off because it is strictly worse on `int`
             # (pre |int| 6.17 against 3.70 judged, breadth mean 6.35 against
@@ -905,13 +933,18 @@ if __name__ == "__main__":
             #     lower_continuation_lam=LOWER_CONTINUATION_LAM,
             # ),
             # ---- everything below is OFF at the user's instruction ----
-            # "i don't want the splice. remove it from consideration. only plot
-            # the black, blue, green, orange" -- which is raw / current /
-            # anchored / lower split 1955. Those four are all still on; the
-            # continuation above is the fifth, and is the thing under test. The lower anchors of
-            # 14.10.1, the pspline_arpls of 14.12 and the 1800 floor of 14.13
-            # are all still built and still measured in spec.md; they are out of
-            # the figures, not out of the package.
+            # Colours, since an earlier note here had them wrong: raw is black,
+            # then the variants take tab10 IN LIST ORDER -- traces[0] blue,
+            # traces[1] orange, traces[2] green. So with the list as it now
+            # stands, `current` is blue and `anchored` is ORANGE. The user's
+            # "go back to 3 anchor points, no split (the orange trace)" names
+            # `anchored`; adding or commenting out a variant above this line
+            # re-colours everything below it.
+            #
+            # The lower anchors of 14.10.1, the pspline_arpls of 14.12, the 1800
+            # floor of 14.13 and the continuation of 14.15 are all still built
+            # and still measured in spec.md; they are out of the figures, not
+            # out of the package.
             #
             # Lower-only split WITH the lower segment anchored at both its
             # endpoints (spec.md 14.10.1). The unanchored lower split above it
@@ -1127,18 +1160,44 @@ if __name__ == "__main__":
             "       positive means the baseline cuts into the 1850/1870-1880 bands\n"
             "  int  mean(data - baseline) over 1838-1750; target 0\n"
             "Read all three. Each one alone ranks a wrong baseline first.\n"
+            "\n"
+            f"  int_sh  the same statistic over "
+            f"{INT_SHARED_WINDOW_CM1[0]:.0f}-{INT_SHARED_WINDOW_CM1[1]:.0f}\n"
+            "       ONLY -- the samples every variant covers -- and scaled by\n"
+            "       the REFERENCE range. This is the column that ranks a\n"
+            "       window-truncated form against a full-ROI one; plain `int`\n"
+            "       cannot, and spec.md 14.16 got that wrong before measuring.\n"
+            "\n"
+            "'n' is how many samples plain `int` averaged and 'rng' is that\n"
+            "trace's OWN signal range -- both per trace, because a truncated\n"
+            "variant has its own array. A variant windowed to 1800 keeps only\n"
+            "1838-1800 of the `int` window, so its `int` is a DIFFERENT\n"
+            "STATISTIC under the same name: compare plain `int` only where n\n"
+            "matches, and read int_sh otherwise (spec.md 14.16 finding 48).\n"
         )
         for item in comparison.files:
             print(f"  {item.subifg_path.name}  [{item.verdict}]")
+            reference_range = signal_range(item.traces[0].raw)
             for trace in item.traces:
                 metrics = lower_target_metrics(
                     trace.wavenumbers, trace.raw, trace.baseline
+                )
+                int_n = int(
+                    np.count_nonzero(
+                        (trace.wavenumbers <= INT_WINDOW_CM1[0])
+                        & (trace.wavenumbers >= INT_WINDOW_CM1[1])
+                    )
+                )
+                shared = int_shared(
+                    trace.wavenumbers, trace.raw, trace.baseline, reference_range
                 )
                 print(
                     f"      mid {metrics['mid']:+7.2f} (pre "
                     f"{metrics['mid_pre_target']:+6.2f})  "
                     f"und {metrics['und']:+7.2f}  "
-                    f"int {metrics['int']:+7.2f}   {trace.label}"
+                    f"int {metrics['int']:+7.2f} (n {int_n:>3})  "
+                    f"int_sh {shared:+7.2f}  "
+                    f"rng {signal_range(trace.raw):.5f}   {trace.label}"
                 )
 
         # The claim 14.14 is built on, and the only column that can check it:
