@@ -11,6 +11,180 @@ recoverable by reading the code or `plan.md`'s decision log.
 
 ---
 
+## 2026-09-19 — Analysis-only session: the selection metric is measuring the wrong two parameters, no learned candidate beats the raw ODE fit under a curve objective, and no model has ever been shown the raw measurement series
+
+**No code was written or changed this session.** Nothing was retrained, no
+artifacts were regenerated, and the deployed candidate is still `rf_only`. This
+entry is findings and a proposed direction only.
+
+**Starting point.** The user asked to re-examine the strategy from first
+principles — "no assumptions and no priors, start at the top, I want to
+forecast, how?" — and to read the specs rather than continue from where the
+last session left off. Later in the session they redirected twice, and both
+redirects should shape how the next session works:
+
+1. **Explain in plain sentences, not code references.** Their words: "You wrote
+   a bunch of code that I haven't read. So when you reference code I have no
+   idea what you are talking [about]."
+2. **They want a pure ML model; heuristics are "engineering hacks" for later.**
+   Blending two estimates, switching between methods by a rule, and the whole
+   `rf_only`/`gated_blend`/gate framing all read to them as plumbing rather
+   than as an answer to the scientific question. Propose the learned approach
+   first; report heuristic scores as evidence, not as the recommendation.
+
+### Finding 1 — the selection score is blind to the parameters that shape the curve
+
+`selection_score = parameter_rmse + early_curve_rmse` (`sequential_model.py`
+~line 363), where `parameter_rmse` is a **pooled** `sqrt(mean(all squared
+errors))` across the five learned parameters. Because the parameters differ by
+four orders of magnitude — `q_e ≈ 0.30`, `q_inf ≈ 0.17`, `k_s ≈ 0.004`,
+`k_a ≈ 0.0001`, `k_p ≈ 0.00005` in per-target RMSE — the pooled figure is
+essentially a `q_e`/`q_inf` number. The three rate constants contribute
+nothing measurable.
+
+The previous entry already noted the scale problem per-target; the consequence
+was not drawn. It is: **curve shape is driven by the rate constants, and the
+selection metric cannot see them.** "Parameter accuracy" and "curve accuracy"
+have therefore been measuring nearly disjoint quantities all along.
+
+The test results show exactly that dissociation:
+
+| Method (test, n=2312) | Param RMSE | Param R² | Curve RMSE |
+|---|---:|---:|---:|
+| rf_ode_blend | **0.0495** (best) | 0.201 | 0.2156 (worst) |
+| rf_only | 0.0536 | **0.270** (best) | 0.2112 |
+| current_ode | 0.0705 (worst) | **−0.364** (worst) | **0.1988** (best) |
+
+Best parameters produced the worst curves; worst parameters produced the best
+curves. Every model comparison made in this project so far was decided by a
+score that does not track the stated objective in `spec.md` §14.
+
+### Finding 2 — validation and test parameter numbers were never comparable
+
+Selection (`sequential_model.py`) uses pooled `sqrt(mean(all squared errors))`.
+Final evaluation (`evaluation.py` `_metric_summary`) uses **mean of per-target
+RMSE** over six targets including the pass-through `q_0`, whose error is ~0.
+That is why the same method reads 0.2208 on validation and 0.0536 on test —
+roughly a factor of four, entirely from the aggregation formula and the extra
+near-zero target, not from test being "easier."
+
+Also: `evaluation.py` already computes `avg_normalized_rmse` (per-target RMSE
+divided by that target's reference standard deviation) — the scale-aware
+metric that *would* expose rate-constant error. It is computed and then used
+nowhere, in neither selection nor the report's headline table.
+
+### Finding 3 — under a curve objective, the plain ODE fit beats every learned candidate
+
+Mean of the three stage curve-RMSE values from
+`artifacts/phase0/sequential_model/manifest.json` (validation, 39 experiments):
+
+| Candidate | Early | Middle | Late | Mean |
+|---|---:|---:|---:|---:|
+| **current_ode** | 0.396 | 0.169 | **0.064** | **0.210** |
+| gated_blend_4 | 0.345 | 0.242 | 0.134 | 0.240 |
+| rf_ode_blend | 0.337 | 0.257 | 0.218 | 0.270 |
+| rf_only | **0.279** | 0.299 | 0.309 | 0.296 |
+| trajectory_10 | 0.352 | 0.563 | 0.519 | 0.478 |
+
+Test agrees on the ordering that matters: `current_ode` 0.199 < `rf_only`
+0.211 < `rf_ode_blend` 0.216.
+
+**This corrects a standing claim in the 2026-09-18 entry below.** That entry
+predicted broadening the selection score "would very likely make gated-blend
+the deployed candidate instead of RF-only." That prediction is **wrong by the
+manifest's own numbers** — Baseline B, the raw intermediate ODE fit with zero
+machine learning, wins under any curve-based aggregation checked
+(equal-weighted stage means, and overall cutoff-weighted on test). Do not
+re-derive gated-blend as the answer; it loses to doing nothing but fitting the
+ODE, and its late-stage blending is shrinkage toward RF that actively hurts
+(0.134 vs the ODE fit's 0.064).
+
+### Finding 4 — no model has ever been shown the raw measurement series
+
+This is the gap, and it is the reason the user's "pure ML model" instinct is
+the right one rather than a preference to be talked out of.
+
+The feature list in the model manifest contains, as its only
+raw-observation-derived inputs: `q_0`, `last_area`, `mean_area`, `std_area`,
+`observed_duration_s` — five summary scalars. Everything else is the RF's
+output, the current fit's output, availability masks, status flags, and
+schedule counts.
+
+**The shape of the adsorption curve — its slope, its curvature, how it is
+bending — has never been an input to any candidate.** Note the distinction:
+`trajectory_extrapolation_model.py` does read a history, but it reads the
+history of *stored fitted parameters*, not the raw measurements. No candidate
+has consumed the measurement series itself.
+
+The untried approach is therefore a single model that takes the raw
+measurements collected so far (times and areas) plus the static setup
+metadata, and outputs the final parameter vector directly — learned end to
+end, no combination of two pre-existing estimates. Each experiment supplies
+many training examples, one per valid cutoff.
+
+### False alarm, recorded so it is not re-investigated
+
+An apparent sign reversal between the validation manifest and
+`evaluation/report.md` (validation says the ODE fit is worst early / best
+late; the test report's `current_ode` block appeared to say the opposite) is
+**not a bug**. In `evaluation.py` `_comparison` (~lines 275-326), `candidate`
+is always `selected_model`, and each block is *keyed by the baseline being
+compared against*. Since `selected_model` is `rf_only`, the block labelled
+`current_ode` with `candidate_beats_curve: true` at `early` means "rf_only
+beats current_ode early" — consistent with validation, not contradictory.
+Both this session and an `advisor()` consult misread it at first glance. The
+naming is confusing but the numbers are correct; the early/late crossover is
+real and confirmed on both partitions.
+
+### Proposed direction, not yet started
+
+In order, because the first two are cheap and make the third interpretable:
+
+1. **Measure the ceiling (no training).** Take each experiment's known
+   reference parameters, run them through the ODE at every cutoff, and score
+   remaining-curve RMSE by stage on validation. That is the best any model
+   could achieve. If the late-stage ceiling is already matched by the plain
+   ODE fit, late is solved and only the early regime is open; if the early
+   ceiling is poor, no architecture will rescue early and we should say so
+   rather than spend weeks discovering it.
+2. **Fix the scoreboard.** Select on curve RMSE across stages rather than
+   `pooled_param_rmse + early_curve_rmse`, and report `avg_normalized_rmse`
+   (already implemented, currently unused) as the parameter headline so the
+   rate constants are visible. When proposing the replacement, name the
+   weighting explicitly and say why — equal-weighted stage means, cutoff-
+   weighted overall, or per-experiment-then-averaged. All three select
+   `current_ode` today, so the choice does not change the current answer, but
+   the existing formula is an unexamined default and the user explicitly asked
+   for no unexamined assumptions.
+3. **Build the sequence model** that reads the raw measurement series plus
+   static metadata.
+
+**Test-set discipline for whoever picks this up:** the reasoning above is
+justified on validation; test figures are cited only as post-hoc confirmation
+of the already-frozen `rf_only` comparison, and test was *not* used to select
+anything. If the deployed candidate changes as a result of steps 1-3, that is
+a legitimate one-time test re-run under the protocol in the entry below — log
+it in `plan.md`, then run `run-inference` → `evaluate-sequential --assignment
+test` exactly once, with no iterating on test.
+
+**State at end of session:** working tree unchanged except this log entry.
+Branch `feature/ml-eda`, clean before the edit. Deployed candidate still
+`rf_only`; `artifacts/phase0/` untouched, so
+`artifacts/phase0/evaluation/report.md` remains accurate for the deployed
+model. The selection-criterion decision flagged as open in both 2026-09-18
+entries is **still open**, but Finding 3 changes what it is a decision
+*between*: it is no longer "keep rf_only vs. deploy gated-blend," it is
+"keep the early-weighted score vs. adopt a curve-based score under which the
+raw ODE fit is the incumbent to beat."
+
+**If resuming this thread:** do not restart by proposing blends, gates, or
+switching rules — the user has explicitly deferred those as engineering
+hacks, and Finding 3 shows the best of them still loses to the plain ODE fit.
+Do not re-litigate the sign reversal (Finding 4's false alarm) or re-derive
+gated-blend as the winner. Start at step 1 above.
+
+---
+
 ## 2026-09-18 (later) — Added trajectory-extrapolation candidate; it wins on parameters but loses on curves, sharpening rather than resolving the selection-criterion question
 
 **Starting point.** The user's reasoning, unprompted by any file read: the
