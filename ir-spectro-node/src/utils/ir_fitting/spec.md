@@ -16,7 +16,7 @@ dormant.**
 
 | Workstream | State |
 |---|---|
-| **Baseline investigation** (§14) | Active. Tuning and bare truncation ruled out (§14.3, §14.6). The isosbestic point is measured (~1957) and an **anchored baseline is built and calibrated** (§14.7). It recovers the halved bands on the post-crossing files and is a no-op on the pre-crossing ones. **Splitting at the crossing is built and rejected** (§14.8) — though the post-mortem shows it was tested in its worst form, and names the variant worth trying — **that variant is now built and measured (§14.9)**: it keeps all of the anchor's band recovery, verified, and replaces the anchored baseline's unconstrained 205 cm⁻¹ extrapolation below the lowest anchor, at the cost of a seam §14.7 does not have. **Whether to prefer it over §14.7 alone is open — the visual call has not been made.** A fourth anchor at 1854 was tried and removed (§14.7.1). **The lower segment now has anchors of its own — both its endpoints, `(1955, 1750)` (§14.10, §14.10.1)**: containment above the cut still verified at exactly zero, and the seam improved against the unanchored split on five of six files. An interior third anchor at 1800 was built, measured and **removed by the user on the figures** (§14.10.1); with two anchors the correction is exact at both ends, so the seam is now *predicted* by the upper anchor's residual at 1955 and confirmed to 0.05% of range. The `.0022` regime is still unfixed — §14.10's apparent movement there was measured on a proxy that §14.10.1 finding 24 withdraws. `lower_settings` now exposes the lower segment's own `std_distribution` parameters (no default changed). **The settings are now re-swept under the anchor (§14.11)**: the three anchor residuals are one scalar, `lower_settings` provably cannot move the seam, and tuning the *upper* side halves both that scalar and the seam — while making the 2040 recovery slightly worse and ranking differently on a 60-file sample. **Then the algorithm itself was changed (§14.12), which is the knob no earlier section turned**: below the cut, with `lower_anchors` removed on the user's instruction, `pspline_arpls` at its defaults is the only one of 44 `pybaselines` methods that hits all three targets the user stated this session — baseline through the midpoint of the dispersive ~1850 feature on post-crossing files, under the base of the 1850/1870-1880 bands on pre-crossing ones, near-zero mean residual over 1838-1750. **It is the first thing in §14 to fix the `.0022` regime.** Containment above the cut is still exactly 0.0 and the `...-022` gate still a no-op; the cost is a seam ~1.5x the two-anchor form. **The user judged that form's lower segment no good on the figures, and named the fix: tie the second baseline off at 1800 rather than 1750 (§14.13)** — built and measured. Over the region it now fits, the artefact is gone: `...-012`'s residual drops from +1.11 to +0.19 and all six judged files land inside ±0.22, `und` improves on every one, and the 1955 seam improves on five of six. The 44-method ranking was re-derived on the shortened array and does not move. **The cost moved rather than went away** — below 1800 the anchored baseline stands, and the jump there is 6.5–16.6% of range, the largest discontinuity in §14. **The user then removed the floored form, and the splice with it, from consideration on the figures (§14.13.1)** — the comparison is back to four traces and nothing below 1955 is recommended.|
+| **Baseline investigation** (§14) | Active. Tuning and bare truncation ruled out (§14.3, §14.6). The isosbestic point is measured (~1957) and an **anchored baseline is built and calibrated** (§14.7). It recovers the halved bands on the post-crossing files and is a no-op on the pre-crossing ones. **Splitting at the crossing is built and rejected** (§14.8) — though the post-mortem shows it was tested in its worst form, and names the variant worth trying — **that variant is now built and measured (§14.9)**: it keeps all of the anchor's band recovery, verified, and replaces the anchored baseline's unconstrained 205 cm⁻¹ extrapolation below the lowest anchor, at the cost of a seam §14.7 does not have. **Whether to prefer it over §14.7 alone is open — the visual call has not been made.** A fourth anchor at 1854 was tried and removed (§14.7.1). **The lower segment now has anchors of its own — both its endpoints, `(1955, 1750)` (§14.10, §14.10.1)**: containment above the cut still verified at exactly zero, and the seam improved against the unanchored split on five of six files. An interior third anchor at 1800 was built, measured and **removed by the user on the figures** (§14.10.1); with two anchors the correction is exact at both ends, so the seam is now *predicted* by the upper anchor's residual at 1955 and confirmed to 0.05% of range. The `.0022` regime is still unfixed — §14.10's apparent movement there was measured on a proxy that §14.10.1 finding 24 withdraws. `lower_settings` now exposes the lower segment's own `std_distribution` parameters (no default changed). **The settings are now re-swept under the anchor (§14.11)**: the three anchor residuals are one scalar, `lower_settings` provably cannot move the seam, and tuning the *upper* side halves both that scalar and the seam — while making the 2040 recovery slightly worse and ranking differently on a 60-file sample. **Then the algorithm itself was changed (§14.12), which is the knob no earlier section turned**: below the cut, with `lower_anchors` removed on the user's instruction, `pspline_arpls` at its defaults is the only one of 44 `pybaselines` methods that hits all three targets the user stated this session — baseline through the midpoint of the dispersive ~1850 feature on post-crossing files, under the base of the 1850/1870-1880 bands on pre-crossing ones, near-zero mean residual over 1838-1750. **It is the first thing in §14 to fix the `.0022` regime.** Containment above the cut is still exactly 0.0 and the `...-022` gate still a no-op; the cost is a seam ~1.5x the two-anchor form. **The user judged that form's lower segment no good on the figures, and named the fix: tie the second baseline off at 1800 rather than 1750 (§14.13)** — built and measured. Over the region it now fits, the artefact is gone: `...-012`'s residual drops from +1.11 to +0.19 and all six judged files land inside ±0.22, `und` improves on every one, and the 1955 seam improves on five of six. The 44-method ranking was re-derived on the shortened array and does not move. **The cost moved rather than went away** — below 1800 the anchored baseline stands, and the jump there is 6.5–16.6% of range, the largest discontinuity in §14. **The user then removed the floored form, and the splice with it, from consideration on the figures (§14.13.1)** — the comparison is back to four traces and nothing below 1955 is recommended. **§14.14 then resolves what §14.13.1 could not: *"the splice"* meant `pspline_arpls`, not the 1955 cut.** The cut stays, its seam is tolerated, and `lower split 1955` is the preferred form. `pspline_arpls` is rejected on a third ground (*"caused major problems elsewhere"*), a full-ROI algorithm swap is out of scope (historical datasets), and a cross-file/stack estimate is shelved. Three new measurements say why the region below the cut is wrong and what will not fix it: `weights` — the sixth setting §14.3 finding 1 never swept — is **bit-for-bit a no-op** on the `.0022` files (finding 41), because `std_distribution` classified **0 of 17** samples in 1870–1836 as background and, on `…-021`, only **3 of 106** in the whole lower segment (finding 42); it is neither degenerate nor an endpoint line (finding 43). So the band is not being mistaken for background — the curve is **under-constrained**, which retires every mask-style fix and points at a **C¹ continuation** of the anchored baseline below the cut. **That continuation is now built — as the continuation **plus** `num_std: 3.0` on the lower classifier, which is load-bearing and is the one knob the rest of §14 leaves alone — swept and checked on both samples (§14.15), and it is the best-measured form in §14.** Everything §14.14 required is exact — containment 0.0 over 688 rows, band heights bit-identical, the `…-022` gate a no-op — and the property §14.14 called a prediction holds: one construction serves both regimes, **the first time without `pspline_arpls`**. Post `mid` 0.25 and pre `und` 0.54 beat every earlier form including the rejected one; the seam, measured properly for the first time as `seam_excess`, is **0.36 against the splice's 5.58**. Two things make it work that §14.14 did not foresee: finding 44 — the classified points are not sparse but **confined above ~1910** on the pre-crossing files, so the `int` window has *nothing* in it and no `lam` over seven decades can help — and finding 45, that `lower_settings` under a continuation configures the **classifier**, which is the one lever that fixes it (`num_std` 3.0 reaches to ~1807). The 60-file breadth sample **agrees with the judged six** for once (51/53), where §14.11 finding 30 warned it would not. Costs: pre `int` +3.3/+3.7, unfixed; and `num_std` 3.0 works through a **regime coincidence** in where the threshold falls, which is the section's largest risk. **The visual call has not been made and nothing is recommended.**|
 | **Two extra low-wavenumber peaks** (§4) | Dormant — `ir_fitting.extra_peaks_base` is `[]`, so nothing fits them. The machinery works; the peaks are simply not configured. |
 
 ### The open question — answered, and replaced by a harder one
@@ -48,8 +48,24 @@ the cut gave up the only thing holding it (§14.12 finding 36) — and whether t
 `.0022` depression below 1838 was baseline error at all, which the `int ≈ 0`
 target asserts rather than measures.
 
-**The current recommendation is the single anchored baseline of §14.7, and
-below 1955 there is now nothing recommended.** §14.12's `pspline_arpls` and
+**Superseded again by §14.15 — read that first.** §14.14's proposal is built.
+The region below the cut now has a form that satisfies `mid` and `und` on both
+regimes at once, is continuous at the cut to 0.36% of range, changes nothing at
+or above it, and does not use the rejected algorithm. What it does not fix is
+`int` on the two pre-crossing files (+3.3, +3.7), and finding 44 bounds how much
+more classification can do there. The two paragraphs below are what stood before
+it.
+
+**Superseded by §14.14 decision 1.** *"The splice"* meant
+`pspline_arpls`, not §14.9's cut: the cut **stays**, its seam is tolerated, and
+the user's preferred form is now **`lower split 1955`** (§14.9), not §14.7 alone.
+`pspline_arpls` is rejected on a third, independent ground — *"it caused major
+problems elsewhere"* — and replacing the full-ROI algorithm is out of scope
+because the historical datasets would need refitting. The next thing to try is
+§14.14's C¹ continuation. The paragraph below is what stood before that.
+
+**The recommendation through §14.13.1 was the single anchored baseline of §14.7, and
+below 1955 there was nothing recommended.** §14.12's `pspline_arpls` and
 §14.13's floor at 1800 met the three stated targets and were **removed from
 consideration by the user** (§14.13.1); they remain built, measured, and off. §14.8
 tried the other reading of §14.4 step 3 — `ip` as a split point rather than a
@@ -67,6 +83,9 @@ uv run python src\utils\ir_fitting\api.py
 
 # Peak fitting. Same file, MODE = "fit".
 uv run python src\utils\ir_fitting\api.py
+
+# The run now prints mid/und/int per file per variant, and seam_excess
+# beside seam -- so §14.15's findings 46/47 need no scratchpad probe.
 
 # View saved baselines for one measurement (computes nothing new).
 uv run python src\visualizations\plot_baseline.py
@@ -122,6 +141,23 @@ CLI.
   `floor_seam_jump` is the floor's; they are different kinds of join — two
   fitted curves at the cut, one fitted and one inherited at the floor — so they
   are reported separately and never summed. The floor's is the larger by 3-5x.
+- **A seam is not a discontinuity.** Adjacent samples of a *continuous* curve
+  differ by ~slope x the 1.9 cm-1 grid step, so §14.15's continuation reports a
+  non-zero `seam_jump` while having no discontinuity at all. Compare forms on
+  `seam_excess_pct_of_range`, which subtracts what the unsplit anchored curve
+  does across the same sample pair. `seam_jump` is still the right column for
+  two independently computed segments, where the two are nearly equal anyway.
+- **Below 1955 the classifier does not reach the bottom of the array on the
+  pre-crossing files.** Not "few points" — *none* below ~1910, which is the
+  whole 1838-1750 `int` window (§14.15 finding 44). Any form that fits
+  `std_distribution`'s classified points there is extrapolating the last
+  ~160 cm-1 whatever its parameters say, and `lam` over seven decades does not
+  move it. This is also why `pspline_arpls`, which classifies nothing, could
+  reach where nothing else could.
+- **`num_std` is not a mask, and a larger value is not a stricter one.** It
+  raises the tolerance for calling a sample background, so 3.0 classifies *more*
+  of the spectrum than 1.1, not less. §14.15 finding 45 uses that direction
+  deliberately; §14.14 finding 41's `weights` family fails in the other.
 - **The three anchor residuals are one number.** A least-squares line through
   three points leaves a 1-D residual, so `(r2240, r2006, r1955)` is always
   proportional to `(+0.218, −1.218, +1)` — measured std 0.000000 over 174 rows
@@ -2693,3 +2729,505 @@ full-ROI baseline, untouched by any of this, and the measurement underneath the
 whole line — finding 31, that the two regimes want opposite signs at 1850, so no
 fixed correction below 1955 can serve both. That still has to be answered, and
 now without a second segment to answer it in.
+
+### 14.14 A C¹ continuation below 1955 — proposed, not built
+
+**Everything after finding 43 is a proposal.** Findings 41–43 and the table in
+decision 3 are measured; the design that follows them is not implemented, and no
+field, default or config value has changed.
+
+#### What this session decided
+
+Four calls, all the user's. Three of them close things §14.13.1 left open.
+
+**1. *"The splice"* meant `pspline_arpls`, not the cut at 1955.** §14.13.1 could
+not tell which was meant and said so; it guessed, from the colour named, that
+the cut was included. That was the wrong way round: *"i didn't want the
+pspline_arpls. That is what i thought splice meant. The discontinuity at 1955
+may be ok."* So **§14.9's cut stays, and its seam is tolerated** rather than
+merely unresolved. `lower split 1955` is the standing preferred form — *"the
+last iteration (the green one) is the best so far"* — and the comparison stays
+at the four traces of §14.13.1.
+
+**2. `pspline_arpls` is rejected on its own terms.** This is a **third** reason,
+separate from the 1750 edge (§14.13's opening) and from the floor seam
+(§14.13.1): *"I don't like pspline_arpls b/c it caused major problems elsewhere.
+Its not just about 1850, b/c then we would have problems elsewhere."* §14.12 and
+§14.13 are closed. Their measurements stand as measurements; the recipe does not
+come back.
+
+**3. Replacing the algorithm on the full ROI is out of scope.** Proposed this
+session as the seam-free form of §14.12 — a `method` / `method_kwargs` field on
+`BaselineVariant`, the full-ROI sibling of `lower_method`, with
+`ANCHOR_POINTS_CM1` applied on top and **no cut anywhere**, so neither a seam nor
+a floor exists to object to. Declined: *"No, I do not like redefining the
+baseline. The current baseline works for the other historical data and I do not
+want to refit everything."*
+
+The measurement is recorded so this is not re-proposed as though untried. Eight
+of finding 32's methods, at their defaults, over the full 259-sample array with
+the three anchors on top:
+
+| form | `und` (…-017 / …-021) | `int` (…-017 / …-021) | `height_2040` (…-021) |
+|---|---|---|---|
+| `lower split 1955` (green, today) | +3.48 / +4.33 | −5.69 / −6.10 | 2.07e−03 |
+| full-ROI `pspline_arpls` | +1.32 / +2.29 | +0.05 / +0.91 | 2.49e−03 |
+| full-ROI `arpls` | +0.07 / +1.99 | +1.51 / +1.80 | 2.34e−03 |
+| full-ROI `loess` | −0.86 / −0.51 | +2.96 / +2.02 | 1.85e−03 |
+
+It clears the `.0022` complaint, and `height_2040` **rises** rather than falls.
+It also overshoots the post-crossing regime at defaults (`…-008` `mid` −12.05,
+`…-027` `mid` −6.96, `…-012` `int` +6.04), degrades the flat 2235–2250 mean by
+~1.5×, carries §14.12's 1750 edge exposure with no floor available to tie off,
+and would be the first form in §14 to change `…-022` — with no cut the split
+gate never fires, so the method runs on that file like any other. **None of that
+is why it was declined.** The reason is the historical datasets, and it holds
+whatever the figures show.
+
+**4. A cross-file / stack background estimate is shelved.** Proposed as the one
+family that never has to classify background *inside* a single spectrum — a
+pre-nucleation reference index, or a low-rank decomposition over a measurement's
+`delta10` stack. *"Sounds complicated. Let's shelve it."* One correction to the
+figures quoted when proposing it: the folder holds **36** measurements and
+**11 921** subIFG files, median 370 per measurement. The *`delta10` group alone*
+is 384 files, ~10–11 per measurement — that is the number that was quoted
+without its qualifier.
+
+#### Finding 41. `weights` is the sixth setting, and here it is a measured no-op
+
+§14.3 finding 1 swept "all five exposed settings". There are **six** valid keys
+(§3), and `weights` is the one it did not turn — it is an array rather than a
+scalar, so it does not fit a scalar sweep. `create_baseline` already forwards it.
+
+Its semantics are the reverse of the intuitive reading: *"Only elements with 0 or
+False values will have an effect; all non-zero values are considered baseline
+points."* A zero therefore **excludes** a point from the background — it declares
+it peak, which is exactly the "tell the classifier where not to look" knob.
+
+Run on the lower segment of the `lower split 1955` recipe with three masks —
+1870–1836, 1875–1830, and 1875–1830 plus 1805–1765 — the result on **both
+`.0022` files is bit-identical to the unmasked green baseline.** On the
+post-crossing files it does move them, and the wrong way: `und` +5.11 → +6.60 on
+`…-007`, +4.16 → +6.99 on `…-012`.
+
+#### Finding 42. The lower segment on `…-021` rests on three classified points
+
+`std_distribution` returns its own background mask. Read on the lower segment
+(106 samples), against the 17 samples in 1870–1836:
+
+| file | regime | classified background | of those, in 1870–1836 |
+|---|---|---|---|
+| `…-007` `.0042` | post | 24 / 106 | 4 / 17 |
+| `…-008` `.0042` | post | 30 / 106 | 4 / 17 |
+| `…-012` `.0052` | post | 26 / 106 | 9 / 17 |
+| `…-017` `.0022` | **pre** | 24 / 106 | **0 / 17** |
+| `…-021` `.0022` | **pre** | **3 / 106** | **0 / 17** |
+| `…-027` `.0052` | post | 21 / 106 | 0 / 17 |
+
+Two things follow, and together they are why this section exists.
+
+**Finding 41's no-op is explained, and the explanation retires a whole family.**
+On both `.0022` files *no* sample in the 1850 window was classified background,
+so removing those candidates cannot change anything. The algorithm is **not
+mistaking the band for background.** Every fix of the shape "detect the bands
+better and mask them" — `weights`, a curvature or CWT mask, a peak-list mask — is
+therefore dead on these files, and dead for a measured reason rather than by
+trial.
+
+**The defect is an under-determined curve, not a misclassification.** On `…-021`
+the baseline over 1955–1750, a 205 cm⁻¹ span, is interpolated from **three**
+samples. That is also the mechanism behind §14.3 finding 1 and §14.11: every
+`std_distribution` knob adjusts *which* samples get classified, and on this file
+there are three of them to adjust.
+
+#### Finding 43. Not degenerate, and not a straight line between the segment's ends
+
+Both simpler explanations are ruled out, because each would call for a different
+fix.
+
+- **No degeneracy.** Re-run inside `warnings.catch_warnings(record=True)` —
+  which a probe must do explicitly, since calling `create_baseline` directly
+  swallows the warning (§0's trap list) — `DEGENERATE_WARNING` fires on **no**
+  lower segment of the judged six, and on no full-ROI baseline either.
+- **Not the endpoint line.** `max |lower segment − the straight line through its
+  two end values|` is **2.00%** of range on `…-017` and **2.72%** on `…-021`
+  (5.14–10.12% on the post-crossing four). So it is a real interpolation
+  following the broad shape, not §14.3 finding 1's "falls back to interpolating
+  between the ROI edges" reappearing at segment scale.
+
+The curve is **under-constrained, not broken.** The correction needed at 1850 is
+4–6% of range (§14.12 finding 32); the freedom the current curve is using is
+2–3%.
+
+#### The proposal
+
+Replace the lower segment's **construction** — not its algorithm (§14.12), not
+its parameters (§14.11), not its anchors (§14.10.1).
+
+Today (§14.9) the region below the cut gets a second, independent
+`create_baseline` on its own 106-sample array, spliced on. Instead, **continue
+the anchored full-ROI baseline downward from the cut**: a smooth curve pinned to
+that baseline's own value *and* slope at 1955, fitted to whatever the classifier
+does supply below there, with an explicit curvature penalty as the one free knob.
+
+Three properties, in the order they matter:
+
+1. **It supplies exactly what finding 42 says is missing.** A starting value, a
+   starting slope, and a stated amount of allowed bend, in place of three
+   classified samples over 205 cm⁻¹. This is the load-bearing property.
+2. **It is shape-adaptive, which finding 31 requires and no fixed correction can
+   be.** A smooth curve fitted to flanks passes near the midpoint of an
+   antisymmetric feature and near the base of a symmetric one — the opposite
+   signs at 1850 that §14.13.1 leaves standing as the unanswered question. This
+   is a **prediction, not a measurement**, and is the first thing to check.
+3. **The seam goes to zero by construction, and the slope break with it.** Not
+   shrunk — absent, because the continuation does not *meet* the upper curve, it
+   *starts from* it. §14.10.1 finding 21 showed the seam is fixed by the upper
+   side alone and that nothing below the cut can improve it; a continuation is
+   the one form not subject to that. Listed third because decision 1 above
+   tolerates the seam, so this is now a bonus rather than the requirement — and
+   it answers §14.12 finding 36's open item on the way past.
+
+#### What it must preserve
+
+- **`upper_max_abs_diff == 0.0` exactly**, on all eight judged files. The
+  continuation touches nothing at or above the cut, so §14.7 stands bit-for-bit
+  there. The `anchored` twin must stay in the run or the check silently reports
+  `nan` (§14.9 finding 13).
+- **`height_2040` / `height_1980` identical to `anchored`** on every file, for
+  finding 13's reason: both bands sit above the cut.
+- **The gate.** A cut gated at 1955 leaves no lower segment and therefore no
+  continuation, so both `…-022` files return `anchored` unchanged — as under
+  every form since §14.9, and unlike decision 3's rejected full-ROI swap.
+- **No default changed.** A new `BaselineVariant` field, `None` unless a variant
+  asks for it, on `lower_method`'s precedent — and mutually exclusive with
+  `lower_method` and `lower_settings`, which configure a second independent
+  baseline that this form does not create.
+
+#### The objection to answer before building it
+
+This is a **constraint**, and §14.12's scope said *"no rules or guardrail tricks.
+Strictly pybaselines and other methods."* Read narrowly, that rules this out.
+
+The reading taken here is that the instruction was aimed at corrections applied
+*to a finished curve* below 1955 — anchors, offsets, clamps, the things finding
+31 shows cannot serve both regimes — and that a continuity condition on how the
+curve is **constructed** is a different object: it adds no per-file rule, no
+threshold and no regime label, and it is the opposite of the splice that decision
+1 identifies as the actual objection. **This has not been confirmed with the
+user, and should be before the field is built.**
+
+#### What is not settled
+
+- **Which smooth family.** A penalised spline, a low-order polynomial in the
+  continuation variable, and a Whittaker-type smoother with the endpoint pinned
+  are all candidates; none has been tried. The curvature penalty is then the one
+  parameter, and it needs §14.11 finding 30's anti-overfitting treatment — the
+  judged eight *and* the 60-file breadth sample, not the two named files.
+- **Whether it reaches.** Finding 42 says the freedom is there to be had. It does
+  not say a curvature-penalised fit to 3–24 classified samples will find the
+  right level. `int` −6.10 → ≈0 and `und` +4.33 → ≤0 on `…-021` are the targets,
+  and both are unmeasured.
+- **The 1750 edge.** A continuation still ends at the array's bottom. §14.13's
+  floor is not available in the same form — there is no independent segment to
+  tie off — but the endpoint hazard is the same one, and it should be checked
+  before the sweep rather than discovered in it.
+- **Finding 31 itself.** Property 2 is the first claim in §14 that a single
+  construction could serve both regimes. If it fails, what remains is §14.13.1's
+  closing position unchanged.
+
+#### The probes behind findings 41–43
+
+`weights_probe.py`, `weights_lower.py`, `degen.py`, `mask.py` and
+`fullroi_probe.py`, written to the session scratchpad rather than the repository
+and not preserved. Findings 41–43 and decision 3's table are what they produced;
+each is a few minutes' work to re-derive against `JUDGED_FILES`.
+
+---
+
+### 14.15 The C¹ continuation — built and measured; the first form to serve both regimes without `pspline_arpls`
+
+§14.14 proposed it and did not build it. It is now built, swept and checked on
+both samples. **Everything §14.14 said it must preserve, it preserves exactly.
+Its load-bearing property — the one §14.14 called "a prediction, not a
+measurement, and the first thing to check" — holds.** The cost is an `int`
+error on the two pre-crossing files that is real, is smaller than every form
+before §14.12, and has a measured cause that is *not* the continuation.
+
+The scope question §14.14 said to settle first was put to the user and answered:
+a continuity condition on how the curve is **constructed** is allowed under
+§14.12's *"no rules or guardrail tricks"*, which was aimed at corrections
+applied to a finished curve.
+
+**Say this before the numbers, because it is not what §14.14 proposed.** The
+form measured here is the continuation **plus `num_std: 3.0` on the lower
+segment's classifier**, and that second half is load-bearing rather than
+incidental — §14.14's literal proposal, with the classifier left alone, is a
+**breadth regression** (finding 47). `num_std` is the knob §14.3 finding 1 and
+§14.11 both swept and recommended nothing from, and every form in §14 until now
+has left it at 1.1. Finding 44 is why it has to move and finding 45 is what
+moves it; the last bullet of "what is not settled" is why to distrust it. A
+reader comparing this section against the rest of §14 should carry that from
+here, not discover it three findings in.
+
+#### What was built
+
+`BaselineVariant.lower_continuation_lam` (`None` by default, nothing in
+`config/analysis.yaml` touched), and `_segment_continuation` beside
+`_segment_baseline` and `_segment_pybaselines` — the third sibling, and the one
+that is **not** a second baseline.
+
+**The pin is two grid nodes, not a value and a derivative.** The node array is
+the two lowest-wavenumber samples *above* the cut followed by every sample below
+it: one contiguous run of the original grid. The first two nodes are held at the
+anchored baseline's own values there. Holding two adjacent nodes fixes the
+curve's value *and* its slope at the join exactly, on the grid the seam is
+measured on — so nothing in the implementation has to reason about the sign of a
+derivative on a descending axis, which is §0's first trap and the likeliest way
+this would have gone quietly wrong.
+
+With `b` the node values, `m` the samples the classifier called background below
+the cut, and `D2` the second-difference operator on the node grid:
+
+```
+minimise  Σ_m (b − y)²  +  lam · ‖D2 b‖²      subject to  b[0], b[1] pinned
+```
+
+solved as one small dense least-squares problem in the `n − 2` free nodes
+(`n ≈ 108`). `D2` uses the exact non-uniform three-point weights scaled by the
+mean spacing squared, so on a uniform grid it is exactly `[1, −2, 1]` and `lam`
+reads as it does in `pybaselines`' Whittaker methods.
+
+**With no classified samples at all the system is still determined** — the
+constrained `D2` block alone is square and triangular, and the answer is the
+straight line continuing the anchored slope. That is the honest degenerate case
+rather than a failure, and `BaselineOutcome.lower_continuation_points` reports
+it rather than leaving it to be inferred: a curve carried entirely by its
+penalty looks fitted and is not.
+
+Three things had to be added to measure any of this:
+
+- **`lower_target_metrics` — `mid` / `und` / `int` as real columns.** §14.12,
+  §14.13 and §14.14 each re-derived them in a scratchpad probe that was not
+  kept. They now live in `baseline.py` beside `band_height`, and the run prints
+  all three per file per variant. Verified against the spec's own numbers before
+  being used: `anchored` `und` +6.15 on `…-021` and `lower split` `und` +4.33 /
+  `int` −6.10 reproduce §14.12 finding 32 exactly.
+- **`seam_excess_jump`.** `seam_jump` alone cannot compare these forms. Adjacent
+  samples of a *continuous* curve differ by ~slope × the 1.9 cm⁻¹ step, so a
+  continuation reports a non-zero seam while having no discontinuity at all.
+  `seam_excess_jump` subtracts what the unsplit anchored curve does across the
+  same sample pair, leaving the part that is one. It is populated for every
+  lower-split form, not just this one, so the comparison is fair in both
+  directions.
+- **`lower_continuation_points`** — finding 42's number, as a per-run column.
+
+`lower_method`, `lower_anchors` and `lower_floor_cm1` each raise when combined
+with a continuation, on the fields' own precedent. `lower_settings` does **not**
+— see finding 45.
+
+#### Finding 44. The classified samples are not sparse, they are confined to the top of the segment
+
+This is the sharper form of finding 42, and it changes what that finding means.
+
+Classified background below the cut, at the unmodified settings:
+
+| file | regime | n / 106 | lowest classified | of those, in 1838–1750 |
+|---|---|---|---|---|
+| `…-007` `.0042` | post | 24 | 1789.6 | 17 |
+| `…-008` `.0042` | post | 30 | 1785.8 | 19 |
+| `…-012` `.0052` | post | 26 | 1789.6 | 15 |
+| `…-017` `.0022` | **pre** | 24 | **1909.2** | **0** |
+| `…-021` `.0022` | **pre** | **3** | **1911.1** | **0** |
+| `…-027` `.0052` | post | 21 | 1787.7 | 17 |
+
+Finding 42 read `…-017` as 24/106 and therefore unremarkable; the count is not
+the problem. **On both pre-crossing files the classifier supplies nothing below
+~1910 — zero samples in the entire 1838–1750 window `int` is measured over.**
+`…-017` classifies 24 points and every one of them sits in 1954–1909.
+
+Two consequences:
+
+- **The continuation extrapolates the last ~160 cm⁻¹ of those files under its
+  curvature penalty alone.** `int` therefore misses by +5.6 to +6.6% of range at
+  **every** `lam` from 1e1 to 1e8 — seven decades, and the miss does not move.
+  It is not a tuning failure.
+- **It is not a failure of the continuation either.** Any method that fits
+  `std_distribution`'s classified points on that segment inherits it. §14.12's
+  `pspline_arpls` reached the bottom of those files precisely *because* it does
+  no classification — which is also why it overshot the post-crossing regime.
+
+#### Finding 45. The one lever inside the form is the classifier, and it works
+
+Under a continuation there is no second baseline for `lower_settings` to
+configure, so it configures the **classifier** — which samples below the cut
+count as background. That is the same object those keys always named, reached
+one step earlier, and it is why `lower_settings` is the one companion field not
+rejected. Finding 44 makes it the interesting lever rather than a leftover.
+
+`num_std` raises the tolerance for calling a sample background, so a *larger*
+value classifies more — the opposite direction from a mask, and the reason the
+mask family (finding 41) had nothing to give here.
+
+Lowest classified wavenumber on the two pre-crossing files:
+
+| setting | `…-017` lowest / in 1838–1750 | `…-021` lowest / in 1838–1750 |
+|---|---|---|
+| default (`num_std` 1.1) | 1909.2 / **0** | 1911.1 / **0** |
+| `num_std` 2.0 | 1889.9 / 0 | 1907.3 / 0 |
+| **`num_std` 3.0** | **1807.0 / 5** | **1808.9 / 3** |
+| `num_std` 5.0 | 1797.3 / 22 | 1803.1 / 9 |
+
+At 3.0 the classifier reaches the `int` window on both, and `int` comes back.
+
+#### Finding 46. The result, on the judged six
+
+`lower_continuation_lam=1e3` with `num_std: 3.0`, against every form §14 has
+measured. `mid` targets 0 on post-crossing files; on pre-crossing ones the
+target is `−(peak − trough)/2`, so the column is the distance from that.
+
+| form | post \|mid\| mean | pre \|mid − target\| mean | pre `und` max | \|int\| max | \|int\| mean | \|seam\| max | \|seam excess\| max |
+|---|---|---|---|---|---|---|---|
+| `anchored`, no cut (§14.7) | 5.34 | 7.32 | 6.15 | 14.51 | 8.46 | — | — |
+| lower split, no anchors (§14.9) | 1.43 | 5.40 | 4.33 | 6.10 | 2.55 | 5.64 | 5.58 |
+| + lower anchors (§14.10.1) | 2.38 | 6.28 | 5.13 | 7.71 | 4.38 | 2.75 | — |
+| `pspline_arpls` (§14.12, rejected) | 0.54 | 0.27 | 0.79 | **1.11** | **0.43** | 4.26 | — |
+| **continuation, `lam` 1e3 + `ns3`** | **0.25** | 0.52 | **0.54** | 3.70 | 1.20 | **0.43** | **0.36** |
+
+Per file:
+
+| file | regime | `mid` | target | `mid − target` | `und` | `int` | excess | pts |
+|---|---|---|---|---|---|---|---|---|
+| `…-007` | post | −0.17 | 0 | −0.17 | +3.75 | **+0.06** | −0.16 | 87 |
+| `…-008` | post | −0.73 | 0 | −0.73 | +4.51 | **+0.02** | −0.36 | 106 |
+| `…-012` | post | +0.06 | 0 | +0.06 | +3.45 | **+0.07** | −0.17 | 85 |
+| `…-017` | **pre** | −4.96 | −4.23 | **−0.73** | +0.54 | +3.34 | +0.04 | 41 |
+| `…-021` | **pre** | −5.08 | −4.76 | **−0.32** | **−0.19** | +3.70 | +0.03 | 38 |
+| `…-027` | post | −0.05 | 0 | −0.05 | +4.09 | **+0.03** | −0.06 | 106 |
+
+**`mid − target` is signed here, and the sign matters more than the magnitude.**
+The summary table above reports it as an absolute mean, which makes an overshoot
+and an undershoot look like the same kind of miss. They are not: *"under the base
+of those peaks"* has a good side to err on. **The continuation errs low on both
+pre-crossing files** — 0.73 and 0.32% of range *below* the flanking trough — where
+`split` reads +0.62 and +1.19, i.e. **4.9 and 6.0 above** it, cutting into the
+band. Erring low is the better direction and `…-021`'s negative `und` agrees.
+But it is still an error, and on the figures a baseline sitting under the trough
+rather than touching it could read as sagging. That is a visual call, and it is
+the one the pre-crossing files turn on.
+
+**Property 2 holds — this is the headline.** §14.14 listed shape-adaptivity
+first and called it a prediction: *"A smooth curve fitted to flanks passes near
+the midpoint of an antisymmetric feature and near the base of a symmetric one."*
+It does. Post-crossing `mid` lands inside ±0.73 on all four, pre-crossing `mid`
+lands within 0.73 of "on the flanking trough", and `…-021`'s `und` goes
+**negative** — the first form in §14 whose baseline is genuinely *under* the
+base of those bands rather than less far into them. Finding 31's opposite signs
+at 1850 are served by one construction, and **for the first time without
+`pspline_arpls`**, which is the question §14.13.1 left standing.
+
+**Property 3 holds, and is now measurable.** `|seam excess|` max **0.36**
+against the splice's **5.58** — 15×, and the one column §14.10.1 finding 24 kept.
+§14.12 finding 36's open item is answered: the seam is not a price this form
+pays.
+
+**Everything §14.14 said it must preserve is preserved, checked and exact:**
+
+- `upper_max_abs_diff` **0.0 exactly** over 88 rows on the judged eight, 600 on
+  the breadth sample.
+- `height_2040` / `height_1980` bit-identical to `anchored` on every file and
+  every `lam` — 0 mismatches in either run.
+- **The gate.** Both `…-022` files gate at 1955, build no continuation
+  (`pts` = −1), and come back `anchored` to 0.000e+00.
+- No default changed, no config value touched, nothing in the live path.
+
+**What it costs.** `int` on the two pre-crossing files, +3.34 and +3.70. That is
+worse than `pspline_arpls`'s 1.11 max and better than every form before it
+(`split` −5.69/−6.10, `anchored` −8.13/−8.77). Finding 44 says why: even at
+`ns3` those files supply only 5 and 3 classified samples in that window, so most
+of it is still carried by the penalty.
+
+**The interior of the segment is held, by nothing.** §14.10.1 removed the third
+lower anchor at 1800 and `LOWER_MID_PROBE_CM1` has measured what that cost ever
+since: with two anchors the correction is exact at both ends and the middle
+drifts. The continuation lands **+0.76 to +1.46% of range on all six**, where
+`split` sits at −8.0 / −8.2 on the pre-crossing files and `anchored` at
+−10.4 / −10.8. Nothing anchors it there — the value comes from the curvature
+penalty carrying the pin across the segment, which is the same mechanism as
+property 1 and the clearest evidence that finding 42's diagnosis was right.
+
+One more result worth keeping:
+
+- **The 1750 edge, which §14.14 said to check before the sweep rather than
+  discover in it.** Checked: at the unmodified classifier the continuation ends
+  +17 to +19% of range off the data on the pre files. At `ns3` that is what
+  finding 45 fixes. The exposure is real and there is no floor available to tie
+  it off — `lower_floor_cm1` raises here, deliberately.
+
+#### Finding 47. Breadth — and this time the wider sample agrees
+
+60 `delta10` files from the same dataset, 53 ungated. The original
+`breadth_files.txt` was a scratchpad file and is gone, so the sample is
+re-derived deterministically: every `delta10` file sorted by name, taken at an
+even stride. Only `int` and the seam are defined without a regime label, so
+`mid` and `und` are not reported — finding 35's shape exactly.
+
+| form | mean \|int\| | median | max | \|seam\| max | \|excess\| max | smaller \|int\| than `split` on |
+|---|---|---|---|---|---|---|
+| `anchored`, no cut | 23.76 | 11.26 | 66.01 | — | — | 1/53 |
+| lower split (§14.9) | 1.94 | 1.35 | 12.01 | 14.96 | 15.22 | — |
+| `pspline_arpls` (§14.12 finding 35) | 0.95 | 0.45 | **4.48** | 12.02 | — | 45/51 |
+| continuation, classifier unchanged | 6.35 | 3.97 | 44.13 | 1.14 | 0.33 | 16/53 |
+| **continuation, `lam` 1e3 + `ns3`** | **0.58** | **0.13** | 9.51 | **1.07** | **0.82** | **51/53** |
+
+Read as constraint 1 (§14.1) and nothing more — *"this does not break the files
+that already work"*. On those terms it passes, and **the breadth sample ranks it
+the same way the judged six do**, which is the thing §14.11 finding 30 warned
+would not happen: 51/53 and 50/53 are not chance, where finding 30's 32/51 was.
+It beats `pspline_arpls` on mean, median and win rate, and loses on the max.
+
+The unmodified-classifier row is finding 44 measured on 53 files rather than 2:
+mean `|int|` 6.35 against 0.58, and better than `split` on only 16/53. **That
+row is the literal form §14.14 proposed**, and on its own it is a regression.
+
+No degenerate or constant baseline in 720 rows, and the degeneracy verdict here
+is `std_distribution`'s own — the continuation reads the classifier's warning
+directly, so unlike finding 35 this is the strong check, not the structural one.
+
+#### What is not settled — and one thing to distrust
+
+- **The judgement is visual and has not been made** (§14.3 finding 4). Nothing
+  is recommended, no default changed. The figures are the four traces the user
+  asked for plus this one.
+- **`num_std: 3.0` works for a reason that is a coincidence.** At 3.0 the
+  classifier calls **all 17** samples of the 1870–1836 band window background on
+  four of the six judged files — exactly the "pure centre-line method" finding 31
+  predicts should fail the pre-crossing regime. It does not fail, because on both
+  pre-crossing files it still classifies **0 of 17** there, as at 1.1. The
+  threshold happens to fall on opposite sides of the same window in the two
+  regimes. **Nothing guarantees that on a file neither regime describes**, and at
+  `num_std` 5.0 it already breaks: `…-017` flips to 17/17 and its `mid` error
+  triples. This is the single largest risk in the section and it is a property of
+  the classifier, not of the continuation.
+- **`int` on the pre-crossing files is unfixed**, at +3.3 to +3.7. Finding 44
+  bounds what more classification can do there: 5 and 3 samples.
+- **Whether the `.0022` depression below 1838 was baseline error at all** is
+  still asserted by the `int ≈ 0` target rather than measured — §14.12's open
+  item, untouched here.
+- **`lam` is not a sharp optimum.** 3e2 and 1e4 are close; 1e3 wins most columns
+  and loses two. Swept 1e1–1e8 on both samples.
+
+#### Where the figures are
+
+`run_name` moved from `four_trace` to `continuation`, so
+`...\baseline_experiments\four_trace` still holds the four-trace figures the
+user judged §14.14 on, unchanged, beside the five-trace set this section is
+read from.
+
+#### Probes
+
+The sweep, the breadth check and the classifier-reach probe were written to the
+session scratchpad and not preserved, on §14.14's precedent. What they produced
+is above; `mid` / `und` / `int`, `seam_excess_jump` and
+`lower_continuation_points` are now table columns, so findings 46 and 47 are
+re-derivable from `uv run python src\utils\ir_fitting\api.py` alone.

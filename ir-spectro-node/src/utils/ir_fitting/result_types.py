@@ -263,6 +263,32 @@ class BaselineTrace:
     section 14.4); it is measured and drawn, not blended away.
     """
 
+    seam_excess_jump: float = float("nan")
+    """:attr:`seam_jump` less the unsplit anchored curve's own step across the
+    same sample pair, in raw units.
+
+    What makes the seam comparable between a form built from two independent
+    curves (spec.md sections 14.9-14.13) and one built by continuing the first
+    (section 14.14). Adjacent samples of a *continuous* curve differ by roughly
+    slope x the ~1.9 cm-1 grid step, so a continuation reports a non-zero
+    ``seam_jump`` while having no discontinuity at all; this is the part that is
+    one.
+    """
+
+    lower_continuation_lam_applied: float | None = None
+    """Curvature penalty the continuation ran with, or ``None`` for every other
+    form (spec.md section 14.14)."""
+
+    lower_continuation_points: int = -1
+    """Samples below the cut the classifier called background -- the
+    continuation's fidelity points, or ``-1`` where no continuation was built.
+
+    Finding 42's number as a per-run column. On ``...-021`` it is 3 over 205
+    cm-1, which is the measured reason the region is under-constrained rather
+    than misclassified; a run returning 0 produced the straight extrapolation of
+    the anchored slope, which looks fitted and is not.
+    """
+
     upper_max_abs_diff: float = float("nan")
     """Largest ``|this - unsplit twin|`` above the cut, or ``nan``.
 

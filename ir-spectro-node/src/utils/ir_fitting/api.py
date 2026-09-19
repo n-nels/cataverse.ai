@@ -33,6 +33,8 @@ from src.utils.ir_fitting.baseline import (
     DEFAULT_WINDOW,
     JUDGED_FILES,
     LOWER_ANCHOR_POINTS_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
+    LOWER_CONTINUATION_LAM,
+    LOWER_CONTINUATION_SETTINGS,
     LOWER_FLOOR_POINT_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_METHOD_CANDIDATE,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_MID_PROBE_CM1,
@@ -42,6 +44,7 @@ from src.utils.ir_fitting.baseline import (
     anchor_data_value,
     band_height,
     gating_extremum,
+    lower_target_metrics,
     overlap_shift,
     signal_range,
 )
@@ -479,6 +482,9 @@ def compare_baselines(
                 split_form=outcome.split_form,
                 segment_edges=outcome.segment_edges,
                 seam_jump=outcome.seam_jump,
+                seam_excess_jump=outcome.seam_excess_jump,
+                lower_continuation_lam_applied=outcome.lower_continuation_lam_applied,
+                lower_continuation_points=outcome.lower_continuation_points,
                 lower_floor_applied=outcome.lower_floor_applied,
                 floor_edges=outcome.floor_edges,
                 floor_seam_jump=outcome.floor_seam_jump,
@@ -569,6 +575,19 @@ def compare_baselines(
                     # variant that asked for a method but had its cut gated, so
                     # this says what ran rather than what was requested.
                     "lower_method": outcome.lower_method_applied,
+                    # The continuation of spec.md 14.14 and the one parameter
+                    # it has. Blank on every other form -- including a variant
+                    # that asked for one but had its cut gated, which is why
+                    # this reads the outcome and not the variant.
+                    "lower_cont_lam": (
+                        ""
+                        if outcome.lower_continuation_lam_applied is None
+                        else f"{outcome.lower_continuation_lam_applied:g}"
+                    ),
+                    # How many classified samples the continuation was fitted
+                    # to (14.14 finding 42). -1 = no continuation; 0 = the
+                    # straight extrapolation of the anchored slope.
+                    "lower_cont_pts": outcome.lower_continuation_points,
                     # Where the lower segment stopped (spec.md 14.13). Blank
                     # means it ran to the ROI floor, which is every variant
                     # through 14.12.
@@ -605,6 +624,15 @@ def compare_baselines(
                         if outcome.split_applied is None
                         else 100 * outcome.seam_jump / variant_range
                     ),
+                    # The seam with the ordinary grid step taken out, so the
+                    # continuation (continuous by construction) and the spliced
+                    # forms can be read in the same column. This is the
+                    # discontinuity; seam_pct_of_range above is not, quite.
+                    "seam_excess_pct_of_range": (
+                        float("nan")
+                        if outcome.split_applied is None
+                        else 100 * outcome.seam_excess_jump / variant_range
+                    ),
                     # The floor's own seam, on the same scale. Not summed with
                     # the cut's: below the floor the curve is the anchored
                     # baseline, so this measures how far the two forms disagree
@@ -614,6 +642,13 @@ def compare_baselines(
                         if outcome.lower_floor_applied is None
                         else 100 * outcome.floor_seam_jump / variant_range
                     ),
+                    # The user's three stated targets for the region below the
+                    # cut (spec.md 14.12). Reported together and never summed:
+                    # each one alone ranks a wrong baseline first (finding 33).
+                    # `mid` targets 0 on post-crossing files; on pre-crossing
+                    # ones the target is `mid_pre_target` in the same column's
+                    # units. `und` targets 0 from below, `int` targets 0.
+                    **lower_target_metrics(wavenumbers, intensity, values),
                     **band_columns,
                     "moved_pct_of_range": trace.moved_pct_of_range,
                     "compared_over": (
@@ -810,7 +845,7 @@ if __name__ == "__main__":
         # with lower_settings, whose keys belong to std_distribution.
         # ------------------------------------------------------------------
         folder_name = "nn1120-4_pd_ceo2_000"
-        run_name = "four_trace"  # change per experiment so runs do not overwrite
+        run_name = "continuation"  # change per experiment so runs do not overwrite
 
         variants = [
             ("current", {}),
@@ -830,10 +865,50 @@ if __name__ == "__main__":
                 anchors=ANCHOR_POINTS_CM1,
                 lower_split_cm1=LOWER_SPLIT_POINT_CM1,
             ),
+            # The C1 continuation of spec.md 14.14: no second baseline below
+            # the cut at all. The anchored curve is continued downward from it
+            # -- value and slope pinned at the two nodes above the cut, the
+            # region below fitted under a curvature penalty to whatever
+            # std_distribution classified there. Built because finding 42
+            # measured the defect as an UNDER-CONSTRAINED curve (3 classified
+            # samples over 205 cm-1 on ...-021), not a misclassified one, which
+            # is why every mask-style fix was a bit-for-bit no-op.
+            #
+            # The variants above are all load-bearing against it: `anchored`
+            # for the containment twin (drop it and upper_max_abs_diff is nan),
+            # and `lower split 1955` because it is the standing preferred form
+            # this has to beat.
+            #
+            # lower_settings here configures the CLASSIFIER, not a second
+            # baseline -- there is none. It is on because at the unmodified
+            # num_std the classifier supplies nothing below ~1910 on the
+            # pre-crossing files, so the continuation extrapolates the whole
+            # `int` window and misses it at every lam (14.15 findings 44/45).
+            # Read LOWER_CONTINUATION_SETTINGS before changing it: what makes
+            # it work is a regime coincidence, not a design property.
+            BaselineVariant(
+                label="lower continuation 1955",
+                anchors=ANCHOR_POINTS_CM1,
+                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+                lower_continuation_lam=LOWER_CONTINUATION_LAM,
+                lower_settings=dict(LOWER_CONTINUATION_SETTINGS),
+            ),
+            # The literal form spec.md 14.14 proposed -- same continuation, the
+            # classifier left alone. Off because it is strictly worse on `int`
+            # (pre |int| 6.17 against 3.70 judged, breadth mean 6.35 against
+            # 0.58) while being no better on `mid` or `und`; kept named because
+            # the difference between the two IS finding 45.
+            # BaselineVariant(
+            #     label="lower continuation 1955 (classifier unchanged)",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_continuation_lam=LOWER_CONTINUATION_LAM,
+            # ),
             # ---- everything below is OFF at the user's instruction ----
             # "i don't want the splice. remove it from consideration. only plot
             # the black, blue, green, orange" -- which is raw / current /
-            # anchored / lower split 1955, the four above. The lower anchors of
+            # anchored / lower split 1955. Those four are all still on; the
+            # continuation above is the fifth, and is the thing under test. The lower anchors of
             # 14.10.1, the pspline_arpls of 14.12 and the 1800 floor of 14.13
             # are all still built and still measured in spec.md; they are out of
             # the figures, not out of the package.
@@ -1030,6 +1105,69 @@ if __name__ == "__main__":
                         f"lower_moved {row['lower_moved_pct']:7.3f}  "
                         f"lo@{row['lower_anchors'] or '-':<16} "
                         f"gated {row['lower_anchors_gated'] or '-':<12} "
+                        f"{row['file']}"
+                    )
+
+        # The three targets the user stated for the region below the cut
+        # (spec.md 14.12), rebuilt as real columns in 14.14 because 14.12 and
+        # 14.13 each re-derived them in a scratchpad probe that was not kept.
+        #
+        # They are printed together and never summed: `irsqr` was the best of 44
+        # methods on `int` alone while sitting 9% of range below where it
+        # belongs (14.12 finding 33). Which `mid` target applies is a REGIME
+        # judgement -- 0 on post-crossing files, `pre` on pre-crossing ones --
+        # so both are shown and neither is subtracted.
+        print(
+            "\nthe three stated targets below the cut, all as % of signal range:\n"
+            "  mid  baseline(1850) - midpoint of the 1866-1838 trough/peak\n"
+            "       target 0 on POST-crossing files; on PRE-crossing ones the\n"
+            "       target is the 'pre' column beside it (the baseline sitting\n"
+            "       on the flanking trough = 'under the base of those peaks')\n"
+            "  und  max(baseline - data) over 1885-1840; target 0 FROM BELOW,\n"
+            "       positive means the baseline cuts into the 1850/1870-1880 bands\n"
+            "  int  mean(data - baseline) over 1838-1750; target 0\n"
+            "Read all three. Each one alone ranks a wrong baseline first.\n"
+        )
+        for item in comparison.files:
+            print(f"  {item.subifg_path.name}  [{item.verdict}]")
+            for trace in item.traces:
+                metrics = lower_target_metrics(
+                    trace.wavenumbers, trace.raw, trace.baseline
+                )
+                print(
+                    f"      mid {metrics['mid']:+7.2f} (pre "
+                    f"{metrics['mid_pre_target']:+6.2f})  "
+                    f"und {metrics['und']:+7.2f}  "
+                    f"int {metrics['int']:+7.2f}   {trace.label}"
+                )
+
+        # The claim 14.14 is built on, and the only column that can check it:
+        # a continuation does not MEET the anchored curve at the cut, it STARTS
+        # from it, so the discontinuity should be zero rather than small. The
+        # raw seam cannot show that -- adjacent samples of a continuous curve
+        # still differ by ~slope x the 1.9 cm-1 grid step.
+        continuations = comparison.table[
+            comparison.table["lower_method"] == "continuation"
+        ]
+        if not continuations.empty:
+            print(
+                "\nseam_excess -- the seam with the ordinary grid step taken "
+                "out, as % of\nsignal range. For a spliced form it is the seam; "
+                "for the continuation it\nis the part that is a genuine "
+                "discontinuity, and it should be ~0.\n'pts' is how many "
+                "classified samples the continuation was fitted to\n(14.14 "
+                "finding 42): 3 on ...-021 is the whole diagnosis, and 0 means "
+                "the\ncurve is the straight extrapolation of the anchored "
+                "slope and nothing more.\n"
+            )
+            for label in checked["variant"].unique():
+                print(f"  {label}")
+                for _, row in checked[checked["variant"] == label].iterrows():
+                    pts = int(row["lower_cont_pts"])
+                    print(
+                        f"    seam {row['seam_pct_of_range']:8.3f}  "
+                        f"excess {row['seam_excess_pct_of_range']:8.3f}  "
+                        f"pts {'-' if pts < 0 else pts:>4}  "
                         f"{row['file']}"
                     )
 

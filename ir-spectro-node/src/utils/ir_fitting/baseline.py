@@ -34,6 +34,7 @@ from typing import Any
 
 import numpy as np
 from pybaselines import Baseline
+from pybaselines.classification import std_distribution
 from scipy.signal import find_peaks
 
 path = Path(__file__).resolve().parents[3]
@@ -295,6 +296,173 @@ are asked for) is exact. Do not read one for the other.
 """
 
 
+LOWER_CONTINUATION_LAM = 1e3
+"""Default curvature penalty for :attr:`BaselineVariant.lower_continuation_lam`
+(spec.md section 14.14).
+
+**Not a default** -- ``lower_continuation_lam`` is ``None`` unless a variant
+asks for it, and nothing in ``config/analysis.yaml`` changed. Named so a sweep
+has a centre to sweep around and the recommended value has one home.
+
+The number is the weight on the squared second difference against a unit weight
+on each classified sample, the same balance ``pybaselines``' Whittaker methods
+use ``lam`` for -- so values in the 1e2-1e8 range read the way they do there.
+It is the form's **only** parameter: everything else about the curve is fixed
+by the two pinned nodes at the cut and by which samples ``std_distribution``
+classified.
+
+**1e3 is where section 14.15 measured it**, swept over seven decades (1e1 to
+1e8) on the judged six and again on the 60-file breadth sample. It is not a
+sharp optimum and it is not recommended as a default -- it wins most of the
+columns and loses two, and the visual call has not been made (section 14.3
+finding 4).
+
+What it trades is stated plainly because the two ends of the range are both
+wrong: small ``lam`` lets the curve chase the ~3-24 classified samples of
+section 14.14 finding 42 and it ripples; large ``lam`` drives the second
+difference to zero and the continuation becomes the straight extrapolation of
+the anchored curve's slope at 1955, which is section 14.7's behaviour below the
+cut written a second way.
+"""
+
+LOWER_CONTINUATION_SETTINGS: dict = {"num_std": 3.0}
+"""The classifier setting the continuation is measured with (spec.md 14.15).
+
+Passed as ``lower_settings`` beside :attr:`BaselineVariant.lower_continuation_lam`.
+**Not a default** -- ``config/analysis.yaml`` is untouched and the live path
+never sees this. Under a continuation ``lower_settings`` configures the
+*classifier* rather than a second baseline, so this is the one lever on
+section 14.14 finding 42 that stays inside the form.
+
+**What it is for.** At the unmodified ``num_std`` of 1.1 the classifier supplies
+**nothing below ~1910** on both pre-crossing files -- zero samples in the whole
+1838-1750 window section 14.12's ``int`` is measured over (section 14.15
+finding 44). The continuation then extrapolates the last ~160 cm-1 under its
+curvature penalty alone, which is why ``int`` misses by +5.6 to +6.6% of range
+at *every* ``lam`` across seven decades. At 3.0 the classifier reaches to
+~1807, and ``int`` comes back.
+
+**The risk, stated because it is contingent and not designed.** ``num_std``
+raises the tolerance for calling a sample background, so a larger value
+classifies *more* of the spectrum -- the opposite direction from a mask. At 3.0
+it calls **all 17** samples of the 1870-1836 band window background on four of
+the six judged files, which is precisely the "pure centre-line method" section
+14.12 finding 31 predicts should fail the pre-crossing regime. It does not fail,
+for one measured reason: on both pre-crossing files it still classifies **0 of
+17** there, exactly as at 1.1. So the threshold happens to fall on opposite
+sides of the same window in the two regimes, and the form's shape-adaptivity
+survives *because of* that coincidence rather than in spite of it. Nothing here
+guarantees it holds on a file neither regime describes. At 5.0 it breaks --
+``...-017`` flips to 17/17 and its ``mid`` error triples (finding 46).
+"""
+
+MID_PROBE_CM1 = 1850.0
+"""Where the dispersive feature's midpoint target is read (spec.md 14.12).
+
+**Interpolated, not sampled.** The grid step is ~1.93 cm-1 and the nearest
+samples are 1851.3 and 1849.4, so ``baseline(1850)`` is a linear interpolation
+between them on the steepest part of the feature -- the same sub-sample caveat
+section 14.10 finding 20 raised for the anchor at 1955. The trough and peak
+:data:`MID_EXTREMA_WINDOW_CM1` supplies are sampled, so only this half of the
+comparison is interpolated.
+"""
+
+MID_EXTREMA_WINDOW_CM1: Window = (1866.0, 1838.0)
+"""``(high, low)`` the ~1850 feature's trough and peak are taken from."""
+
+UND_WINDOW_CM1: Window = (1885.0, 1840.0)
+"""``(high, low)`` over which ``max(baseline - data)`` is read.
+
+Covers the 1850 and 1870-1880 bands, which the user asked the baseline to run
+*under* the base of (spec.md 14.12).
+"""
+
+INT_WINDOW_CM1: Window = (1838.0, 1750.0)
+"""``(high, low)`` over which ``mean(data - baseline)`` is read.
+
+**1838, not 1860**: the top edge excludes the ~1850 feature, which is what keeps
+this out of section 14.10.1 finding 24's trap -- a signed residual over a window
+containing a negative-going band rewards a baseline pulled down onto it. The
+1795/1775 bands are counted *in*, on the user's instruction (spec.md 14.12).
+"""
+
+
+def lower_target_metrics(
+    wavenumbers: np.ndarray,
+    raw: np.ndarray,
+    baseline: np.ndarray,
+) -> dict[str, float]:
+    """The three targets the user stated for the region below the cut.
+
+    Rebuilt here rather than in a probe script because sections 14.12, 14.13 and
+    14.14 each needed them and each re-derived them: the probes behind them were
+    written to a scratchpad and not preserved (spec.md 14.14, closing note).
+
+    Every value is a **percentage of the file's signal range**, so they read on
+    the same scale as ``moved_pct_of_range`` and ``seam_pct_of_range``.
+
+    Returns a dict of:
+
+    - ``mid`` -- ``baseline(1850) - (trough + peak)/2`` over
+      :data:`MID_EXTREMA_WINDOW_CM1`. Target **0 on post-crossing files**: the
+      baseline through the midpoint of the dispersive feature.
+    - ``mid_pre_target`` -- ``-(peak - trough)/2``, what ``mid`` reads when the
+      baseline sits on the flanking trough. That is what *"under the base of
+      those peaks"* means in ``mid``'s units, so it is the target for
+      **pre-crossing** files. Reported beside ``mid`` rather than subtracted
+      from it: which target applies is a regime judgement, not a measurement.
+    - ``und`` -- ``max(baseline - data)`` over :data:`UND_WINDOW_CM1`. Target
+      **0 approached from below**; positive means the baseline cuts into the
+      bands.
+    - ``int`` -- ``mean(data - baseline)`` over :data:`INT_WINDOW_CM1`. Target
+      **0** on every file.
+
+    **Never sum them and never quote one alone.** Section 14.12 finding 33 has
+    the worked case: ``irsqr`` is the best of 44 methods on ``int`` while
+    sitting 9% of range below where it belongs, because a strict lower envelope
+    games a signed mean. They are three separate statements about where the
+    curve should be, and a form is judged on all three at once (spec.md
+    section 0's trap list).
+    """
+    scale = signal_range(raw)
+    ascending = np.argsort(wavenumbers)
+    x_sorted = wavenumbers[ascending]
+
+    mid_hi, mid_lo = MID_EXTREMA_WINDOW_CM1
+    feature = (wavenumbers <= mid_hi) & (wavenumbers >= mid_lo)
+    if feature.any():
+        trough = float(raw[feature].min())
+        peak = float(raw[feature].max())
+        fitted = float(np.interp(MID_PROBE_CM1, x_sorted, baseline[ascending]))
+        mid = 100 * (fitted - 0.5 * (trough + peak)) / scale
+        mid_pre_target = -100 * 0.5 * (peak - trough) / scale
+    else:
+        mid = mid_pre_target = float("nan")
+
+    und_hi, und_lo = UND_WINDOW_CM1
+    under = (wavenumbers <= und_hi) & (wavenumbers >= und_lo)
+    und = (
+        100 * float(np.max(baseline[under] - raw[under])) / scale
+        if under.any()
+        else float("nan")
+    )
+
+    int_hi, int_lo = INT_WINDOW_CM1
+    flat = (wavenumbers <= int_hi) & (wavenumbers >= int_lo)
+    integral = (
+        100 * float(np.mean(raw[flat] - baseline[flat])) / scale
+        if flat.any()
+        else float("nan")
+    )
+
+    return {
+        "mid": mid,
+        "mid_pre_target": mid_pre_target,
+        "und": und,
+        "int": integral,
+    }
+
+
 @dataclass
 class BaselineOutcome:
     """What :meth:`BaselineVariant.compute` produced, and how.
@@ -416,6 +584,45 @@ class BaselineOutcome:
     :attr:`seam_jump` -- measured, not blended away. Below the floor the curve
     is the anchored full-ROI baseline, so this is also the size of the
     disagreement between the two forms at that point.
+    """
+
+    lower_continuation_lam_applied: float | None = None
+    """The curvature penalty the continuation of spec.md section 14.14 ran with.
+
+    ``None`` when no continuation was built -- which is every variant before
+    14.14, and also a variant that asked for one but had its cut gated.
+    Reported rather than inferred from the variant for
+    :attr:`lower_method_applied`'s reason.
+    """
+
+    lower_continuation_points: int = -1
+    """How many samples below the cut ``std_distribution`` classified as
+    background, i.e. how many fidelity points the continuation was fitted to.
+
+    ``-1`` when no continuation was built. **This is finding 42's number, made
+    a per-run column.** It is the whole diagnosis of the region below the cut:
+    on ``...-021`` it is 3 over a 205 cm-1 span, and a continuation fitted to 3
+    points is carried almost entirely by its curvature penalty. A run where this
+    comes back 0 produced the straight extrapolation of the anchored slope and
+    nothing else -- a curve that looks fitted and is not.
+    """
+
+    seam_excess_jump: float = float("nan")
+    """:attr:`seam_jump` minus the unsplit anchored curve's own step across the
+    same sample pair, in raw units.
+
+    The column that makes the seam comparable **across forms**, which
+    :attr:`seam_jump` alone is not. No two adjacent samples of a continuous
+    curve have equal values -- the grid step is ~1.9 cm-1 -- so a form that is
+    continuous at the cut still reports a non-zero ``seam_jump`` of roughly
+    slope x step. Subtracting what the anchored baseline does across that same
+    pair leaves the part that is a genuine *discontinuity*.
+
+    For two independently computed segments (sections 14.9-14.13) this is
+    within rounding of ``seam_jump`` itself, because the two curves have no
+    relation. For section 14.14's continuation it is the number to read: the
+    claim is that it goes to zero by construction, and this is where that is
+    checked rather than asserted.
     """
 
     split_form: str = ""
@@ -595,6 +802,49 @@ class BaselineVariant:
             validated here: ``pybaselines`` raises a ``TypeError`` on an unknown
             keyword, which is already loud, and the accepted keywords differ per
             method so there is no key list to check against.
+        lower_continuation_lam: Curvature penalty for the **C1 continuation**
+            of spec.md section 14.14, or ``None`` -- the default -- for the
+            second independent ``create_baseline`` every section through
+            14.13 measured. Requires ``lower_split_cm1``; must be strictly
+            positive.
+
+            This changes the lower segment's *construction*, which is the
+            knob no earlier section turned: 14.11 varied
+            ``std_distribution``'s parameters, 14.12 its algorithm, 14.10
+            the anchors on top of it -- all of them a **second,
+            independent** curve spliced on at the cut. Here there is no
+            second curve. The anchored full-ROI baseline is **continued
+            downward** from the cut: its value *and* its slope there are
+            pinned -- as the two grid nodes just above the cut, so the pin
+            is exact and needs no sign convention -- and below them the
+            curve is the penalised least-squares fit to whatever
+            ``std_distribution`` classified as background, with this as the
+            weight on its squared second difference.
+
+            The point is section 14.14 finding 42: on ``...-021`` the lower
+            segment rests on **3** classified samples over 205 cm-1, so the
+            defect is an **under-constrained** curve rather than a
+            misclassified one -- which is why every mask-style fix
+            (``weights``, a curvature or peak-list mask) measured as a
+            bit-for-bit no-op there. A starting value, a starting slope and
+            a stated amount of allowed bend are exactly the constraints
+            that are missing. See :data:`LOWER_CONTINUATION_LAM`.
+
+            Mutually exclusive with ``lower_method`` (that *is* the second
+            curve), ``lower_anchors`` (an affine correction applied on top
+            would shift and tilt the curve away from the value and slope it
+            was pinned to) and ``lower_floor_cm1`` (a continuation has no
+            independent segment to tie off, and a floor would reintroduce
+            the second interface section 14.13.1 removed).
+
+            ``lower_settings`` **is** accepted, and this is the one place
+            its meaning differs from its docstring above: there is no
+            second baseline for it to configure, so it configures the
+            **classifier** that supplies the continuation's fidelity points
+            -- which samples below the cut count as background. That is the
+            same object those keys always named, reached one step earlier,
+            and finding 42 is what makes it the interesting lever here
+            rather than a leftover.
     """
 
     label: str
@@ -608,6 +858,7 @@ class BaselineVariant:
     lower_method: str | None = None
     lower_method_kwargs: dict = field(default_factory=dict)
     lower_floor_cm1: float | None = None
+    lower_continuation_lam: float | None = None
 
     @classmethod
     def coerce(cls, item: BaselineVariant | tuple) -> BaselineVariant:
@@ -619,13 +870,13 @@ class BaselineVariant:
         """
         if isinstance(item, cls):
             return item
-        if not isinstance(item, (tuple, list)) or not 2 <= len(item) <= 11:
+        if not isinstance(item, (tuple, list)) or not 2 <= len(item) <= 12:
             raise TypeError(
                 "each variant must be a BaselineVariant or a "
                 "(label, settings[, window[, anchors[, split_cm1"
                 "[, lower_split_cm1[, lower_anchors[, lower_settings"
                 "[, lower_method[, lower_method_kwargs"
-                "[, lower_floor_cm1]]]]]]]]]) "
+                "[, lower_floor_cm1[, lower_continuation_lam]]]]]]]]]]) "
                 f"tuple; got {item!r}. Past the 5th slot the keyword form "
                 "BaselineVariant(label=..., lower_split_cm1=...) reads better "
                 "-- positional tuples were for the two-element case."
@@ -780,6 +1031,63 @@ class BaselineVariant:
                     "of LOWER_ANCHOR_POINTS_CM1 ends at the ROI floor, so a "
                     "floored variant wanting the same idea asks for "
                     "(lower_split_cm1, lower_floor_cm1) instead."
+                )
+
+        if self.lower_continuation_lam is not None:
+            if self.lower_split_cm1 is None:
+                raise ValueError(
+                    f"variant {self.label!r} declares lower_continuation_lam "
+                    f"{self.lower_continuation_lam} but no lower_split_cm1. The "
+                    "continuation starts *at* the cut -- without one there is "
+                    "nothing to continue from and nothing below to continue "
+                    "into, and silently ignoring it would look exactly like a "
+                    "penalty that changed nothing. Pass "
+                    "lower_split_cm1=LOWER_SPLIT_POINT_CM1."
+                )
+            object.__setattr__(
+                self, "lower_continuation_lam", float(self.lower_continuation_lam)
+            )
+            if not (
+                np.isfinite(self.lower_continuation_lam)
+                and self.lower_continuation_lam > 0
+            ):
+                raise ValueError(
+                    f"variant {self.label!r}: lower_continuation_lam must be a "
+                    f"finite positive weight; got {self.lower_continuation_lam}. "
+                    "At 0 the curvature penalty vanishes and the fit is "
+                    "undetermined wherever the classifier supplied no points -- "
+                    "which on the .0022 files is most of the segment (spec.md "
+                    "14.14 finding 42). See LOWER_CONTINUATION_LAM."
+                )
+            if self.lower_method is not None:
+                raise ValueError(
+                    f"variant {self.label!r} sets both lower_continuation_lam "
+                    f"and lower_method={self.lower_method!r}. They are two "
+                    "answers to the same question: lower_method computes a "
+                    "second, independent baseline below the cut (spec.md 14.12), "
+                    "and the continuation is the form that computes none. "
+                    "Declare them as two variants and compare."
+                )
+            if self.lower_anchors:
+                raise ValueError(
+                    f"variant {self.label!r} sets both lower_continuation_lam "
+                    f"and lower_anchors {self.lower_anchors}. The anchors are an "
+                    "affine correction applied *after* the lower curve is built, "
+                    "so they would shift and tilt it away from the value and "
+                    "slope it was pinned to at the cut -- destroying the one "
+                    "property this form exists for. Drop one of the two."
+                )
+            if self.lower_floor_cm1 is not None:
+                raise ValueError(
+                    f"variant {self.label!r} sets both lower_continuation_lam "
+                    f"and lower_floor_cm1={self.lower_floor_cm1:.0f}. The floor "
+                    "ties off an independent segment so its algorithm stops "
+                    "seeing the ROI edge (spec.md 14.13); a continuation has no "
+                    "independent segment, and stopping it early would leave the "
+                    "anchored baseline standing below it behind a second "
+                    "interface -- the thing 14.13.1 removed from consideration. "
+                    "The 1750 edge is a real exposure here, and is measured "
+                    "rather than floored."
                 )
 
     def resolved_lower_settings(self, voigt_settings: dict | None = None) -> dict:
@@ -1078,7 +1386,25 @@ class BaselineVariant:
         # Step 3. The lower segment takes the current baseline's own parameters
         # -- not this variant's -- unless lower_settings overrides them, or
         # lower_method replaces the algorithm outright (spec.md 14.12).
-        if self.lower_method is not None:
+        continuation_points = -1
+        if self.lower_continuation_lam is not None:
+            # Not a second baseline: the anchored curve, continued (14.14).
+            # `outcome.values` and not `values` -- the pin has to be taken from
+            # the curve the splice will sit beside, which is the one the affine
+            # correction has already been applied to.
+            lower_values, lower_degenerate, continuation_points = (
+                self._segment_continuation(
+                    wavenumbers,
+                    intensity,
+                    outcome.values,
+                    upper,
+                    lower,
+                    self.resolved_lower_settings(voigt_settings),
+                )
+            )
+            method_applied = "continuation"
+            degeneracy_checked = True
+        elif self.lower_method is not None:
             lower_values, lower_degenerate = self._segment_pybaselines(
                 wavenumbers[lower], intensity[lower]
             )
@@ -1149,6 +1475,13 @@ class BaselineVariant:
             for name, flag in (("full", degenerate), ("lower", lower_degenerate))
             if flag
         )
+        # What the unsplit anchored curve does across the same sample pair. A
+        # continuous curve still steps by ~slope x 1.9 cm-1 there, so this is
+        # what has to come off seam_jump before two forms can be compared on it
+        # (BaselineOutcome.seam_excess_jump).
+        anchored_step = float(
+            outcome.values[upper_edge] - outcome.values[lower_edge]
+        )
         return BaselineOutcome(
             values=spliced,
             degenerate=bool(segments),
@@ -1163,13 +1496,159 @@ class BaselineVariant:
                 float(wavenumbers[lower_edge]),
             ),
             seam_jump=float(spliced[upper_edge] - spliced[lower_edge]),
+            seam_excess_jump=float(
+                spliced[upper_edge] - spliced[lower_edge] - anchored_step
+            ),
             degenerate_segments=segments,
+            lower_continuation_lam_applied=self.lower_continuation_lam,
+            lower_continuation_points=continuation_points,
             lower_method_applied=method_applied,
             lower_method_degeneracy_checked=degeneracy_checked,
             lower_floor_applied=floor,
             floor_edges=floor_edges,
             floor_seam_jump=floor_seam,
         )
+
+    def _segment_continuation(
+        self,
+        wavenumbers: np.ndarray,
+        intensity: np.ndarray,
+        anchored: np.ndarray,
+        upper: np.ndarray,
+        lower: np.ndarray,
+        settings: dict,
+    ) -> tuple[np.ndarray, bool, int]:
+        """Continue the anchored baseline below the cut (spec.md section 14.14).
+
+        The third sibling of :meth:`_segment_baseline` and
+        :meth:`_segment_pybaselines`, and the one that is **not** a second
+        baseline. Those two compute an independent curve on the sub-array and
+        hand it back to be spliced on; this one extends the curve that is
+        already there.
+
+        **The pin is two grid nodes, not a value and a derivative.** The node
+        array is the two lowest-wavenumber samples *above* the cut followed by
+        every sample below it -- one contiguous run of the original grid. The
+        first two nodes are held at the anchored baseline's own values there.
+        Holding two adjacent nodes fixes the curve's value and its slope at the
+        join exactly, on the grid the seam is measured on, which is why nothing
+        here has to reason about the sign of a derivative on a descending axis
+        (spec.md section 0's first trap).
+
+        **The fit.** With ``b`` the node values, ``m`` the samples
+        ``std_distribution`` classified as background below the cut, and ``D2``
+        the second-difference operator on the node grid::
+
+            minimise  sum_m (b - y)^2  +  lam * ||D2 b||^2
+            subject to  b[0] = anchored[0],  b[1] = anchored[1]
+
+        solved as one small dense least-squares problem in the ``n - 2`` free
+        nodes (``n`` is ~108, so there is nothing to gain from a banded solver).
+        ``D2`` uses the exact non-uniform three-point second-derivative weights
+        scaled by the mean spacing squared, so on a uniform grid it is exactly
+        ``[1, -2, 1]`` and ``lam`` reads as it does in ``pybaselines``' Whittaker
+        methods -- while staying correct if the grid is not quite uniform.
+
+        **With no classified samples at all the system is still determined**, and
+        determined as the straight line continuing the anchored slope: the
+        constrained ``D2`` block alone is square and triangular. That is the
+        honest degenerate case rather than a failure, and it is reported through
+        the returned count rather than inferred -- a curve carried entirely by
+        its penalty looks fitted and is not.
+
+        Returns:
+            ``(values below the cut, degenerate, number of fidelity points)``.
+        """
+        lam = float(self.lower_continuation_lam)
+
+        upper_idx = np.flatnonzero(upper)
+        lower_idx = np.flatnonzero(lower)
+        if upper_idx.size < 2:
+            raise ValueError(
+                f"variant {self.label!r}: the continuation pins the two samples "
+                f"above the cut at {float(self.lower_split_cm1):.0f} and only "
+                f"{int(upper_idx.size)} is available; a single node fixes a value "
+                "but not a slope, which is the whole construction"
+            )
+        # Wavenumbers descend, so `upper` is a prefix and its last two entries
+        # are the ones nearest the cut -- the tail, never the head (spec.md 0).
+        join_idx = upper_idx[-2:]
+        node_idx = np.concatenate([join_idx, lower_idx])
+        x = wavenumbers[node_idx]
+        n = int(node_idx.size)
+
+        # Which samples below the cut the classifier calls background. Read from
+        # std_distribution directly because create_baseline discards the mask --
+        # it returns (corrected, baseline), not (mask, baseline).
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _, params = std_distribution(
+                intensity[lower],
+                half_window=settings.get("half_window", 10),
+                interp_half_window=settings.get("interp_half_window", 5),
+                fill_half_window=settings.get("fill_half_window", 6),
+                num_std=settings.get("num_std", 1.1),
+                smooth_half_window=settings.get("smooth_half_window"),
+                weights=settings.get("weights"),
+            )
+        classifier_degenerate = any(
+            DEGENERATE_WARNING in str(item.message) for item in caught
+        )
+        mask = np.asarray(params["mask"], dtype=bool)
+        # Node positions of the fidelity points: the lower samples start at 2.
+        fit_nodes = 2 + np.flatnonzero(mask)
+        n_fit = int(fit_nodes.size)
+
+        # Second-difference rows, non-uniform and scaled to the uniform [1,-2,1].
+        spacing = float(np.mean(np.abs(np.diff(x))))
+        rows = np.zeros((n - 2, n), dtype=float)
+        for i in range(1, n - 1):
+            h_a = abs(x[i] - x[i - 1])
+            h_b = abs(x[i + 1] - x[i])
+            scale = spacing * spacing * 2.0 / (h_a + h_b)
+            rows[i - 1, i - 1] = scale / h_a
+            rows[i - 1, i] = -scale * (1.0 / h_a + 1.0 / h_b)
+            rows[i - 1, i + 1] = scale / h_b
+
+        design = np.zeros((n_fit + n - 2, n), dtype=float)
+        target = np.zeros(n_fit + n - 2, dtype=float)
+        if n_fit:
+            design[np.arange(n_fit), fit_nodes] = 1.0
+            target[:n_fit] = intensity[lower][mask]
+        design[n_fit:] = np.sqrt(lam) * rows
+
+        pinned = anchored[join_idx]
+        free, _, rank, _ = np.linalg.lstsq(
+            design[:, 2:], target - design[:, :2] @ pinned, rcond=None
+        )
+        values = np.concatenate([pinned, free])[2:]
+
+        if n_fit == 0:
+            LOGGER.warning(
+                "variant %r: std_distribution classified no background samples "
+                "below the cut, so the continuation is the straight "
+                "extrapolation of the anchored slope and nothing more",
+                self.label,
+            )
+        if rank < n - 2:
+            LOGGER.warning(
+                "variant %r: the continuation system is rank %d of %d; the "
+                "curve is a least-norm solution, not a determined fit",
+                self.label, int(rank), n - 2,
+            )
+        degenerate = bool(
+            classifier_degenerate
+            or not np.all(np.isfinite(values))
+            or np.ptp(values) == 0.0
+        )
+        if degenerate:
+            LOGGER.warning(
+                "variant %r: the continuation below the cut is degenerate "
+                "(classifier found no baseline points, or the curve is "
+                "non-finite or flat); it is not meaningful",
+                self.label,
+            )
+        return values, degenerate, n_fit
 
     def _segment_pybaselines(
         self,
