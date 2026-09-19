@@ -55,7 +55,7 @@ Written high-to-low because that is the order the instrument writes and the
 order the plots display.
 """
 
-TRUNCATED_WINDOW_1800: Window = (2250.0, 1800.0)
+TRUNCATED_WINDOW_1790: Window = (2250.0, 1790.0)
 """``(high, low)`` cm-1 -- the full ROI with its bottom 50 cm-1 removed.
 
 A **window**, so it reaches the one thing a floor cannot: ``create_baseline``
@@ -65,23 +65,23 @@ therefore changes the baseline *everywhere*, not just below 1800 -- which is
 the point, and is why this cannot be read off section 14.13's figures.
 
 **Three earlier things sit at 1800 or at truncation, and this is none of them.**
-Confusing them is the likeliest misreading of section 14.16:
+Confusing them is the likeliest misreading of sections 14.16-14.17:
 
-- :data:`LOWER_FLOOR_POINT_CM1` is also 1800, but is a *floor on a split form*
+- :data:`LOWER_FLOOR_POINT_CM1` is 1800, but is a *floor on a split form*
   (section 14.13): the second baseline stops there and the anchored full-ROI
   curve -- computed over the whole 2250-1750 array -- stands below it. Here
   there is no second baseline and nothing below 1800 at all.
-- :data:`LOWER_MID_PROBE_CM1` is also 1800 and is a diagnostic readout
-  (section 14.10.1). Under this window it lands on the array edge, so the
-  probe's number stops being an interior measurement for this variant.
+- :data:`LOWER_MID_PROBE_CM1` is 1800 and is a diagnostic readout
+  (section 14.10.1). Under this window it remains just inside the array, so it
+  is still an interior measurement for this variant.
 - Section 14.6 finding 7's rejected truncation was **bare** and at **1955** --
-  no anchors, and 205 cm-1 lower. Anchors plus truncation at 1800 is a
+  no anchors, and 205 cm-1 lower. Anchors plus truncation at 1790 is a
   combination section 14 has not run, and finding 7 does not rule it out.
 
 **The 1795/1775 bands leave the array**, as they do under the floor -- the
 reading section 14.12 confirmed with the user. One measurement consequence
 follows and is reported rather than assumed: :data:`INT_WINDOW_CM1` is
-1838-1750, so a variant on this window has ``int`` over 1838-1800 only, ~40% of
+1838-1750, so a variant on this window has ``int`` over 1838-1790 only, ~45% of
 the samples the full-ROI variants average over. It is a different statistic
 under the same column name -- the run prints its sample count beside it, and
 section 14.16 does not rank it against the others.
@@ -157,6 +157,19 @@ without re-reading that subsection.
 Anchoring is **not** truncation -- the array stays 1750-2250 and the baseline
 keeps the shape ``std_distribution`` gave it; only an affine correction is added
 (section 14.7).
+"""
+
+TRUNCATED_ANCHOR_POINTS_1790_CM1: tuple[float, ...] = (
+    *ANCHOR_POINTS_CM1,
+    TRUNCATED_WINDOW_1790[1],
+)
+"""Anchors for the selected single-baseline ``2250-1790`` experiment.
+
+The three calibrated anchors remain above the cutoff, while the fourth anchor is
+at the truncated window's low edge. This is deliberately separate from
+:data:`ANCHOR_POINTS_CM1`: the full-ROI baseline and production defaults retain
+the established three-anchor correction. The edge anchor is used only for the
+truncated variant (spec.md section 14.18).
 """
 
 ANCHOR_GUARD_CM1 = 25.0
@@ -418,12 +431,12 @@ containing a negative-going band rewards a baseline pulled down onto it. The
 1795/1775 bands are counted *in*, on the user's instruction (spec.md 14.12).
 """
 
-INT_SHARED_WINDOW_CM1: Window = (1838.0, 1800.0)
-"""``(high, low)`` -- :data:`INT_WINDOW_CM1` clipped to what a 1800-truncated
+INT_SHARED_WINDOW_CM1: Window = (1838.0, 1790.0)
+"""``(high, low)`` -- :data:`INT_WINDOW_CM1` clipped to what a 1790-truncated
 variant also covers.
 
 Exists because ``int`` is otherwise **not comparable across a window change**
-(spec.md 14.16). A variant on :data:`TRUNCATED_WINDOW_1800` keeps only 1838-1800
+(spec.md 14.18). A variant on :data:`TRUNCATED_WINDOW_1790` keeps only 1838-1790
 of the ``int`` window, so its ``int`` averages ~20 samples where a full-ROI
 variant averages ~46: the same column name over a different statistic, which is
 exactly the kind of silent mismatch section 0's trap list is about.
@@ -435,7 +448,7 @@ section had to rebuild ``mid``/``und``/``int`` because 14.12, 14.13 and 14.14
 each re-derived them in a scratchpad that was not kept, and section 14.16's
 load-bearing comparison would have been the fourth.
 
-Read it *beside* ``int``, never instead of it: it says nothing about 1800-1750,
+Read it *beside* ``int``, never instead of it: it says nothing about 1790-1750,
 which is where section 14.12's edge artefact lived and where a truncated variant
 has no baseline at all.
 """
@@ -719,9 +732,13 @@ class BaselineOutcome:
                 f"SPLIT GATED {split:.0f} (band at {where:.0f}, p={prominence:.2f})"
             )
         if self.anchors_applied:
-            parts.append("anchored " + "/".join(f"{a:.0f}" for a in self.anchors_applied))
+            parts.append(
+                "anchored " + "/".join(f"{a:.0f}" for a in self.anchors_applied)
+            )
         for anchor, where, prominence in self.anchors_gated:
-            parts.append(f"GATED {anchor:.0f} (band at {where:.0f}, p={prominence:.2f})")
+            parts.append(
+                f"GATED {anchor:.0f} (band at {where:.0f}, p={prominence:.2f})"
+            )
         if self.lower_anchors_applied:
             parts.append(
                 "lower-anchored "
@@ -1251,7 +1268,10 @@ class BaselineVariant:
             LOGGER.debug(
                 "variant %r: split at %.0f gated by a band at %.0f (prominence "
                 "%.2f of signal range); falling back to one segment",
-                self.label, self.split_cm1, split_hit[0], split_hit[1],
+                self.label,
+                self.split_cm1,
+                split_hit[0],
+                split_hit[1],
             )
             values, degenerate = self._segment_baseline(intensity, settings, "")
             if self.anchors:
@@ -1413,7 +1433,10 @@ class BaselineVariant:
                 "variant %r: lower split at %.0f gated by a band at %.0f "
                 "(prominence %.2f of signal range); returning the anchored "
                 "full-ROI baseline unchanged",
-                self.label, cut, split_hit[0], split_hit[1],
+                self.label,
+                cut,
+                split_hit[0],
+                split_hit[1],
             )
             outcome.split_gated = (cut, float(split_hit[0]), float(split_hit[1]))
             outcome.split_form = "lower_only"
@@ -1533,9 +1556,7 @@ class BaselineVariant:
         # continuous curve still steps by ~slope x 1.9 cm-1 there, so this is
         # what has to come off seam_jump before two forms can be compared on it
         # (BaselineOutcome.seam_excess_jump).
-        anchored_step = float(
-            outcome.values[upper_edge] - outcome.values[lower_edge]
-        )
+        anchored_step = float(outcome.values[upper_edge] - outcome.values[lower_edge])
         return BaselineOutcome(
             values=spliced,
             degenerate=bool(segments),
@@ -1688,7 +1709,9 @@ class BaselineVariant:
             LOGGER.warning(
                 "variant %r: the continuation system is rank %d of %d; the "
                 "curve is a least-norm solution, not a determined fit",
-                self.label, int(rank), n - 2,
+                self.label,
+                int(rank),
+                n - 2,
             )
         degenerate = bool(
             classifier_degenerate
@@ -2003,11 +2026,15 @@ def apply_anchors(
     ascending = np.argsort(wavenumbers)
     grid_w = wavenumbers[ascending]
     grid_b = baseline[ascending]
-    guard_w = wavenumbers if guard_wavenumbers is None else np.asarray(
-        guard_wavenumbers, dtype=float
+    guard_w = (
+        wavenumbers
+        if guard_wavenumbers is None
+        else np.asarray(guard_wavenumbers, dtype=float)
     )
-    guard_y = intensity if guard_intensity is None else np.asarray(
-        guard_intensity, dtype=float
+    guard_y = (
+        intensity
+        if guard_intensity is None
+        else np.asarray(guard_intensity, dtype=float)
     )
     tolerance = float(np.median(np.diff(grid_w))) if grid_w.size > 1 else 0.0
 
@@ -2024,7 +2051,9 @@ def apply_anchors(
             gated.append((float(anchor), hit[0], hit[1]))
             continue
         value = anchor_data_value(guard_w, guard_y, anchor)
-        residuals.append((float(anchor), value - float(np.interp(anchor, grid_w, grid_b))))
+        residuals.append(
+            (float(anchor), value - float(np.interp(anchor, grid_w, grid_b)))
+        )
         applied.append(float(anchor))
 
     if not residuals:
@@ -2044,7 +2073,10 @@ def apply_anchors(
             LOGGER.debug(
                 "variant %r: anchor %.0f gated by a band at %.0f (prominence "
                 "%.2f of signal range)",
-                label, anchor, where, fraction,
+                label,
+                anchor,
+                where,
+                fraction,
             )
 
     return BaselineOutcome(

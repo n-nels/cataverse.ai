@@ -3468,3 +3468,40 @@ columns, because §14.12's and §14.15's forms are commented out of `__main__` a
 the user's *"no split"* instruction. Uncomment those two variants and re-run
 with `plot=False` to get the two right-hand columns back; the figures are
 deliberately left as the three traces plus raw that were asked for.
+
+### 14.17 Edge anchor at 1800 — selected for the truncated experiment
+
+The latest experiment remains the single anchored baseline on
+`TRUNCATED_WINDOW_1800 = (2250, 1800)`: no split, no second baseline, and no
+production-ROI change. The user selected one additional anchor at the cutoff,
+so the truncated variant now uses
+`TRUNCATED_ANCHOR_POINTS_1800_CM1 = (2240, 2006, 1955, 1800)`.
+
+This is intentionally **not** a change to `ANCHOR_POINTS_CM1`. The full-ROI
+`anchored` variant remains the three-anchor twin required to attribute movement
+to truncation, and production defaults remain unchanged. The 1800 point is an
+edge anchor: the truncated data array's lowest available sample is just above
+1800, so its data estimate is a short one-sided local fit at the cutoff rather
+than an interior measurement. The existing prominence guard runs on the
+truncated array and the anchor is reported through `anchors_applied` or
+`anchors_gated` like the other points.
+
+The figures and comparison table must be re-run before judging the change. In
+particular, compare the new truncated form against the unchanged `anchored`
+twin, and keep the guard files separate: removing 1800–1750 also removes the
+low bands that previously influenced their signal range.
+
+### 14.18 Live trial: edge anchor at 1790
+
+The next trial changes the live experiment from the measured 1800 cutoff to a
+1790 cutoff so that an anchor at 1790 is inside the fitted array. The production
+ROI and the full-ROI `anchored` twin remain unchanged. The live variant is now
+named `anchored 1790`, uses `TRUNCATED_WINDOW_1790 = (2250, 1790)`, and has
+anchors `(2240, 2006, 1955, 1790)`.
+
+The live `int_shared` comparison window moves with it to `1838–1790`; the
+earlier `1838–1800` values in §14.16 remain historical measurements.
+
+This section records an experiment request, not a result. The plots and the
+comparison table must be regenerated before interpreting the effect; the
+historical 1800 measurements above remain the reference for comparison.

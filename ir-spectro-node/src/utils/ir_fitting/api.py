@@ -42,7 +42,8 @@ from src.utils.ir_fitting.baseline import (
     LOWER_MID_PROBE_CM1,
     LOWER_SPLIT_POINT_CM1,
     SPLIT_POINT_CM1,  # noqa: F401 -- for the commented-out split variant in __main__
-    TRUNCATED_WINDOW_1800,
+    TRUNCATED_ANCHOR_POINTS_1790_CM1,
+    TRUNCATED_WINDOW_1790,
     BaselineVariant,
     anchor_data_value,
     band_height,
@@ -514,11 +515,10 @@ def compare_baselines(
                         "upper_max_abs_diff and lower_moved_pct are nan. Add the "
                         "unsplit twin (e.g. the 'anchored' variant) to check that "
                         "the region above the cut did not move (spec.md 14.9).",
-                        variant.label, cut,
+                        variant.label,
+                        cut,
                     )
-                trace.upper_max_abs_diff = _twin_max_abs_diff(
-                    trace, twin, cut, "upper"
-                )
+                trace.upper_max_abs_diff = _twin_max_abs_diff(trace, twin, cut, "upper")
                 lower_shift = _twin_max_abs_diff(trace, twin, cut, "lower")
                 trace.lower_moved_pct = 100 * lower_shift / signal_range(intensity)
 
@@ -856,7 +856,7 @@ if __name__ == "__main__":
         # with lower_settings, whose keys belong to std_distribution.
         # ------------------------------------------------------------------
         folder_name = "nn1120-4_pd_ceo2_000"
-        run_name = "anchored_1800"  # change per experiment so runs do not overwrite
+        run_name = "anchored_1790"  # change per experiment so runs do not overwrite
 
         variants = [
             ("current", {}),
@@ -869,20 +869,26 @@ if __name__ == "__main__":
             # anchors, and it is the twin upper_max_abs_diff is measured
             # against. Drop it and that check silently reports nan.
             ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
-            # The same three anchors and no cut, on an array that stops at 1800
-            # (spec.md 14.16). This is `anchored` with 50 cm-1 taken off the
+            # The same three upper anchors plus an edge anchor at 1790, on an
+            # array that stops at 1790
+            # (spec.md 14.16-14.18). This is `anchored` with 60 cm-1 taken off the
             # bottom -- NOT 14.13's floor, which left the full-ROI curve
             # standing below 1800. A window changes the array create_baseline
             # sees, so std_distribution reclassifies and the baseline moves
-            # ABOVE 1800 too; that is the whole experiment, and it is why the
+            # ABOVE 1790 too; that is the whole experiment, and it is why the
             # untruncated `anchored` above it is not optional. It is the middle
             # term that attributes a change to the truncation rather than to the
             # anchors, exactly as it is for the split forms.
             #
-            # All three anchors (2240/2006/1955) sit above 1800, so none is lost
-            # to the window check. `int` is not comparable across this boundary
-            # -- see TRUNCATED_WINDOW_1800 and the sample counts printed below.
-            ("anchored 1800", {}, TRUNCATED_WINDOW_1800, ANCHOR_POINTS_CM1),
+            # The 1790 anchor is evaluated at the truncated edge. `int` is not
+            # comparable across this boundary -- see TRUNCATED_WINDOW_1790 and
+            # the sample counts printed below.
+            (
+                "anchored 1790",
+                {},
+                TRUNCATED_WINDOW_1790,
+                TRUNCATED_ANCHOR_POINTS_1790_CM1,
+            ),
             # ---- the split forms are OFF: "no split", the user's call ----
             # Lower-only split: the anchored baseline above 1955 untouched, a
             # second create_baseline below it (spec.md 14.9). Still built and
@@ -1085,9 +1091,7 @@ if __name__ == "__main__":
         print(
             comparison.table.drop(
                 columns=["settings", "upper_max_abs_diff", "lower_moved_pct"]
-            ).to_string(
-                index=False, float_format=lambda v: f"{v:9.4f}"
-            )
+            ).to_string(index=False, float_format=lambda v: f"{v:9.4f}")
         )
 
         # Printed apart from the table because the table's float format rounds
@@ -1112,10 +1116,7 @@ if __name__ == "__main__":
             for _, row in checked.iterrows():
                 print(f"  {row['lower_moved_pct']:8.3f}  {row['file']}")
             worst = checked["upper_max_abs_diff"].max()
-            print(
-                f"\n  worst: {worst:.3e} -- "
-                + ("PASS" if worst == 0.0 else "FAIL")
-            )
+            print(f"\n  worst: {worst:.3e} -- " + ("PASS" if worst == 0.0 else "FAIL"))
 
             # The seam is the metric for spec.md 14.10: 1955 is in BOTH anchor
             # sets, so both sides are pulled toward the same data value there,
@@ -1170,8 +1171,8 @@ if __name__ == "__main__":
             "\n"
             "'n' is how many samples plain `int` averaged and 'rng' is that\n"
             "trace's OWN signal range -- both per trace, because a truncated\n"
-            "variant has its own array. A variant windowed to 1800 keeps only\n"
-            "1838-1800 of the `int` window, so its `int` is a DIFFERENT\n"
+            "variant has its own array. A variant windowed to 1790 keeps only\n"
+            "1838-1790 of the `int` window, so its `int` is a DIFFERENT\n"
             "STATISTIC under the same name: compare plain `int` only where n\n"
             "matches, and read int_sh otherwise (spec.md 14.16 finding 48).\n"
         )
@@ -1283,9 +1284,7 @@ if __name__ == "__main__":
             "Both as % of signal range; 'gap' is the difference.\n"
         )
         for item in comparison.files:
-            anchored = next(
-                (t for t in item.traces if t.label == "anchored"), None
-            )
+            anchored = next((t for t in item.traces if t.label == "anchored"), None)
             lower_anchored = next(
                 (
                     t
