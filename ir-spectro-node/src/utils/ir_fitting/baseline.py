@@ -15,7 +15,9 @@ kept as a knob. ``lower_split_cm1`` is a third form -- section 14.9's
 lower-only cut, which leaves the anchored full-ROI baseline untouched above the
 cut and only replaces it below. ``lower_anchors`` pins *that* second baseline
 -- section 14.10's anchors on the lower half, which only mean anything under
-``lower_split_cm1``.
+``lower_split_cm1``. ``lower_method`` replaces the lower segment's *algorithm*
+-- section 14.12: any ``pybaselines.Baseline`` method instead of
+``std_distribution``, which is the one knob no earlier section turned.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from pybaselines import Baseline
 from scipy.signal import find_peaks
 
 path = Path(__file__).resolve().parents[3]
@@ -175,52 +178,87 @@ that region provably does not move, and only the region below gets a second
 ``create_baseline``.
 """
 
-LOWER_ANCHOR_MID_CM1 = 1800.0
-"""Interior anchor for the lower segment (spec.md section 14.10).
+LOWER_MID_PROBE_CM1 = 1800.0
+"""Mid-segment diagnostic wavenumber. **Not an anchor** -- see section 14.10.1.
 
-Chosen by the user. It is **close to a band**: at the default 13CO isotope the
-low peaks sit at 1795/1775 (section 4), so 1795 is ~5 cm-1 away -- well inside
-:data:`ANCHOR_GUARD_CM1`. Whether that matters is an empirical question the
-guard answers per file, and the run reports it: :data:`ANCHOR_PROMINENCE_FRAC`
-is a fraction of the **full ROI** range, and the low bands are ~1e-5 to 1e-4
-against ~2e-3 for the 2040 band, so the guard may well pass 1800 rather than
-gate it. Passing is not reassurance -- it means the anchor is reading a region
-where a small band lives, and the measured prominence is the number to judge
-that on. The nearest clearly clear alternative is >= 1820.
+1800 *was* the interior lower anchor, and was removed after the figures were
+judged. It is kept as a named probe because two anchors leave the middle of the
+lower segment unconstrained, and ``data(1800) - baseline(1800)`` is the number
+that says how far it drifted there. The run prints it beside the guard's verdict.
+
+It is also the wavenumber section 14.10 finding 16 is about: at the default 13CO
+isotope the low peaks sit at 1795/1775 (section 4), so 1800 is ~5 cm-1 from a
+band and well inside :data:`ANCHOR_GUARD_CM1` -- yet the guard passes it on every
+file, scoring 0.002-0.089 against the 0.5 threshold, because
+:data:`ANCHOR_PROMINENCE_FRAC` is a fraction of the whole ROI range and the low
+bands are 2-9% of it. That is a standing limit of the guard, not a fact about
+this one wavenumber: **the guard does not protect a low-wavenumber anchor.**
 """
 
 LOWER_ANCHOR_POINTS_CM1: tuple[float, ...] = (
     LOWER_SPLIT_POINT_CM1,
-    LOWER_ANCHOR_MID_CM1,
     DEFAULT_WINDOW[1],
 )
-"""Default anchors for the lower segment: both endpoints plus 1800 cm-1.
+"""Default anchors for the lower segment: **both endpoints of it, and nothing else.**
 
 Only meaningful with :attr:`BaselineVariant.lower_split_cm1` -- there is no
 "lower segment" without a cut, and :class:`BaselineVariant` raises rather than
 ignore them.
 
+**Two anchors, so they are hit exactly.** With three or more the correction is a
+least-squares line and every anchor is a pull (the most misread property of
+:data:`ANCHOR_POINTS_CM1`); with exactly two it is the unique line through both
+residuals. The lower baseline therefore passes through the data estimate at the
+cut and at the ROI floor. One consequence is worth stating because it retires a
+thread: the seam is then **fixed by the upper side alone** -- it is the anchored
+full-ROI baseline's own residual at 1955, which section 14.7 measured -- and
+nothing done below the cut can shrink it further.
+
 **Structurally different from :data:`ANCHOR_POINTS_CM1`, not a variant of it.**
 The full-ROI set pins only the top (2240) and fits the other two below it, so
-everything under 1955 is extrapolation -- which is the 205 cm-1 excursion
-section 14.9 finding 14 measured as the anchored baseline's single largest.
-This set pins **both ends of its own 205 cm-1 segment**, so nothing in it is
-extrapolated.
+everything under 1955 is extrapolation -- the 205 cm-1 excursion section 14.9
+finding 14 measured as the anchored baseline's single largest. This set pins
+**both ends of its own 205 cm-1 segment**, so nothing in it is extrapolated.
 
 **This is not section 14.7.1 being re-litigated.** That subsection removed a
-*fourth* anchor at 1854 because one least-squares line cannot satisfy four
-points over 400 cm-1 of curved residuals, and the brake it applied cost 2040
-band recovery. Here the lower segment carries its own line, fitted to its own
-three points, over its own 205 cm-1; the full-ROI correction above the cut is
-untouched and provably so (section 14.9 finding 13). It is the third answer to
-section 14.7.1's closing "a non-affine correction or per-anchor weights" --
-a separate line on a separate segment.
+*fourth* anchor at 1854 because one least-squares line cannot satisfy four points
+over 400 cm-1 of curved residuals. Here the lower segment carries its own line,
+fitted to its own points, over its own 205 cm-1; the full-ROI correction above the
+cut is untouched and provably so (section 14.9 finding 13). It is the third answer
+to section 14.7.1's closing "a non-affine correction or per-anchor weights" -- a
+separate line on a separate segment.
 
-The two outer values track :data:`LOWER_SPLIT_POINT_CM1` and
-:data:`DEFAULT_WINDOW` so "both endpoints" stays true if either moves;
-:meth:`BaselineVariant.__post_init__` re-checks it per variant, because a
-variant with its own window or cut would otherwise silently anchor at a point
-that is no longer an endpoint.
+**1800 is deliberately absent.** It was the interior third anchor, was built and
+measured (section 14.10), and was removed by the user on the figures
+(section 14.10.1). Removing it is what makes the remaining two exact; what it
+costs is the only constraint on the middle of the segment, where the `.0022`
+files' residuals are curved by 4-6% of range. :data:`LOWER_MID_PROBE_CM1` keeps
+that cost measurable. Do not re-add it without re-reading 14.10.1.
+
+The two values track :data:`LOWER_SPLIT_POINT_CM1` and :data:`DEFAULT_WINDOW` so
+"both endpoints" stays true if either moves;
+:meth:`BaselineVariant.__post_init__` re-checks it per variant, because a variant
+with its own window or cut would otherwise silently anchor at a point that is no
+longer an endpoint.
+"""
+
+LOWER_METHOD_CANDIDATE = "pspline_arpls"
+"""The lower-segment algorithm spec.md section 14.12 measured, at its defaults.
+
+A ``pybaselines.Baseline`` method name for :attr:`BaselineVariant.lower_method`.
+**Not a default** -- ``lower_method`` is ``None`` unless a variant asks for it,
+and nothing in ``config/analysis.yaml`` changed.
+
+Named because it is the one candidate that satisfied all three of the user's
+stated targets at once (section 14.12): the baseline through the midpoint of the
+dispersive ~1850 feature on the post-crossing files, under the base of the 1850
+and 1870-1880 bands on the pre-crossing ones, and a near-zero mean residual over
+1838-1750. Every parameter variant tried was worse on at least one of them, so
+the defaults are where it is used -- that is evidence against a tuned optimum,
+not a reason to stop looking.
+
+Its cost is the seam, which no longer has an anchor holding it: ~1.5x the
+two-anchor form of section 14.10.1 on both samples measured.
 """
 
 
@@ -281,17 +319,45 @@ class BaselineOutcome:
     lower_anchors_applied: tuple[float, ...] = ()
     """Anchor wavenumbers the **lower segment's** baseline was corrected at.
 
-    Separate from :attr:`anchors_applied` because the two corrections are two
-    least-squares lines on two arrays, and one merged tuple could not say which
-    line a gated 1955 was dropped from (spec.md section 14.10). Empty unless
+    Separate from :attr:`anchors_applied` because they are two corrections on
+    two arrays -- least-squares above the cut, exact through both ends below it
+    -- and one merged tuple could not say which of them a gated 1955 was dropped
+    from (spec.md sections 14.10/14.10.1). Empty unless
     :attr:`BaselineVariant.lower_anchors` was asked for.
     """
 
     lower_anchors_gated: tuple[tuple[float, float, float], ...] = ()
     """``(anchor, extremum wavenumber, prominence fraction)`` per rejected
-    lower-segment anchor. Reported for the reason this class exists: 1800 sits
-    ~5 cm-1 from the 1795 band (:data:`LOWER_ANCHOR_MID_CM1`), so whether the
-    guard fired there is the first thing a reader needs to know."""
+    lower-segment anchor. Reported for the reason this class exists: with the
+    default two-anchor set a gated anchor leaves the correction a constant shift
+    instead of an exact line through both ends, and a lower baseline that was
+    silently left half-corrected looks exactly like one where correcting did
+    little."""
+
+    lower_method_applied: str = ""
+    """The ``pybaselines`` method the lower segment ran, under
+    :attr:`BaselineVariant.lower_method`. Empty when the lower segment ran
+    ``create_baseline``/``std_distribution`` -- which is every variant before
+    spec.md section 14.12 -- or when there is no lower segment at all.
+
+    Reported rather than inferred from the variant, because a gated cut leaves
+    no lower segment and therefore no method, and a variant that *asked* for one
+    looks identical to one that did not unless the outcome says which ran.
+    """
+
+    lower_method_degeneracy_checked: bool = True
+    """False when the lower segment's degeneracy could not be tested.
+
+    ``std_distribution`` warns *"there were no baseline points found"* and
+    :meth:`BaselineVariant._segment_baseline` catches it; a ``pybaselines``
+    method called directly emits no such warning, so under
+    :attr:`BaselineVariant.lower_method` the ``"lower"`` entry of
+    :attr:`degenerate_segments` rests on a **weaker, structural** check
+    (non-finite or constant output) and not on the algorithm's own verdict. The
+    traps list in spec.md section 0 says not to drop the degenerate flag; this
+    says how far to trust it, because a flag that is clean for want of anyone
+    asking reads exactly like one that was checked.
+    """
 
     split_form: str = ""
     """Which cut produced this baseline -- ``""``, ``"truncate"`` or ``"lower_only"``.
@@ -314,6 +380,7 @@ class BaselineOutcome:
                 self.split_gated,
                 self.lower_anchors_applied,
                 self.lower_anchors_gated,
+                self.lower_method_applied,
             )
         ):
             return ""
@@ -321,6 +388,8 @@ class BaselineOutcome:
         if self.split_applied is not None:
             form = f" {self.split_form}" if self.split_form else ""
             parts.append(f"split {self.split_applied:.0f}{form}")
+        if self.lower_method_applied:
+            parts.append(f"lower {self.lower_method_applied}")
         if self.split_gated is not None:
             split, where, prominence = self.split_gated
             parts.append(
@@ -398,8 +467,51 @@ class BaselineVariant:
             stays 0.0 exactly. Requires ``lower_split_cm1``: without a cut
             there is no lower segment, and a silently ignored anchor list is the
             same failure mode as an unknown ``settings`` key. Use
-            :data:`LOWER_ANCHOR_POINTS_CM1` for the endpoints-plus-1800 set of
-            section 14.10.
+            :data:`LOWER_ANCHOR_POINTS_CM1` for the both-endpoints pair of
+            sections 14.10/14.10.1, which being exactly two are hit exactly.
+        lower_settings: ``std_distribution`` overrides for the **lower segment
+            only**, or ``None`` -- the default -- to run it with the unmodified
+            ``voigt_fit.baseline`` settings, which is what sections 14.8, 14.9
+            and 14.10 measured. Validated on the same terms as ``settings``: an
+            unknown key raises. Requires a cut (either kind); without one there
+            is no lower segment and the override would silently do nothing.
+
+            Exposed because the lower segment has a real reason to want
+            different values, not as a general knob: it is ~106 samples against
+            the full ROI's ~259, so ``half_window`` and the other sample-count
+            settings are ~2.4x larger *relative to the array* than the values
+            they were tuned at (section 14.8's "no degenerate segments" note).
+            Those are the knobs to reach for first. No default is changed here
+            and none is recommended -- this is the instrument, not a tuning.
+        lower_method: Name of a ``pybaselines.Baseline`` method to run on the
+            **lower segment** in place of ``std_distribution``, or ``None`` --
+            the default -- to keep ``create_baseline``, which is what every
+            section through 14.11 measured. Requires ``lower_split_cm1``, on
+            ``lower_anchors``' precedent: without a cut there is no lower
+            segment, and a silently ignored method name is the same failure as a
+            misspelled settings key. Mutually exclusive with ``lower_settings``
+            for the same reason -- those keys are ``std_distribution``'s and
+            another algorithm would ignore them without saying so. An unknown
+            method name raises at variant construction.
+
+            This is the knob spec.md section 14.3 finding 1 could not turn: that
+            sweep, and section 14.11's re-sweep under the anchor, both varied
+            ``std_distribution``'s *parameters*, never the algorithm. Section
+            14.12 varies the algorithm and is the first thing in section 14 to
+            move the pre-crossing `.0022` regime in a direction the figures
+            accepted. See :data:`LOWER_METHOD_CANDIDATE`.
+
+            The segment is handed to ``pybaselines`` with **ascending**
+            wavenumbers as ``x_data`` and the result flipped back, because
+            wavenumbers descend here (spec.md section 0) and a method that uses
+            ``x`` would otherwise see the axis reversed.
+        lower_method_kwargs: Keyword arguments for ``lower_method``. ``{}`` --
+            the default -- runs the method at *its own* defaults, which is where
+            section 14.12 measured the candidate and where it scored best; every
+            parameter variant tried was worse on at least one target. Not
+            validated here: ``pybaselines`` raises a ``TypeError`` on an unknown
+            keyword, which is already loud, and the accepted keywords differ per
+            method so there is no key list to check against.
     """
 
     label: str
@@ -409,6 +521,9 @@ class BaselineVariant:
     split_cm1: float | None = None
     lower_split_cm1: float | None = None
     lower_anchors: tuple[float, ...] = ()
+    lower_settings: dict | None = None
+    lower_method: str | None = None
+    lower_method_kwargs: dict = field(default_factory=dict)
 
     @classmethod
     def coerce(cls, item: BaselineVariant | tuple) -> BaselineVariant:
@@ -420,11 +535,15 @@ class BaselineVariant:
         """
         if isinstance(item, cls):
             return item
-        if not isinstance(item, (tuple, list)) or not 2 <= len(item) <= 7:
+        if not isinstance(item, (tuple, list)) or not 2 <= len(item) <= 10:
             raise TypeError(
                 "each variant must be a BaselineVariant or a "
                 "(label, settings[, window[, anchors[, split_cm1"
-                f"[, lower_split_cm1[, lower_anchors]]]]]) tuple; got {item!r}"
+                "[, lower_split_cm1[, lower_anchors[, lower_settings"
+                "[, lower_method[, lower_method_kwargs]]]]]]]]) "
+                f"tuple; got {item!r}. Past the 5th slot the keyword form "
+                "BaselineVariant(label=..., lower_split_cm1=...) reads better "
+                "-- positional tuples were for the two-element case."
             )
         return cls(*item)
 
@@ -450,6 +569,57 @@ class BaselineVariant:
         object.__setattr__(
             self, "lower_anchors", tuple(float(a) for a in self.lower_anchors)
         )
+        if self.lower_settings is not None:
+            if self.split_cm1 is None and self.lower_split_cm1 is None:
+                raise ValueError(
+                    f"variant {self.label!r} declares lower_settings "
+                    f"{self.lower_settings} but makes no cut. There is no lower "
+                    "segment to configure without split_cm1 or lower_split_cm1, "
+                    "and silently ignoring them would look exactly like settings "
+                    "that did nothing -- use `settings` for the full-ROI baseline."
+                )
+            # Same eager check `settings` gets, and for the same reason: a
+            # misspelled key would fall back to the default and silently run the
+            # unmodified lower baseline.
+            ir_config.get_baseline_settings(override=dict(self.lower_settings))
+
+        if self.lower_method is not None:
+            if self.lower_split_cm1 is None:
+                raise ValueError(
+                    f"variant {self.label!r} declares "
+                    f"lower_method={self.lower_method!r} but no lower_split_cm1. "
+                    "There is no lower segment to run it on without a cut, and "
+                    "silently ignoring it would look exactly like a method that "
+                    "changed nothing -- pass "
+                    "lower_split_cm1=LOWER_SPLIT_POINT_CM1."
+                )
+            if self.lower_settings is not None:
+                raise ValueError(
+                    f"variant {self.label!r} sets both lower_method="
+                    f"{self.lower_method!r} and lower_settings "
+                    f"{self.lower_settings}. Those keys belong to "
+                    "std_distribution and another algorithm would ignore them "
+                    "without saying so -- the same silent no-op an unknown "
+                    "settings key is rejected for. Pass lower_method_kwargs "
+                    "instead, or drop one of the two."
+                )
+            if self.lower_method.startswith("_") or not callable(
+                getattr(Baseline, self.lower_method, None)
+            ):
+                raise ValueError(
+                    f"variant {self.label!r}: lower_method "
+                    f"{self.lower_method!r} is not a pybaselines.Baseline "
+                    "method. A typo here would otherwise surface only when the "
+                    "first file is computed, partway through a batch."
+                )
+
+        if self.lower_method_kwargs and self.lower_method is None:
+            raise ValueError(
+                f"variant {self.label!r} declares lower_method_kwargs "
+                f"{self.lower_method_kwargs} but no lower_method; there is "
+                "nothing to pass them to."
+            )
+
         if self.lower_anchors and self.lower_split_cm1 is None:
             raise ValueError(
                 f"variant {self.label!r} declares lower_anchors "
@@ -496,6 +666,19 @@ class BaselineVariant:
                     "cover it. Anchors above the cut belong in `anchors`, which "
                     "corrects the full-ROI baseline."
                 )
+
+    def resolved_lower_settings(self, voigt_settings: dict | None = None) -> dict:
+        """Settings the lower segment runs with.
+
+        The current baseline's own parameters by default -- ``settings`` belongs
+        to the full-ROI/upper baseline and is deliberately *not* inherited, so a
+        variant that changes ``num_std`` above the cut leaves the region below it
+        on the recipe the file has today. :attr:`lower_settings` overrides that,
+        and only that.
+        """
+        return ir_config.get_baseline_settings(
+            voigt_settings, override=dict(self.lower_settings or {}) or None
+        )
 
     @property
     def is_default_window(self) -> bool:
@@ -628,9 +811,9 @@ class BaselineVariant:
             intensity[upper], settings, "upper"
         )
         # The lower segment takes the current baseline's own parameters --
-        # get_baseline_settings with no override -- not this variant's.
+        # not this variant's -- unless lower_settings overrides them.
         lower_values, lower_degenerate = self._segment_baseline(
-            intensity[lower], ir_config.get_baseline_settings(voigt_settings), "lower"
+            intensity[lower], self.resolved_lower_settings(voigt_settings), "lower"
         )
 
         if self.anchors:
@@ -698,7 +881,8 @@ class BaselineVariant:
         1. ``create_baseline`` on the full window, this variant's settings;
         2. :func:`apply_anchors` on the **full** wavenumbers and intensity;
         3. ``create_baseline`` on the sub-array below the cut, with the
-           unmodified ``voigt_fit.baseline`` settings;
+           unmodified ``voigt_fit.baseline`` settings, or
+           :attr:`lower_settings` where given;
         3b. :func:`apply_anchors` on that lower baseline at
            :attr:`lower_anchors`, if any -- its own least-squares line, on its
            own array, fitted before the splice (spec.md section 14.10);
@@ -761,10 +945,20 @@ class BaselineVariant:
             )
 
         # Step 3. The lower segment takes the current baseline's own parameters
-        # -- get_baseline_settings with no override -- not this variant's.
-        lower_values, lower_degenerate = self._segment_baseline(
-            intensity[lower], ir_config.get_baseline_settings(voigt_settings), "lower"
-        )
+        # -- not this variant's -- unless lower_settings overrides them, or
+        # lower_method replaces the algorithm outright (spec.md 14.12).
+        if self.lower_method is not None:
+            lower_values, lower_degenerate = self._segment_pybaselines(
+                wavenumbers[lower], intensity[lower]
+            )
+            method_applied = self.lower_method
+            degeneracy_checked = False
+        else:
+            lower_values, lower_degenerate = self._segment_baseline(
+                intensity[lower], self.resolved_lower_settings(voigt_settings), "lower"
+            )
+            method_applied = ""
+            degeneracy_checked = True
 
         # Step 3b. The lower segment's own anchors, on the lower segment's own
         # array. Unanchored by default, which is what sections 14.8 and 14.9
@@ -824,7 +1018,53 @@ class BaselineVariant:
             ),
             seam_jump=float(spliced[upper_edge] - spliced[lower_edge]),
             degenerate_segments=segments,
+            lower_method_applied=method_applied,
+            lower_method_degeneracy_checked=degeneracy_checked,
         )
+
+    def _segment_pybaselines(
+        self,
+        wavenumbers: np.ndarray,
+        intensity: np.ndarray,
+    ) -> tuple[np.ndarray, bool]:
+        """Run :attr:`lower_method` on one segment (spec.md section 14.12).
+
+        The sibling of :meth:`_segment_baseline` for a ``pybaselines`` method
+        called directly rather than through ``create_baseline``. Two things
+        differ and both are deliberate:
+
+        **Ascending x.** Wavenumbers descend here, so the arrays are flipped
+        before the call and the result flipped back. Methods that ignore ``x``
+        are unaffected; the spline and polynomial ones are not, and would fit a
+        reversed axis.
+
+        **The degeneracy check is weaker.** There is no *"no baseline points
+        found"* warning to catch -- that is ``std_distribution``'s own -- so
+        this reports the structural failures any method can have: a non-finite
+        value, or a baseline with no variation at all. It is not the same
+        verdict, which is why :attr:`BaselineOutcome.lower_method_degeneracy_checked`
+        comes back False and says so.
+        """
+        ascending = wavenumbers[::-1]
+        fitter = Baseline(x_data=ascending, assume_sorted=True)
+        result = getattr(fitter, self.lower_method)(
+            intensity[::-1], **dict(self.lower_method_kwargs)
+        )
+        values = np.asarray(result[0], dtype=float)[::-1]
+        if values.shape != intensity.shape:
+            raise ValueError(
+                f"variant {self.label!r}: lower_method {self.lower_method!r} "
+                f"returned {values.shape} for a {intensity.shape} segment"
+            )
+        degenerate = bool(not np.all(np.isfinite(values)) or np.ptp(values) == 0.0)
+        if degenerate:
+            LOGGER.warning(
+                "variant %r: lower_method %r returned a non-finite or constant "
+                "baseline on its lower segment; the curve is not meaningful",
+                self.label,
+                self.lower_method,
+            )
+        return values, degenerate
 
     def _segment_baseline(
         self,

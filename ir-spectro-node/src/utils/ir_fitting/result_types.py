@@ -205,17 +205,18 @@ class BaselineTrace:
     lower_anchors_applied: tuple[float, ...] = ()
     """Anchors the **lower segment's** baseline was corrected at (spec.md 14.10).
 
-    Separate from :attr:`anchors_applied`: two least-squares lines on two
-    arrays, and a legend that merged them could not say which line dropped a
-    gated point.
+    Separate from :attr:`anchors_applied`: two corrections on two arrays, and a
+    legend that merged them could not say which one dropped a gated point --
+    1955 belongs to both sets.
     """
 
     lower_anchors_gated: tuple[tuple[float, float, float], ...] = ()
     """``(anchor, extremum wavenumber, prominence)`` per rejected lower anchor.
 
-    The first thing to read on a section 14.10 run: 1800 sits ~5 cm-1 from the
-    1795 band, so whether the guard fired there decides whether the anchor ran
-    at all.
+    Worth reading on any lower-anchored run: the default set is two anchors, so
+    losing one drops the correction from an exact line through both segment ends
+    to a constant shift (spec.md section 14.10.1). A half-corrected lower
+    baseline looks much like one where correcting did little.
     """
 
     split_applied: float | None = None

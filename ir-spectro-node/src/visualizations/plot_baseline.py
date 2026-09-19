@@ -32,7 +32,12 @@ from src.utils.ir_fitting.result_types import (
     FileFitResult,
     MeasurementFitResult,
 )
-from src.visualizations._axes import XLim, as_windows, rescale_y_to_window
+from src.visualizations._axes import (
+    XLim,
+    apply_reference_grid,
+    as_windows,
+    rescale_y_to_window,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -165,6 +170,7 @@ def plot_file_baseline(
 
     for axes in (ax_raw, ax_sub):
         rescale_y_to_window(axes, x, xlim)
+        apply_reference_grid(axes, xlim)
 
     fig.tight_layout()
 
@@ -207,8 +213,8 @@ def _anchor_label(trace) -> str:
             parts.append(f"GATED {anchor:.0f} (outside window)")
     # The lower segment's own anchors, marked "lo@" because they are a second
     # correction on a second array, not more points on the same line (spec.md
-    # 14.10). A legend that merged the two could not say which line lost a
-    # gated point.
+    # 14.10.1). A legend that merged the two could not say which one lost a
+    # gated point -- 1955 is in both sets.
     if trace.lower_anchors_applied:
         parts.append("lo@" + "/".join(f"{a:.0f}" for a in trace.lower_anchors_applied))
     for anchor, where, fraction in trace.lower_anchors_gated:
@@ -268,7 +274,7 @@ def plot_baseline_comparison(
         xlim = union_window(traces)
 
     fig, (ax_raw, ax_sub) = plt.subplots(
-        2, 1, figsize=(8, 6.5), sharex=True, gridspec_kw={"height_ratios": [1, 1]}
+        2, 1, figsize=(9, 7), sharex=True, gridspec_kw={"height_ratios": [1, 1]}
     )
 
     reference = traces[0]
@@ -386,20 +392,37 @@ def plot_baseline_comparison(
     if comparison.verdict:
         title += f"   [{comparison.verdict}]"
     ax_raw.set_title(title, fontsize=9)
-    ax_raw.legend(fontsize=7, loc="upper right", ncol=2)
 
     ax_sub.axhline(0, color="0.7", linewidth=0.5)
     ax_sub.set_ylabel("baseline-subtracted")
     ax_sub.set_xlabel("Wavenumber (cm-1)")
     ax_sub.set_xlim(xlim)
-    ax_sub.legend(fontsize=7, loc="upper right", ncol=2)
 
     # Percentages in the legend are relative to the first variant, over the
     # region the two share -- see BaselineTrace.compared_over.
     for axes in (ax_raw, ax_sub):
         rescale_y_to_window(axes, reference.wavenumbers, xlim)
+        apply_reference_grid(axes, xlim)
 
-    fig.tight_layout()
+    # One legend, under the figure, rather than one box per panel inside it.
+    # The anchor/split/seam annotations make these labels long enough that an
+    # in-axes box covered the top of both panels -- which is where the flat
+    # 2235-2250 check lives, and the whole point of the grid is reading values
+    # off the plot. Handles come from ax_raw because it carries the raw trace
+    # as well as every variant; ax_sub's labels are the same set.
+    handles, labels = ax_raw.get_legend_handles_labels()
+    # One text line per entry, as a fraction of figure height, plus a margin.
+    # Reserved first so tight_layout does not lay the axes over the legend.
+    reserved = min(0.3, 0.021 * len(labels) + 0.01)
+    fig.legend(
+        handles,
+        labels,
+        fontsize=7,
+        loc="lower left",
+        bbox_to_anchor=(0.01, 0.005),
+        frameon=False,
+    )
+    fig.tight_layout(rect=(0, reserved, 1, 1))
 
     if not save:
         plt.close(fig)

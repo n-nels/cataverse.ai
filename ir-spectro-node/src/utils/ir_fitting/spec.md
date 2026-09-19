@@ -16,7 +16,7 @@ dormant.**
 
 | Workstream | State |
 |---|---|
-| **Baseline investigation** (§14) | Active. Tuning and bare truncation ruled out (§14.3, §14.6). The isosbestic point is measured (~1957) and an **anchored baseline is built and calibrated** (§14.7). It recovers the halved bands on the post-crossing files and is a no-op on the pre-crossing ones. **Splitting at the crossing is built and rejected** (§14.8) — though the post-mortem shows it was tested in its worst form, and names the variant worth trying — **that variant is now built and measured (§14.9)**: it keeps all of the anchor's band recovery, verified, and replaces the anchored baseline's unconstrained 205 cm⁻¹ extrapolation below the lowest anchor, at the cost of a seam §14.7 does not have. **Whether to prefer it over §14.7 alone is open — the visual call has not been made.** A fourth anchor at 1854 was tried and removed (§14.7.1). **The lower segment now has anchors of its own — both its endpoints plus 1800 (§14.10), built and measured**: containment above the cut still verified at exactly zero, the seam cut by a third to three quarters on the four post-crossing files, and the `.0022` files' subtracted offset below the cut halved — the first measurement in §14 that moves that regime at all, though whether closer to zero is *better* there is exactly what §14.3 finding 4 says these numbers cannot say. Against it: a seam that *grows* on those same `.0022` files, the post-crossing four's offset pushed back out, and an anchor at 1800 the guard cannot police. **Also a trade; also a visual call not yet made.** |
+| **Baseline investigation** (§14) | Active. Tuning and bare truncation ruled out (§14.3, §14.6). The isosbestic point is measured (~1957) and an **anchored baseline is built and calibrated** (§14.7). It recovers the halved bands on the post-crossing files and is a no-op on the pre-crossing ones. **Splitting at the crossing is built and rejected** (§14.8) — though the post-mortem shows it was tested in its worst form, and names the variant worth trying — **that variant is now built and measured (§14.9)**: it keeps all of the anchor's band recovery, verified, and replaces the anchored baseline's unconstrained 205 cm⁻¹ extrapolation below the lowest anchor, at the cost of a seam §14.7 does not have. **Whether to prefer it over §14.7 alone is open — the visual call has not been made.** A fourth anchor at 1854 was tried and removed (§14.7.1). **The lower segment now has anchors of its own — both its endpoints, `(1955, 1750)` (§14.10, §14.10.1)**: containment above the cut still verified at exactly zero, and the seam improved against the unanchored split on five of six files. An interior third anchor at 1800 was built, measured and **removed by the user on the figures** (§14.10.1); with two anchors the correction is exact at both ends, so the seam is now *predicted* by the upper anchor's residual at 1955 and confirmed to 0.05% of range. The `.0022` regime is still unfixed — §14.10's apparent movement there was measured on a proxy that §14.10.1 finding 24 withdraws. `lower_settings` now exposes the lower segment's own `std_distribution` parameters (no default changed). **The settings are now re-swept under the anchor (§14.11)**: the three anchor residuals are one scalar, `lower_settings` provably cannot move the seam, and tuning the *upper* side halves both that scalar and the seam — while making the 2040 recovery slightly worse and ranking differently on a 60-file sample. **Then the algorithm itself was changed (§14.12), which is the knob no earlier section turned**: below the cut, with `lower_anchors` removed on the user's instruction, `pspline_arpls` at its defaults is the only one of 44 `pybaselines` methods that hits all three targets the user stated this session — baseline through the midpoint of the dispersive ~1850 feature on post-crossing files, under the base of the 1850/1870-1880 bands on pre-crossing ones, near-zero mean residual over 1838-1750. **It is the first thing in §14 to fix the `.0022` regime.** Containment above the cut is still exactly 0.0 and the `...-022` gate still a no-op; the cost is a seam ~1.5x the two-anchor form. **The visual call on that trade is the user's and has not been made.**|
 | **Two extra low-wavenumber peaks** (§4) | Dormant — `ir_fitting.extra_peaks_base` is `[]`, so nothing fits them. The machinery works; the peaks are simply not configured. |
 
 ### The open question — answered, and replaced by a harder one
@@ -33,17 +33,29 @@ elsewhere — is **answered in §14.7**: a per-file prominence guard drops an
 anchor with a band within ±25 cm⁻¹, and the baseline falls back to what it
 already was. Built, calibrated, and clean on the judged files.
 
-**The open question now:** the `.0022` / pre-crossing files (§14.3 finding 3)
-are unchanged by anchoring, and §14.8's split does not reach them either. Half
-the progression still has no fix **above 1955**. §14.10 finding 19 is the first
-measurement that moves them at all; it moves them only below the cut, and the
-direction of goodness there is unjudged.
+**The open question now — answered for the region below the cut.** The `.0022` /
+pre-crossing files (§14.3 finding 3) were unchanged by anchoring, and §14.8's
+split did not reach them; §14.10 finding 19 looked like the first measurement to
+move them and §14.10.1 finding 24 withdrew it. **§14.12 moves them for real**, by
+changing the lower segment's *algorithm* rather than its parameters or its
+anchors: on `...-021` the 1850 and ~1876 bands go from being cut into by 4% of
+range to standing above a baseline touching their feet, and the 1838–1750
+residual goes from −6.0% to +0.2%. Below 1955 there are now three proxies rather
+than none, but they are the **user's stated targets**, not discovered ones, and
+finding 33 shows any one of them alone still ranks a wrong baseline first. What
+remains open is the seam — 1.5× the two-anchor form, since removing the anchor at
+the cut gave up the only thing holding it (§14.12 finding 36) — and whether the
+`.0022` depression below 1838 was baseline error at all, which the `int ≈ 0`
+target asserts rather than measures.
 
-**The current recommendation is the single anchored baseline of §14.7.** §14.8
+**The current recommendation above 1955 is the single anchored baseline of
+§14.7; below it, §14.12's `pspline_arpls` is the only form that meets the stated
+targets, pending the visual call on its seam.** §14.8
 tried the other reading of §14.4 step 3 — `ip` as a split point rather than a
-pass-through point — and measured it as worse. §14.9 and §14.10 build the form
-that is *not* worse and is not obviously better either; both are trades waiting
-on a visual judgement, and neither has displaced §14.7 as the recommendation.
+pass-through point — and measured it as worse. §14.9, §14.10 and §14.10.1 build
+the form that is *not* worse and is not obviously better either; it is a trade
+waiting on a visual judgement, and it has not displaced §14.7 as the
+recommendation.
 
 ### How to run things
 
@@ -87,6 +99,21 @@ CLI.
   are 2–9% of that range. So an anchor at 1800 passes the guard with the 1795
   band 5 cm⁻¹ away, scoring 0.002–0.089 against a 0.5 threshold (§14.10 finding
   16). A passing guard there means "not visible at ROI scale", not "background".
+  That anchor is gone (§14.10.1), but the limit is not — it applies to any anchor
+  placed below ~1900.
+- **Below 1955 the only proxies are the three the user stated, and each is
+  gameable alone.** Every "distance from the data" measure invented in-house got
+  it backwards, because the bands there are negative-going and a baseline pulled
+  down onto them scores *better* — §14.10.1 finding 24 has the worked case.
+  §14.12 uses `mid` / `und` / `int` instead, which come from the user rather than
+  from the data, and reports all three together: `irsqr` is best of 44 methods on
+  `int` and is a strict lower envelope sitting 9% of range below where it belongs
+  (finding 33). Never sum them, never quote one.
+- **The three anchor residuals are one number.** A least-squares line through
+  three points leaves a 1-D residual, so `(r2240, r2006, r1955)` is always
+  proportional to `(+0.218, −1.218, +1)` — measured std 0.000000 over 174 rows
+  (§14.11 finding 25). Reporting them as three independent misses reads as more
+  information than there is.
 - **Settings keys fail silently if misspelled.** `create_baseline` reads them
   with `.get(...)` and falls back to defaults, so `num_stds: 1.4` would run the
   *unmodified* baseline. `config.get_baseline_settings` therefore raises on
@@ -494,7 +521,16 @@ shared-x two-panel layout; x inverted, 2250 → 1750.
   against the stored CSV column. Display limits are the **union** of every
   variant's window, so a narrower variant's trace visibly *stops* instead of
   being cropped out of view. Legend carries each variant's shift, its window
-  when it differs from the reference, and a `DEGENERATE` marker.
+  when it differs from the reference, the anchors applied and gated on each side
+  of a cut, the seam, and a `DEGENERATE` marker. It is drawn **below** the
+  figure: those annotations make the labels wide enough that an in-axes box
+  covered the top of both panels, which is where the flat 2235≐2250 check is
+  read from.
+- Both figures carry a reference grid — `_axes.apply_reference_grid`, major and
+  minor ticks on both axes, 50/10 cm⁻¹ over the full ROI and finer on a zoom.
+  Judgement here is visual (§14.3 finding 4), and reading a value off a 500 cm⁻¹
+  span with five ticks is guesswork. `plot_individual_fit` shares `_axes` and
+  could take it too; it has not been changed.
 
 ## 10. Entry points
 
@@ -521,10 +557,10 @@ compare_baselines(
 
 Every variant is measured against the **first**, so put the baseline being
 compared to at the front. A variant is a `BaselineVariant` or a
-`(label, settings[, window[, anchors[, split_cm1[, lower_split_cm1[, lower_anchors]]]]])`
+`(label, settings[, window[, anchors[, split_cm1[, lower_split_cm1[, lower_anchors[, lower_settings]]]]]])`
 tuple; `window` is `(high, low)` cm⁻¹ and defaults to the 2250–1750 ROI.
 
-The last four are the ways a baseline can be changed beyond its settings, and
+The last five are the ways a baseline can be changed beyond its settings, and
 they are not interchangeable:
 
 | Slot | What it does | Section |
@@ -532,7 +568,8 @@ they are not interchangeable:
 | `anchors` | Affine correction pulling the full-ROI baseline to the data at each surviving wavenumber. The array is never cut. | §14.7 |
 | `split_cm1` | Cuts the ROI and recomputes **both** sides on their own truncated arrays. Measured and rejected; kept as a knob. | §14.8 |
 | `lower_split_cm1` | Keeps the anchored full-ROI baseline above the cut untouched, replaces it only below. Recommended. | §14.9 |
-| `lower_anchors` | A *second* affine correction, on the lower segment alone — its own line, its own residuals. Requires `lower_split_cm1`, and raises without it. | §14.10 |
+| `lower_anchors` | A *second* affine correction, on the lower segment alone — its own line, its own residuals. Requires `lower_split_cm1`, and raises without it. Two by default, so both are hit exactly. | §14.10.1 |
+| `lower_settings` | `std_distribution` overrides for the lower segment only. Requires a cut of either kind. `None` keeps the current baseline's parameters, which is what every measurement used. | §14.10.1 |
 
 The last two are mutually exclusive and raise if both are set — they cut at the
 same wavenumber and mean different things. A comparison that includes either
@@ -558,11 +595,18 @@ The band-height columns cannot: 2040 and 1980 both sit above the cut, so they
 are guaranteed to equal the anchored variant's (§14.9 finding 13).
 
 `lower_anchors` adds `lower_anchors` / `lower_anchors_gated`, reported apart from
-`anchors` / `anchors_gated` because they are two least-squares lines on two
-arrays and 1955 belongs to both. The column to judge a `lower_anchors` run on is
+`anchors` / `anchors_gated` because they are two corrections on two arrays and
+1955 belongs to both. The column to judge a `lower_anchors` run on is
 `seam_pct_of_range` — not the band heights, which are pinned to `anchored` by
-finding 13, and not `lower_moved_pct`, which only says the lower baseline moved
-(§14.10).
+finding 13, and not `lower_moved_pct`, which only says the lower baseline moved.
+With the default two anchors the seam is *predictable* before the run — it is
+minus the anchored baseline's residual at the cut — and `__main__` prints
+predicted against actual as a check (§14.10.1 finding 21).
+
+Past the fifth slot, declare variants with the **keyword** form,
+`BaselineVariant(label=..., lower_split_cm1=..., lower_anchors=...)`. The
+positional tuple exists to keep `("current", {})` short; at eight slots with two
+`None`s in the middle it no longer does. `coerce` still accepts both.
 
 ### Fitting
 
@@ -657,7 +701,10 @@ Deferred, to revisit:
 | `lower_split_cm1` leaves the region above the cut untouched | max abs diff vs the `anchored` variant at and above 1955: **0.0e+00** on all 8 judged files, no tolerance applied (§14.9 finding 13). |
 | `lower_split_cm1` falls back to §14.7 when the guard fires | `...-022`, both files: cut gated at 1955, result identical to `anchored` — `lower_moved_pct` 0.0, band heights and `moved_pct_of_range` unchanged. |
 | `split_cm1` + `lower_split_cm1` together | rejected at variant construction with `ValueError`; they are different operations at the same wavenumber. |
-| `lower_anchors` do not leak above the cut | with `LOWER_ANCHOR_POINTS_CM1` applied, `upper_max_abs_diff` is still **0.0e+00** on all 8 files, and the flat 2235–2250 means and both band heights are identical to `anchored` (§14.10 finding 17). `lower_anchors` is excluded from `_recipe_key` on purpose, so the `anchored` twin — and therefore the check — stays in place. |
+| `lower_anchors` do not leak above the cut | with `LOWER_ANCHOR_POINTS_CM1` applied (re-checked for both the three- and the two-anchor set), `upper_max_abs_diff` is still **0.0e+00** on all 8 files, and the flat 2235–2250 means and both band heights are identical to `anchored` (§14.10 finding 17). `lower_anchors` is excluded from `_recipe_key` on purpose, so the `anchored` twin — and therefore the check — stays in place. |
+| Two lower anchors are hit exactly, so the seam is predictable | predicted `-(anchored residual at 1955)` against the measured seam, per file: gap **0.013-0.056% of signal range** on all six un-gated files — the sub-sample interpolation gap and nothing more (§14.10.1 finding 21). Printed by `api.py`'s `__main__`. |
+| `lower_settings` without a cut, or with an unknown key | rejected at variant construction with `ValueError`, on `settings`' precedent. |
+| `lower_settings` is confined to the lower segment | `lower_settings=None` against `lower_settings=` the current resolved settings: max abs diff **0.0**, so the default is bit-for-bit §14.8-§14.10. `{"half_window": 4}` moves the baseline by 2.2e-4 below the cut and by **0.0 at and above it**. Honoured by `split_cm1`'s lower segment as well (1.9e-4). |
 | `lower_anchors` without `lower_split_cm1` | rejected at variant construction with `ValueError`; there is no lower segment to anchor. A `lower_anchors` entry above the cut is rejected the same way. |
 | `lower_split_cm1` unchanged by the §14.10 branch | the unanchored `lower split 1955` variant reproduces §14.9's seams exactly in the same run (−2.87/−1.77/−5.64/+2.02/+0.85/−0.53) and its local-step ratios to the reported precision (2.2/1.2/5.3/10.7/9.8/0.4). |
 | `lower_anchors` with the cut gated | `...-022`, both files: `lower_anchors_applied` empty, `lower_moved_pct` 0.0, result identical to `anchored` — the anchors go with the cut rather than being fitted to a segment that was never made. |
@@ -1478,8 +1525,15 @@ Figures: `C:\Figures\nn1120-4_pd_ceo2_000\baseline_experiments\lower_split_1955\
 
 The thread §14.9 left open and §14.7.1 asked for. §14.9's lower segment ran with
 the unmodified `voigt_fit.baseline` settings and **no anchors**, matching
-`split_cm1`'s precedent; it now gets three of its own — **both endpoints of its
-own segment plus 1800 cm⁻¹**, `LOWER_ANCHOR_POINTS_CM1 = (1955, 1800, 1750)`.
+`split_cm1`'s precedent; it now gets anchors of its own — as first built, three
+of them: **both endpoints of its own segment plus 1800 cm⁻¹**.
+
+> **Read §14.10.1 first. `LOWER_ANCHOR_POINTS_CM1` is now `(1955, 1750)`** — the
+> 1800 anchor was removed by the user on the figures. Every table in this section
+> measures the **three**-anchor set and is kept as the record of it, not as a
+> description of the default. Findings 21–24 supersede findings 18–20 where they
+> overlap; finding 19's reading is **withdrawn** by finding 24, and finding 16 is
+> now about a wavenumber that is only a probe.
 
 Implemented per §2 as `BaselineVariant.lower_anchors` plus a step in
 `_compute_lower_split`, not a parallel module. It **requires** `lower_split_cm1`
@@ -1517,7 +1571,7 @@ own baseline **before** the splice, never to the spliced curve.
 
 **Coverage: n=8**, all judged files, `...-007_delta10.0042` included.
 
-#### Finding 16. The guard passes 1800 on every file, and that is the thing to know about this anchor
+#### Finding 16. The guard passes 1800 on every file — a standing limit of the guard, not a fact about 1800
 
 1800 is ~5 cm⁻¹ from the 1795 band (at the default ¹³CO isotope the low peaks sit
 at 1795/1775, §4) — well inside `ANCHOR_GUARD_CM1 = 25`. It is **never gated**.
@@ -1619,6 +1673,12 @@ both segments are fitted to the data alone.
 
 #### Finding 19. Below the cut, this is the first thing that moves the `.0022` regime
 
+> **Withdrawn by finding 24.** The numbers are right; the reading is not. Below
+> 1955 the bands are negative-going, so "the subtracted trace sits nearer zero"
+> and "the baseline has been pulled onto the band" are the same movement, and this
+> metric rewards the form the user rejected. Kept intact because §14.10.1 argues
+> against it and an edited-away claim cannot be argued against.
+
 **Mean signed `raw − baseline` over 1750–1900, raw units** — the quantity §14.9
 read off the figures ("the anchored baseline leaves the subtracted trace floating
 +0.0005 to +0.0009 above zero across 1900–1750"). A signed offset is a baseline
@@ -1676,6 +1736,9 @@ baseline(w)`, so the sign says which way the line ended up off):
 | `...-017` | .0022 | −0.78 | **−5.50** | **+4.14** |
 | `...-021` | .0022 | −0.49 | **−5.99** | **+4.53** |
 
+(The 1800 column is the removed anchor; §14.10.1 finding 23 re-reads it against
+the *current* baseline's own miss at 1800, which changes what it means.)
+
 The post-crossing files' residuals are nearly collinear and all three anchors land
 within 2.1%. On the two `.0022` files the pattern is the signature of curvature —
 ends high, middle low, by 4–6% of range — and it is exactly §14.7.1's mechanism at
@@ -1723,7 +1786,8 @@ verified: above the cut this is §14.7 exactly, so no band recovery is at risk
 (finding 17). Below the cut it cuts the seam by a third to three quarters on the
 four post-crossing files — removing §14.9's only cost over §14.7 on the files
 that section was built for — and it halves the `.0022` files' subtracted offset
-below 1955, the first movement in that regime anywhere in §14 (finding 19).
+below 1955 — which finding 24 later shows is not a result in the direction it
+appears to be (finding 19, withdrawn).
 Against that it grows the seam on those same `.0022` files (2.0 → 2.9%,
 0.9 → 2.6% of range), moves the post-crossing four's offset back out by 2–5x
 (from −1.6e-5..−7.7e-5 to −4.0e-5..−1.6e-4, though still far inside
@@ -1750,3 +1814,653 @@ user judgement:
   same data value from opposite sides.
 
 Figures: `C:\Figures\nn1120-4_pd_ceo2_000\baseline_experiments\lower_anchored_1955\`.
+#### 14.10.1 The 1800 anchor — tried and removed
+
+**Outcome: `LOWER_ANCHOR_POINTS_CM1` is `(1955, 1750)`.** The interior anchor at
+1800 was built, measured (§14.10), judged on the figures and taken out again by
+the user — *"that did not work well"*. The lower segment keeps both its endpoints
+and nothing between them. This subsection is kept so it is not re-added on the
+same reasoning, and because removing it changes the mechanics, not just the
+count.
+
+**Two anchors are hit exactly. Three were not.** `apply_anchors` fits a
+least-squares line to three or more residuals and the unique line through two —
+so the lower baseline now passes through the data estimate at the cut and at the
+ROI floor, instead of being pulled toward three points and satisfying none. Every
+number below follows from that.
+
+##### Finding 21. The seam is now predictable, and it is fixed by the upper side alone
+
+If the lower baseline hits `anchor_data_value(1955)` exactly while the upper side
+still misses by its own least-squares residual, then
+
+> **seam = −(the anchored baseline's residual at 1955)**
+
+up to the ~1.4 cm⁻¹ between the anchor and the lower segment's top sample. That is
+a prediction, not a description, so it was checked before the run was read. As %
+of signal range:
+
+| File | index | predicted | actual | gap |
+|---|---|---|---|---|
+| `...-007` | .0042 | −1.742 | −1.770 | −0.028 |
+| `...-008` | .0042 | −0.704 | −0.760 | −0.056 |
+| `...-012` | .0052 | −2.694 | −2.748 | −0.054 |
+| `...-017` | .0022 | +1.507 | +1.495 | −0.013 |
+| `...-021` | .0022 | +1.165 | +1.129 | −0.036 |
+| `...-027` | .0052 | −0.689 | −0.729 | −0.041 |
+
+Agreement to 0.013–0.056% of range, which is the sub-sample gap and nothing else.
+The predicted column is §14.7's own anchor residual at 1955 — `...-007`'s +1.74%
+is the number §14.8's miss table already reported — so this is the two sections
+meeting where they should.
+
+**This retires a thread.** With the endpoint anchor exact, *nothing done below the
+cut can change the seam*: it is bounded by the quality of the full-ROI anchor at
+1955 and by that alone. A smaller seam now needs a better upper anchor, a
+continuity constraint (§14.10 finding 18), or a different cut point — not more
+lower anchors.
+
+##### Finding 22. The seam against the other two forms: better where §14.10 was worse
+
+`seam_pct_of_range`, and the local ratio (seam step in the subtracted trace over
+the median sample-to-sample step across 1946–1966):
+
+| File | index | §14.9 none | §14.10 three | **§14.10.1 two** | local: none / three / **two** |
+|---|---|---|---|---|---|
+| `...-007` | .0042 | −2.87 | **−1.58** | −1.77 | 2.2 / **1.2** / 1.3 |
+| `...-008` | .0042 | −1.77 | **−0.42** | −0.76 | 1.2 / **0.1** / 0.5 |
+| `...-012` | .0052 | −5.64 | **−2.52** | −2.75 | 5.3 / **1.6** / 1.9 |
+| `...-027` | .0052 | −0.53 | **−0.36** | −0.73 | 0.4 / **0.2** / 0.6 |
+| `...-017` | .0022 | +2.02 | +2.86 | **+1.50** | 10.7 / 14.9 / **8.0** |
+| `...-021` | .0022 | +0.85 | +2.61 | **+1.13** | 9.8 / 21.9 / **11.8** |
+
+Two anchors are a little worse than three on the post-crossing four (by 0.2–0.4
+points, all still well inside the unanchored form) and **clearly better on the two
+`.0022` files**, which is where three anchors had made the seam worse than doing
+nothing. On `...-017` the two-anchor seam is the smallest of the three forms
+outright. The regime split that has run through findings 9, 10, 15, 18 and 19
+reverses here.
+
+##### Finding 23. What two anchors give up is the middle, and on the `.0022` files the middle is the question
+
+With no interior constraint, the lower correction is a straight line between the
+endpoints and the segment's curvature is unopposed. `data(1800) − baseline(1800)`,
+as % of signal range — a **probe, not an anchor** (`LOWER_MID_PROBE_CM1`):
+
+| File | index | current | anchored | lower-only | three anchors | **two anchors** |
+|---|---|---|---|---|---|---|
+| `...-007` | .0042 | −0.13 | +9.82 | −0.12 | −0.76 | −1.23 |
+| `...-008` | .0042 | −0.31 | +6.67 | +0.72 | −1.36 | −2.22 |
+| `...-012` | .0052 | −0.18 | +15.18 | −0.18 | −0.93 | −1.52 |
+| `...-027` | .0052 | +0.16 | +6.48 | +0.14 | −1.50 | −2.45 |
+| `...-017` | .0022 | **−7.89** | −10.40 | −8.02 | −5.50 | −8.96 |
+| `...-021` | .0022 | **−8.12** | −10.83 | −8.23 | −5.99 | −9.78 |
+
+On the post-crossing four the cost is small: the two-anchor baseline sits 1.2–2.5%
+of range above the data at 1800, against ~0% for the current baseline.
+
+**The `.0022` column is the whole argument, and it is not what §14.10 finding 20
+made it sound like.** Read the `current` column first: the existing baseline
+*already* sits 7.9–8.1% of range above the data at 1800 on those files. The low
+region there is a broad depression, deeper than the 1795 band's own 3.7–4.0%
+peak-to-peak (§14.10 finding 16). So the three-anchor set's −5.50/−5.99 was not
+"the anchor holding the middle in place" — it was the anchor pulling the baseline
+**down into that depression** by ~2.4 points, on the assumption that the
+depression is baseline error. The two-anchor set takes no position and leaves the
+baseline ~1 point further above the data than current.
+
+Which of those is right is unresolved and is exactly §14.3 finding 4: nothing here
+distinguishes "the baseline is too high at 1800" from "there is unfitted band
+intensity at 1800". §4's two low-wavenumber peaks are still the instrument that
+could, and are still dormant. **The user judged the figures and the answer was
+that pulling it down did not work.**
+
+##### Finding 24. The signed-offset proxy of §14.10 finding 19 points the wrong way here, and is retired
+
+Mean signed `raw − baseline` over 1750–1900, raw units, with the removed form
+included:
+
+| File | index | current | anchored | lower-only | three anchors | **two anchors** |
+|---|---|---|---|---|---|---|
+| `...-007` | .0042 | −1.04e-4 | +6.05e-4 | −1.6e-5 | −4.0e-5 | −7.2e-5 |
+| `...-008` | .0042 | −2.24e-4 | +2.54e-4 | −3.3e-5 | −1.43e-4 | −1.98e-4 |
+| `...-012` | .0052 | −3.4e-6 | +7.23e-4 | +2.3e-6 | −3.3e-6 | −2.98e-5 |
+| `...-017` | .0022 | −3.33e-4 | −5.45e-4 | −3.51e-4 | **−1.46e-4** | −4.31e-4 |
+| `...-021` | .0022 | −3.98e-4 | −6.41e-4 | −4.13e-4 | **−1.99e-4** | −5.37e-4 |
+| `...-027` | .0052 | −8.19e-5 | +3.08e-4 | −7.71e-5 | −1.64e-4 | −2.19e-4 |
+
+**On this metric the three-anchor set wins on every file, and it is the form the
+user rejected.** That is not a contradiction to explain away — it is the metric
+failing, and finding 23 says how. Below 1955 the bands are negative-going, so
+"the subtracted trace sits nearer zero" and "the baseline has been pulled down
+onto the band intensity" are *the same movement*. The metric cannot tell them
+apart, and on the `.0022` files it rewards precisely the movement that was judged
+wrong.
+
+§14.10 finding 19 introduced this table as "a metric whose direction of goodness
+is defensible" and read its `.0022` improvement as the first real movement in that
+regime. **That reading does not survive.** The measurement stands — the offset did
+halve — but it is not evidence the baseline got better, and §14.10's conclusion
+and the §0 status row are corrected accordingly. Mean `|subtracted|`, which
+finding 19 had already demoted, fails for the same reason and more obviously.
+
+What this leaves: below 1955 there is **no proxy**, signed or absolute. The seam
+(findings 21–22) is measurable and means what it says because it is a
+discontinuity in something that should be continuous. Everything else in that
+region is for the figures and for §4's peaks when they are configured.
+
+##### Unchanged
+
+- **Containment.** `upper_max_abs_diff` is **0.0e+00 on all eight files** with the
+  two-anchor set, `height_2040` / `height_1980` identical to `anchored`, flat
+  2235–2250 inherited. §14.10 finding 17 holds unchanged; the anchor count below
+  the cut cannot reach above it.
+- **The `...-022` gate.** Both files: cut gated at 1955, `lower_anchors_applied`
+  empty, result identical to `anchored`.
+- `lower_moved_pct` with two anchors: 12.78 / 11.88 / 19.64 / 10.27 on the
+  post-crossing four, and **1.81 / 1.52** on the `.0022` pair — against 5.95 /
+  5.60 with three. Below the cut the two-anchor baseline stays much closer to the
+  full-ROI anchored one on the pre-crossing files, which is the same fact
+  finding 23 reports from the other side.
+
+##### `lower_settings` — the lower segment's parameters are now exposed
+
+Separate change, same run. `BaselineVariant.lower_settings` overrides
+`std_distribution` for the **lower segment only**; `None` — the default — keeps
+the unmodified `voigt_fit.baseline` settings that every measurement in §14.8–§14.10
+used, so nothing here is re-based. It requires a cut and raises without one, and an
+unknown key raises at variant construction, both on `settings`' precedent.
+
+It is exposed because that segment has a specific reason to want different values:
+it is ~106 samples against the full ROI's ~259, so `half_window` and the other
+sample-count settings are **~2.4× larger relative to the array** than the values
+they were tuned at (§14.8's "no degenerate segments" note). Those are the knobs to
+reach for first. **No value is recommended and no default is changed** — this is
+the instrument, not a tuning. A commented template variant sits in `api.py`'s
+`__main__`.
+
+##### Reading the figures
+
+`plot_baseline` now draws a reference grid — major and minor ticks on both axes,
+50/10 cm⁻¹ over the full ROI and finer on a zoom (`_axes.apply_reference_grid`) —
+and the legend moved below the figure, because the anchor and seam annotations had
+made it wide enough to cover the top of both panels, including the flat 2235–2250
+region the high-end check is read from. Judgement here is visual (§14.3 finding 4);
+the figures should at least be readable.
+
+Figures: `C:\Figures\nn1120-4_pd_ceo2_000\baseline_experiments\lower_anchored_2pt\`.
+
+### 14.11 `std_distribution` settings, re-swept under the anchor — measured; nothing recommended
+
+§14.3 finding 1 swept the five exposed settings and ruled tuning out. That sweep
+was of the **bare** baseline: no anchors, no cut, no lower segment. Two
+instruments have been built since that finding 1 could not have used — the
+full-ROI anchor set (§14.7) and `lower_settings` (§14.10.1) — so the sweep was
+run again on both. The headline is unchanged (**tuning does not un-halve the
+bands**), but the re-run produces a quantity that does move, and a measurement
+of its limit.
+
+Runs: `C:\Figures\nn1120-4_pd_ceo2_000\baseline_experiments\std_sweep_upper\`,
+`...\std_sweep_lower\`, `...\std_sweep_anchor_consistency\`. The last folder
+also holds `anchor_inconsistency_sweep.{py,csv}` (28 settings × 8 judged files)
+and `anchor_inconsistency_breadth.{py,csv}` (4 settings × 60 unlabelled files);
+both are throwaway probes in §14.6's sense, kept beside their output rather than
+promoted into the package.
+
+#### Finding 25. The three-anchor residual is a single scalar, exactly
+
+`apply_anchors` fits a least-squares **line** to three residuals, so the leftover
+residual vector lives in the 1-dimensional orthogonal complement of a
+2-parameter fit on 3 points. Its *direction* is fixed by the anchor wavenumbers
+alone; only its magnitude varies with the file and the settings. Normalised to
+the residual at 1955, that direction is
+
+> `(r2240, r2006, r1955) ∝ (+0.217949, −1.217949, +1)`
+
+analytically, from `(2240, 2006, 1955)`. Measured across 174 (file, settings)
+pairs the two ratios have standard deviation **0.000000** — the same to machine
+precision in every row. The "0.4–3.2% of signal range" spread §14.7 reports as
+three numbers is therefore one number seen three times.
+
+Call it the **anchor inconsistency**, reported as `r1955`: the part of the
+baseline's error at the three anchors that is *not* affine, and so is the part
+anchoring cannot remove. It is zero exactly when the three residuals are
+collinear in wavenumber.
+
+**It is not a quality score.** §14.3 finding 4 applies to it directly: a
+baseline whose error happens to be collinear at three chosen points can be wrong
+everywhere between them. What it is defensibly a measure of is (a) anchor
+self-consistency and (b), via §14.10.1 finding 21, the seam.
+
+#### Finding 26. `lower_settings` cannot move the seam — predicted, then confirmed
+
+Stated before the run, from finding 21: with two lower anchors the lower
+baseline hits `anchor_data_value(1955)` exactly whatever the lower segment's
+parameters are, so `seam_pct_of_range` must be invariant under `lower_settings`.
+Eight variants (`half_window` 4/6/15, all three sample-count knobs ×0.4,
+`num_std` 1.4/2.0, against the §14.10.1 reference), `std_sweep_lower`:
+
+| file | index | ref | spread across all 8 |
+|---|---|---|---|
+| `...-007` | .0042 | −1.770 | −1.748 … −1.774 |
+| `...-008` | .0042 | −0.760 | −0.728 … −0.762 |
+| `...-012` | .0052 | −2.748 | −2.718 … −2.753 |
+| `...-017` | .0022 | +1.495 | +1.494 … +1.498 |
+| `...-021` | .0022 | +1.129 | +1.129 … +1.140 |
+| `...-027` | .0052 | −0.729 | −0.711 … −0.727 |
+
+Spread ≤ 0.035% of range — the ~1.4 cm⁻¹ sub-sample term, not the parameters.
+`upper_max_abs_diff` is **0.0e+00 on all 8 files × all 8 variants**, and no
+variant went degenerate, including `half_window 4` on the ~106-sample segment.
+So `lower_settings` is confirmed as an instrument that reaches only the interior
+of the lower segment — the region §14.10.1 finding 24 left with no proxy at all.
+**Nothing in this sweep can be scored, and none of it is recommended.**
+
+The one visible movement is the 1800 probe on the `.0022` pair, where
+`lower_settings={"half_window": 15}` takes it from −8.96/−9.78 to **−2.88/−3.68**
+% of range. That is the largest movement anything has produced in that regime —
+and it is the *same direction* as the three-anchor set of §14.10, i.e. pulling
+the baseline down onto the low-wavenumber depression, which is what the user
+judged wrong. Finding 24 already says why the number cannot tell the two apart.
+Recorded so it is not rediscovered as a result.
+
+#### Finding 27. Under the anchor, tuning halves the anchor inconsistency
+
+28 settings combinations, judged files, `anchor_inconsistency_sweep.csv`. Mean
+|`r1955`| over the six bad files (the `...-022` pair is excluded — 1955 is gated
+there, so the number is a miss, not a residual):
+
+| settings | mean \|r1955\|, % of range |
+|---|---|
+| current (`num_std` 1.1, `half_window` 10) | 1.417 |
+| `num_std` 2.5 + `half_window` 20 | **0.690** |
+| `num_std` 2.5 + `half_window` 15 | 0.715 |
+| `num_std` 2.0 + `half_window` 20 | 0.798 |
+| `num_std` 2.5 | 0.970 |
+| `half_window` 20 alone | 1.611 |
+| `half_window` 30 alone | 1.778 |
+
+`num_std` upward and `half_window` upward only help **together**; each alone is
+neutral-to-worse. `interp_half_window`, `fill_half_window` and
+`smooth_half_window` move it by <0.05 and are as inert here as finding 1 found
+them. `num_std 0.8` produced a degenerate baseline on `...-008` and is out.
+
+#### Finding 28. The seam halves — and then hits a floor the inconsistency does not
+
+Measured end to end in `std_sweep_anchor_consistency`: the §14.10.1 form with
+`settings={"num_std": 2.5, "half_window": 20}` on the **upper** side.
+`seam_pct_of_range`, and finding 21's prediction beside it:
+
+| file | index | seam ref | seam new | predicted new | gap |
+|---|---|---|---|---|---|
+| `...-007` | .0042 | −1.770 | **+0.116** | +0.249 | −0.133 |
+| `...-008` | .0042 | −0.760 | **−0.378** | −0.294 | −0.084 |
+| `...-012` | .0052 | −2.748 | **−0.661** | −0.480 | −0.181 |
+| `...-017` | .0022 | +1.495 | **+1.074** | +1.067 | +0.007 |
+| `...-021` | .0022 | +1.129 | **+1.013** | +1.034 | −0.022 |
+| `...-027` | .0052 | −0.729 | −0.987 | −1.016 | +0.029 |
+
+Mean |seam| **1.439 → 0.705**; smaller on five of six, larger on `...-027`.
+`upper_max_abs_diff` stays 0.0e+00 everywhere and nothing went degenerate.
+
+**But read the gap column.** Under the current settings it was 0.013–0.056
+(§14.10.1 finding 21). Here it reaches **0.181**, and the three files where it
+blew out are exactly the three where the inconsistency got smallest. That term
+is the sub-sample slope difference across the ~1.4 cm⁻¹ between the anchor and
+the segment's top sample, and **it does not shrink with `r1955`**. So the seam
+does not go to zero as the inconsistency does — it floors at ~0.03–0.18% of
+range, and `...-007`'s −1.770 → +0.116 is partly the sign passing through zero,
+not a clean 15× scaling. That floor is the limit on what upper-side tuning can
+buy, and it is the honest form of "the seam halves".
+
+#### Finding 29. The primary symptom is slightly worse, and the movement roughly doubles
+
+§14.1 constraint 2 names the halved 2040 and 1980 bands as the failure, and
+`height_*_x_ref` is the arm where "better" is defensible. Under `ns2.5 hw20`
+(unsplit anchored form; the lower-split twin is identical above the cut):
+
+| file | index | 2040 anchored → new | 1980 anchored → new | moved_pct anchored → new |
+|---|---|---|---|---|
+| `...-007` | .0042 | 1.43 → 1.40 | 1.71 → **2.33** | 11.0 → 18.2 |
+| `...-008` | .0042 | 1.23 → 1.17 | 1.21 → **1.44** | 7.7 → 20.7 |
+| `...-012` | .0052 | 2.05 → 1.85 | (ref ≤ 0) | 17.0 → 12.8 |
+| `...-027` | .0052 | 1.66 → **2.17** | 1.21 → 1.27 | 6.9 → 14.2 |
+| `...-017` | .0022 | 0.98 → 0.93 | 0.44 → 0.50 | 2.9 → 5.9 |
+| `...-021` | .0022 | 0.99 → 1.01 | 0.23 → **0.08** | 3.2 → 5.9 |
+
+2040 recovery goes **down** on three of the four post-crossing files and up only
+on `...-027`; 1980 improves on three and collapses on `...-021`. The baseline
+also moves 1.5–2.7× further from `current` than the anchored form does, on files
+nobody has looked at yet. **The metric §14.1 makes primary argues against the
+candidate the inconsistency sweep found.** That is not resolved by promoting the
+metric that agrees — it is finding 4 again, wearing a new hat.
+
+Noted without a claim: on the `...-022` gate `moved_pct` drops 34.4 → 18.6
+(.0022) and 13.9 → 13.3 (.0042). "Moves less from current" only counts if
+current is right there, and §14.2 withdrew that label.
+
+#### Finding 30. The breadth check disagrees with the judged six, and prefers the other candidate
+
+60 unlabelled `delta10` files from the same dataset, 51 with 1955 ungated
+(`anchor_inconsistency_breadth_60files.csv`):
+
+| settings | mean \|r1955\| | median | max | smaller than current on |
+|---|---|---|---|---|
+| current | 2.421 | 2.147 | 9.651 | — |
+| `ns2.5 hw15` | **1.607** | 1.201 | 9.586 | **37/51** |
+| `ns2.5 hw20` | 1.700 | **1.079** | 9.611 | 32/51 |
+| `ns2.0 hw20` | 1.795 | 1.355 | 9.548 | 31/51 |
+
+The judged-six argmin (`hw20`) has the **weaker** independent evidence: 32/51 is
+not distinguishable from chance, 37/51 is. That is what picking an argmin over
+28 candidates on 6 files is expected to do. `ns2.5 hw15` also leaves the
+2235–2250 flat check slightly *better* than current (mean 5.98e-5 vs 6.77e-5;
+`hw20` ≈ current at 6.81e-5, worst file 4.6e-4 against current's 4.2e-4 — same
+order, 20× below §14.7's 1.5e-3 failure). No degenerate baseline in 240 rows.
+
+And the **max is unchanged** across all four settings, 9.65 → 9.55–9.61: whatever
+makes the worst files worst is not a `std_distribution` parameter.
+
+#### What this settles, and what it does not
+
+- **Settled:** the three anchor residuals are one scalar (25); `lower_settings`
+  cannot reach the seam (26); tuning under the anchor halves that scalar on the
+  judged files (27) and improves it on a majority, not all, of a wider sample
+  (30).
+- **Settled against:** finding 1's headline survives — no setting un-halves the
+  bands, and the best candidate on the inconsistency makes 2040 slightly worse
+  (29).
+- **Not settled:** whether any of this is an improvement. The seam is real and
+  smaller; the band heights are real and slightly worse; the two samples rank the
+  candidates differently. **Judgement is visual (§14.3 finding 4) and has not
+  been made.** No value is recommended, no default is changed, `voigt_fit.baseline`
+  is untouched, and everything here is offline.
+- **Next, if this is picked up:** the seam floor of finding 28 says upper-side
+  tuning is nearly spent as a way to shrink the seam; a continuity constraint at
+  the cut (§14.10 finding 18) is the remaining lever. And `r1955` is cheap enough
+  to promote to a column on the comparison table if it is going to be used — it
+  is currently computed only in the scratch scripts beside the run output.
+
+### 14.12 A different algorithm below the cut — built, measured, and the first thing to satisfy all three stated targets
+
+Everything in §14.3 through §14.11 varied `std_distribution`'s *parameters*, the
+anchors, or where the cut goes. **None of it varied the algorithm.** This
+section does, on the lower segment only, and it is the first form in §14 that
+moves the pre-crossing `.0022` regime in a direction the figures accept.
+
+**The scope is the user's, this session**, and is narrower than it looks:
+
+- The full-ROI three-anchor baseline of §14.7 **stays** — *"the upper baseline
+  regime is fine, the one with 3 anchor points."* Nothing here touches it.
+- The 1955 cut **stays**; `lower_anchors` **go**. Below the cut the baseline is
+  whatever the algorithm produces, with no affine correction on top — *"no rules
+  or guardrail tricks. Strictly pybaselines and other methods."* That rules out
+  a fix built from anchors, offsets or clamps below 1955, and finding 31
+  explains why the data itself already ruled them out.
+- **Do not overfit**: acceptance is the judged eight *and* the 60-file breadth
+  sample of §14.11, not the two files named.
+
+#### The three targets, and the proxy §14.10.1 finding 24 said did not exist
+
+Finding 24 retired every metric below 1955 and left only the seam. The user's
+three statements restore three, because they are statements about where the
+baseline should *be*, not inferences from where it ended up:
+
+| column | definition | target | applies to |
+|---|---|---|---|
+| `mid` | `baseline(1850) − (data(trough) + data(peak))/2`, where trough/peak are the extrema in 1866–1838; % of range | **0** on post-crossing files | the dispersive ~1850 feature |
+
+**`mid` is interpolated, not sampled.** The grid step is ~1.93 cm⁻¹ and no sample
+lands on 1850 — the nearest are 1851.3 and 1849.4 — so `baseline(1850)` is a
+linear interpolation between them, on the steepest part of a dispersive feature.
+Same sub-sample caveat §14.10 finding 20 raised for the anchor at 1955, and the
+first thing to check if the post-crossing `mid` column ever looks stubborn. The
+trough and peak themselves are sampled, so the target is exact.
+| `und` | `max(baseline − data)` over 1885–1840, % of range | **0**, from below | the 1850 and 1870–1880 bands |
+| `int` | `mean(data − baseline)` over **1838–1750**, % of range | **0** | every file |
+
+`mid`'s target comes from *"[the baseline at 1850] should be as close [as
+possible to] the halfway point between the trough at around 1855 and the peak at
+1845"* on `...-007_delta10.0042`. `und`'s from *"[`...-021_delta10.0022`] has a
+nice peak centered at 1850 and 1870-1880. The baseline should run under the base
+of those peaks."* `int`'s from *"I do not see many features beyond 1850 to the
+terminal 1750, so the integral from 1860 or so to 1750 should be close to zero."*
+
+**Two readings had to be fixed before these were usable**, both confirmed with
+the user:
+
+1. **The window is 1838–1750, and the ¹³CO bands are counted in, not masked.**
+   The user picked "1838–1750, bands excluded" and then wrote *"Include the bands
+   at 1795/1775. There is a reason these are no longer in production.
+   Unnecessary. They will get deleted later."* Read as: exclude the 1850 feature
+   at the top of the window (hence 1838, not 1860), and do **not** treat
+   1795/1775 as signal to be preserved. §4's two dormant peaks are, on that
+   reading, not coming back.
+2. **`mid` at 1850 is a diagnostic, not a rule about what is baseline.** The user
+   chose *"it is a real band, centre is coincidence"* and added *"there is a
+   physical reason they have opposite signs."* So do **not** generalise it to
+   "the baseline passes through the centre of any dispersive feature".
+
+**This window is not §14.10.1 finding 24's trap.** That metric was signed over
+1900–1750, which contains the 1850 feature, so pulling the baseline down onto a
+negative-going band improved it. 1838–1750 excludes that feature, and the
+candidate below lands **positive** (+0.04 to +1.11), i.e. sitting *above* the
+data — so it is not eating the bands there. The metric can still be gamed by any
+baseline that simply hugs the data; see finding 33.
+
+#### Finding 31. The two named files want opposite signs at 1850, which is what rules the families out
+
+Read off the raw spectra before anything was fitted, as % of signal range:
+
+| file | regime | features in 1866–1838 | data @1850 | user's target | target − data |
+|---|---|---|---|---|---|
+| `...-007` `.0042` | post | trough 1853.3 = 57.3, peak 1843.6 = 65.8 | 58.4 | midpoint **61.5** | **+3.1** |
+| `...-021` `.0022` | pre | peak 1849.4 = 18.9, flanks 1864.8 = 9.4 / 1834 = 10.1 | 18.9 | under the base **≈9.5** | **−9.4** |
+
+Same wavenumber, opposite sign, 12.5 points apart — and the amplitudes do not
+discriminate, 8.5% peak-to-peak against 9.5%. The discriminator is **local
+shape**: dispersive/antisymmetric on the post-crossing file, a symmetric
+positive band on the pre-crossing one.
+
+Three consequences, and they are the whole design:
+
+- **No fixed anchor, offset, tilt or line below 1955 can satisfy both.** This is
+  the measurement behind "no guardrail tricks", not a preference.
+- **A pure lower-envelope method fails the post-crossing files**, because it
+  settles on the 1853 trough rather than the midpoint ~4.5% above it.
+- **A pure centre-line method fails the pre-crossing files**, because it runs
+  through the middle of the 1850 band instead of under it.
+
+Both predictions were checked, not assumed — see finding 33's `irsqr` row.
+
+On `...-021` the base is a real line, not an idea: the data at 1888 (8.03%),
+1864.8 (9.41%) and 1838 (11.09%) are collinear to 0.04 points, so "under the
+base of those peaks" names a baseline that touches at three places.
+
+#### Finding 32. 44 methods at their defaults; `pspline_arpls` is the only one that clears all three
+
+Every `pybaselines.Baseline` method that runs on a 106-sample segment was tried
+on the lower segment with the upper side held at §14.7's anchored baseline —
+classification, Whittaker, polynomial, morphological, smoothing, spline and
+misc families. Judged six (the two `...-022` files are gated, finding 34):
+
+| form | post \|mid\| mean | pre \|mid − target\| mean | pre `und` max | \|int\| max | \|int\| mean | \|seam\| max |
+|---|---|---|---|---|---|---|
+| `anchored`, no cut (§14.7) | 5.34 | 7.32 | 6.15 | 14.51 | 8.46 | — |
+| lower split, no anchors (§14.9) | 1.43 | 5.40 | 4.33 | 6.10 | 2.55 | 5.64 |
+| + lower anchors (§14.10.1, today's default) | 2.38 | 6.28 | 5.13 | 7.71 | 4.38 | **2.75** |
+| **`pspline_arpls`, defaults** | **0.54** | **0.27** | **0.79** | **1.11** | **0.43** | 4.26 |
+
+(`pre target` is `−(peak − trough)/2`: what `mid` reads when the baseline sits on
+the flanking trough, which is what "under the base" means in `mid`'s units.)
+
+Per file, the forms that matter:
+
+| file | form | `mid` | target | `und` | `int` | `seam` |
+|---|---|---|---|---|---|---|
+| `...-007` `.0042` | current | +3.93 | 0 | +8.07 | −1.15 | — |
+| | + lower anchors | +1.42 | 0 | +5.46 | −2.01 | −1.77 |
+| | **`pspline_arpls`** | **−0.17** | 0 | +3.82 | **+0.14** | −2.41 |
+| `...-008` `.0042` | current | +5.96 | 0 | +11.52 | −2.06 | — |
+| | + lower anchors | +2.63 | 0 | +8.04 | −3.72 | −0.76 |
+| | **`pspline_arpls`** | **−1.24** | 0 | +4.14 | **+0.37** | −1.92 |
+| `...-012` `.0052` | current | +0.76 | 0 | +4.16 | −1.03 | — |
+| | + lower anchors | +0.72 | 0 | +4.03 | −2.52 | −2.75 |
+| | **`pspline_arpls`** | **+0.26** | 0 | +3.69 | **+1.11** | −4.26 |
+| `...-017` `.0022` | current | +0.35 | −4.23 | +3.17 | −5.57 | — |
+| | + lower anchors | +1.42 | −4.23 | +4.24 | −6.65 | +1.49 |
+| | **`pspline_arpls`** | **−4.41** | −4.23 | **+0.79** | **+0.04** | +1.74 |
+| `...-021` `.0022` | current | +0.97 | −4.76 | +4.08 | −6.00 | — |
+| | + lower anchors | +2.14 | −4.76 | +5.13 | −7.71 | +1.13 |
+| | **`pspline_arpls`** | **−4.41** | −4.76 | **+0.21** | **+0.18** | +1.03 |
+| `...-027` `.0052` | current | +2.60 | 0 | +6.89 | −0.94 | — |
+| | + lower anchors | +4.76 | 0 | +9.01 | −3.69 | −0.73 |
+| | **`pspline_arpls`** | **−0.50** | 0 | +3.72 | **+0.76** | −1.33 |
+
+**The `.0022` files are the result.** Four sections have been a no-op there
+(findings 9, 10, 15) or moved them the wrong way (finding 23). `und` goes from
++4.1/+3.2 — the baseline cutting 3–4% of range *into* the 1850 band — to
++0.2/+0.8, which is touching its foot. `int` goes from −6.0/−5.6 to +0.2/+0.0.
+`mid` lands at −4.41 against targets of −4.76 and −4.23, i.e. within 0.35 points
+of sitting exactly on the flanking trough.
+
+**Every parameter variant tried was worse on at least one target.** `lam` 1e2,
+3e2, 3e3, 1e4, 1e5; `num_knots` 25, 50, 200; `diff_order` 2, 3. `lam=1e2` halves
+the seam and doubles the post `mid` error; `num_knots=200` wins the breadth
+column and quadruples post `mid`. Nothing here is at a tuned point — the
+defaults *are* the argmin over the parameters tried, which is the
+anti-overfitting evidence §14.11 finding 30 says to look for, and not a reason
+to stop looking.
+
+The near-misses, worth knowing because they say what the shape discriminator is
+made of: `dietrich` and `fabc lam1e3` get post `mid` to 0.25/0.27 — better than
+`pspline_arpls` — and fail the pre-crossing files at `und` +3.40/+2.72, cutting
+straight through the 1850 band. `loess` is the seam's best showing (max 2.00)
+and is second on everything else. `rolling_ball` is close on `mid` and `und` and
+fails `int` at 6.07.
+
+#### Finding 33. `int` alone is not a quality score — `irsqr` is the worked case
+
+`irsqr` scores `int` 0.02 mean, 0.08 max on the judged six — the best of the 44,
+20× better than `pspline_arpls` — and its `und` is 0.00 on both `.0022` files.
+It is also **wrong**: it is a strict lower envelope, so its pre `|mid − target|`
+is **8.94**, meaning it sits ~9% of range *below* the base it should be touching,
+and its post `|mid|` is 2.78. `corner_cutting`, `pspline_derpsalsa` and
+`pspline_mpls` fail the same way.
+
+This is finding 31's prediction landing exactly where it was pointed, and it is
+why the three columns are reported together and never summed. Any baseline that
+hugs the data from below tops the `int` and `und` columns; only `mid` objects.
+
+#### Finding 34. Containment and the gate are unchanged — verified, not inherited
+
+- `upper_max_abs_diff` is **0.0e+00** on all eight judged files and on all 51
+  ungated breadth files. Above the cut this is §14.7 bit for bit, so
+  `height_2040` / `height_1980` are identical to `anchored` on every file and all
+  of §14.7 finding 9's band recovery is intact. The check can still fail:
+  `lower_method` is deliberately **not** part of `_recipe_key`, exactly as
+  `lower_anchors` is not, so `anchored` stays the zero-diff twin.
+- **Both `...-022` files are gated at 1955** (bands at 1942 and 1969), so no
+  lower segment is built, no method runs, `lower_method` comes back blank and the
+  result is `anchored` exactly. Nothing in this section reaches them, by design.
+- `lower_moved_pct` on the `.0022` pair is **10.6 / 11.2**, against 1.8 / 1.5 for
+  the two-anchor form. That is the size of the change below the cut on the regime
+  four sections could not move.
+
+#### Finding 35. Breadth on the 60-file sample — a non-regression check, and only that
+
+Same sample as §14.11, 51 ungated. Only `int` and the seam are defined without a
+regime label, so `mid` and `und` are not reported here.
+
+| form | mean \|int\| | median | max | \|seam\| max | smaller \|int\| than today's default on |
+|---|---|---|---|---|---|
+| `anchored`, no cut | 20.40 | 9.42 | 74.29 | — | 13/51 |
+| lower split, no anchors | 2.13 | 1.32 | 7.36 | 15.50 | 39/51 |
+| + lower anchors (today) | 3.38 | 2.33 | 10.98 | 9.60 | — |
+| **`pspline_arpls`** | **0.95** | **0.45** | **4.48** | 12.02 | **45/51** |
+| `loess` | 1.29 | 0.38 | 17.65 | 11.22 | 43/51 |
+
+**Read this as constraint 1 (§14.1) and nothing more** — "this does not break the
+files that already work". It is *not* evidence that `pspline_arpls` is the best
+method, because finding 33 shows `int` on its own ranks a wrong baseline first,
+and on unlabelled files there is no `mid` to object. §14.10 finding 19 was
+over-read in exactly this way; this row is the same shape of number.
+
+No non-finite or constant baseline in 204 rows, and no method failure. **That is
+a weaker statement than the identically-shaped sentence in §14.11**, which rested
+on `std_distribution`'s own *"no baseline points found"* verdict; a direct
+`pybaselines` call emits no such warning, so this is the structural check only
+(see the last bullet below).
+
+#### Finding 36. The cost is the seam, which no longer has anything holding it
+
+| form | judged six \|seam\| max | breadth 51 \|seam\| max |
+|---|---|---|
+| + lower anchors (today's default) | 2.75 | 9.60 |
+| **`pspline_arpls`** | **4.26** | **12.02** |
+| lower split, no anchors (§14.9) | 5.64 | 15.50 |
+
+~1.5× the two-anchor form on both samples, consistently, and this is the one
+quantity §14.10.1 finding 24 kept — it is a discontinuity in something that
+should be continuous, so it means what it says. It lands **between** the two
+existing forms rather than outside them, and it is the direct and expected price
+of "anchors go": §14.10.1 finding 21 proved the seam is fixed by the anchor at
+the cut, so removing that anchor gives the control up.
+
+The remaining lever is the one §14.10 finding 18 named and nobody has built: a
+**continuity constraint** pinning the lower baseline to the *upper baseline's
+value* at 1955 rather than to the data. That is not an anchor — it constrains the
+lower curve against the upper curve, not against the spectrum — so it survives
+"no guardrail tricks" on a reading that should be confirmed before it is built.
+It would zero the seam by construction and give up the property that both
+segments are fitted to the data alone.
+
+#### What the figures show
+
+As read by the author of this section, **not** as a user judgement. Run
+`lower_pspline_arpls`, five variants, all eight judged files.
+
+- `...-007` (.0042): below 1955 the baseline passes through the middle of the
+  1853/1843 kink rather than under it, and the subtracted trace over 1838–1750
+  sits on zero where `anchored` had it floating at +0.0008. No new wiggle appears
+  elsewhere in the segment.
+- `...-021` (.0022): the change is the whole point. The bands at 1850 and
+  ~1876 now stand **above** a baseline running under their feet — in the
+  subtracted trace they read +0.0009 and +0.0004 against a flat zero — where
+  every other form runs through them and leaves 1838–1750 sitting at −0.0010.
+- `...-012` (.0052) is where to look for the cost: below ~1790 the spline
+  flattens while the data rises to the ROI floor, leaving the subtracted trace
+  at +0.0005 at 1750. That is this file's `int` of +1.11, the largest of the six,
+  and it is the end behaviour of an unanchored spline at the array edge.
+
+#### What this settles, and what it does not
+
+- **Settled:** the two regimes want opposite signs at 1850, so no fixed
+  correction below 1955 can serve both (31); `pspline_arpls` at its defaults is
+  the only method of 44 that clears all three stated targets, and its parameter
+  variants are all worse (32); `int` alone ranks a wrong baseline first (33);
+  containment above the cut and the `...-022` gate are untouched (34).
+- **Settled against:** the lower segment's problem was never a
+  `std_distribution` parameter — §14.3 finding 1 and §14.11 both looked in the
+  only place they could, and the algorithm was the knob.
+- **Not settled:** whether the seam cost is acceptable (36); whether the
+  continuity constraint should be built; and **whether the `.0022` depression
+  below 1838 was baseline error at all** — the `int ≈ 0` answer asserts it was,
+  and §4's dormant peaks, the instrument that could have tested it
+  independently, are on their way out by the same answer.
+- **Unchanged:** no default moved. `lower_method` is `None` unless a variant asks
+  for it, `LOWER_ANCHOR_POINTS_CM1` is still `(1955, 1750)`, `voigt_fit.baseline`
+  is untouched, and everything here is offline.
+- **The degenerate flag is weaker under `lower_method`.** `std_distribution`'s
+  *"no baseline points found"* warning has no analogue in a direct `pybaselines`
+  call, so the `"lower"` entry rests on a structural check (non-finite or
+  constant) and `BaselineOutcome.lower_method_degeneracy_checked` comes back
+  False to say so. A flag that is clean for want of anyone asking reads exactly
+  like one that was checked.
+
+Figures: `C:\Figures\nn1120-4_pd_ceo2_000\baseline_experiments\lower_pspline_arpls\`. That folder also holds the
+throwaway probes the tables come from -- `method_sweep_44.py` (finding 32's
+44 methods), `method_sweep_judged.py` (the parameter sweep),
+`method_breadth_60files.py` with `breadth_files.txt` (finding 35), and
+`per_file_table.py` -- kept beside their output rather than promoted into the
+package, on section 14.11's precedent.

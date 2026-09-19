@@ -32,11 +32,13 @@ from src.utils.ir_fitting.baseline import (
     ANCHOR_POINTS_CM1,
     DEFAULT_WINDOW,
     JUDGED_FILES,
-    LOWER_ANCHOR_MID_CM1,
     LOWER_ANCHOR_POINTS_CM1,
+    LOWER_METHOD_CANDIDATE,
+    LOWER_MID_PROBE_CM1,
     LOWER_SPLIT_POINT_CM1,
     SPLIT_POINT_CM1,  # noqa: F401 -- for the commented-out split variant in __main__
     BaselineVariant,
+    anchor_data_value,
     band_height,
     gating_extremum,
     overlap_shift,
@@ -558,6 +560,11 @@ def compare_baselines(
                     "lower_anchors_gated": "/".join(
                         f"{a:.0f}" for a, _, _ in outcome.lower_anchors_gated
                     ),
+                    # Which algorithm actually ran below the cut (spec.md
+                    # 14.12). Blank means std_distribution -- including on a
+                    # variant that asked for a method but had its cut gated, so
+                    # this says what ran rather than what was requested.
+                    "lower_method": outcome.lower_method_applied,
                     "split": (
                         ""
                         if outcome.split_applied is None
@@ -755,15 +762,34 @@ if __name__ == "__main__":
         # result is bit-for-bit the unsplit anchored baseline, which the
         # upper_max_abs_diff column checks (spec.md 14.9).
         #
-        # A 7th element is the LOWER anchor list -- anchors for the second
-        # baseline the 6th element creates, and it requires it. Its own affine
-        # correction on its own array, so it cannot reach above the cut;
-        # LOWER_ANCHOR_POINTS_CM1 is both segment endpoints plus 1800 cm-1
-        # (spec.md 14.10). Reported in the lower_anchors / lower_anchors_gated
-        # columns, separately from the full-ROI ones.
+        # Past the 5th slot, use the KEYWORD form -- BaselineVariant(label=...,
+        # lower_split_cm1=...) -- as the lower-split variants below do. The
+        # positional tuple exists to keep ("label", {}) short; at eight slots
+        # with two Nones in the middle it no longer does. Both are accepted.
+        #
+        # lower_anchors are anchors for the second baseline lower_split_cm1
+        # creates, and require it. Their own affine correction on their own
+        # array, so they cannot reach above the cut. LOWER_ANCHOR_POINTS_CM1 is
+        # both segment endpoints -- exactly two, so both are hit exactly rather
+        # than pulled (spec.md 14.10.1). Reported in lower_anchors /
+        # lower_anchors_gated, separately from the full-ROI ones.
+        #
+        # lower_settings are std_distribution overrides for the lower segment
+        # ONLY -- the place to try different params, since that segment is ~106
+        # samples against the ROI's ~259 and the sample-count knobs
+        # (half_window and friends) are ~2.4x larger relative to it than where
+        # they were tuned. None = the current baseline's own parameters, which
+        # is what every measurement in 14.8-14.10 used.
+        # ------------------------------------------------------------------
+        #
+        # lower_method replaces the lower segment's ALGORITHM rather than its
+        # parameters -- any pybaselines.Baseline method (spec.md 14.12). It is
+        # the knob 14.3 finding 1 and 14.11 could not turn: both swept
+        # std_distribution's parameters, never the algorithm. Mutually exclusive
+        # with lower_settings, whose keys belong to std_distribution.
         # ------------------------------------------------------------------
         folder_name = "nn1120-4_pd_ceo2_000"
-        run_name = "lower_anchored_1955"  # change per experiment so runs do not overwrite
+        run_name = "lower_pspline_arpls"  # change per experiment so runs do not overwrite
 
         variants = [
             ("current", {}),
@@ -778,28 +804,87 @@ if __name__ == "__main__":
             ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
             # Lower-only split: the anchored baseline above 1955 untouched, a
             # second create_baseline below it (spec.md 14.9).
-            (
-                "lower split 1955",
-                {},
-                DEFAULT_WINDOW,
-                ANCHOR_POINTS_CM1,
-                None,
-                LOWER_SPLIT_POINT_CM1,
+            BaselineVariant(
+                label="lower split 1955",
+                anchors=ANCHOR_POINTS_CM1,
+                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
             ),
             # Lower-only split WITH the lower segment anchored at both its
-            # endpoints plus 1800 (spec.md 14.10). The unanchored lower split
-            # above it is not optional: without it a change cannot be
-            # attributed to the lower anchors rather than to the cut, one
-            # level deeper than the reason 14.8 gives for keeping `anchored`.
-            (
-                "lower split 1955 + lower anchors",
-                {},
-                DEFAULT_WINDOW,
-                ANCHOR_POINTS_CM1,
-                None,
-                LOWER_SPLIT_POINT_CM1,
-                LOWER_ANCHOR_POINTS_CM1,
+            # endpoints (spec.md 14.10.1). The unanchored lower split above it
+            # is not optional: without it a change cannot be attributed to the
+            # lower anchors rather than to the cut, one level deeper than the
+            # reason 14.8 gives for keeping `anchored`.
+            BaselineVariant(
+                label="lower split 1955 + lower anchors",
+                anchors=ANCHOR_POINTS_CM1,
+                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+                lower_anchors=LOWER_ANCHOR_POINTS_CM1,
             ),
+            # ---- a different ALGORITHM below the cut (spec.md 14.12) ----
+            # No anchors below 1955: the correction is gone and the curve is
+            # whatever the algorithm produces, which is the form asked for. The
+            # three variants above are all load-bearing against it -- `anchored`
+            # for the containment twin, the unanchored split to separate the
+            # algorithm from the cut, and the two-anchor form because it is
+            # today's default and the thing being displaced.
+            BaselineVariant(
+                label="lower pspline_arpls",
+                anchors=ANCHOR_POINTS_CM1,
+                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+                lower_method=LOWER_METHOD_CANDIDATE,
+            ),
+            # Other methods measured in 14.12; loess is the seam's best showing,
+            # irsqr the case for why a near-zero low-window residual is not on
+            # its own a good baseline (it is a strict lower envelope and misses
+            # the 1850 midpoint by 8.9% of range).
+            # BaselineVariant(
+            #     label="lower loess",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_method="loess",
+            # ),
+            # BaselineVariant(
+            #     label="lower pspline_arpls lam1e2",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_method="pspline_arpls",
+            #     lower_method_kwargs={"lam": 1e2},
+            # ),
+            # ---- std_distribution settings, swept under the anchor (14.11) ----
+            # `settings` on an anchored variant reaches the FULL-ROI/upper
+            # baseline, and through it the anchor residuals and the seam.
+            # num_std and half_window only move it together; the other three
+            # keys are inert (14.11 finding 27). Nothing is recommended: this
+            # halves the seam and makes the 2040 recovery slightly worse
+            # (finding 29), and the 60-file breadth check ranks hw15 above
+            # hw20 where the judged six rank them the other way (finding 30).
+            # ("anchored ns2.5 hw20", {"num_std": 2.5, "half_window": 20},
+            #  DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
+            # ("anchored ns2.5 hw15", {"num_std": 2.5, "half_window": 15},
+            #  DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
+            # Same settings carried onto the split form -- this is what the
+            # seam of 14.11 finding 28 was measured on. Its unsplit twin above
+            # is not optional, for the reason `anchored` is not.
+            # BaselineVariant(
+            #     label="lo anchors ns2.5 hw20",
+            #     settings={"num_std": 2.5, "half_window": 20},
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_anchors=LOWER_ANCHOR_POINTS_CM1,
+            # ),
+            # Different params for the LOWER segment only -- add variants here.
+            # Nothing is recommended; these are the knobs, and the reason they
+            # might want changing is the segment's length (see above). 14.11
+            # finding 26 measured this arm: it cannot move the seam at all, by
+            # construction, and below 1955 there is no proxy -- so it is a
+            # figures-only comparison.
+            # BaselineVariant(
+            #     label="lower split 1955 + anchors + half_window 4",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            #     lower_anchors=LOWER_ANCHOR_POINTS_CM1,
+            #     lower_settings={"half_window": 4},
+            # ),
             # Truncating both sides was tried and is worse than the anchors
             # alone (spec.md 14.8); split_cm1 stays available:
             # ("split 1955", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1, SPLIT_POINT_CM1),
@@ -898,28 +983,88 @@ if __name__ == "__main__":
                         f"{row['file']}"
                     )
 
-        # The guard's verdict at 1800, measured rather than assumed. 1800 sits
-        # ~5 cm-1 from the 1795 band at the default 13CO isotope -- well inside
-        # ANCHOR_GUARD_CM1 -- but ANCHOR_PROMINENCE_FRAC is scaled to the FULL
-        # ROI range and the low bands are ~1e-5 to 1e-4 against ~2e-3 for 2040,
-        # so the guard may pass it. Passing is not reassurance: it means the
-        # anchor reads a region where a small band lives, and this number is
-        # what that judgement rests on (spec.md 14.10, LOWER_ANCHOR_MID_CM1).
+        # What two anchors give up: the middle of the lower segment. With
+        # exactly two the correction is the unique line through both endpoints,
+        # so nothing constrains 1800 -- and on the .0022 files the lower
+        # residuals are curved by 4-6% of range (spec.md 14.10 finding 20).
+        # This is the cost of removing the 1800 anchor, measured. It is a
+        # probe, not an anchor (LOWER_MID_PROBE_CM1).
+        #
+        # The guard's verdict is printed beside it because it is the standing
+        # limit it documents: 1800 sits ~5 cm-1 from the 1795 band and the
+        # guard passes it anyway, since ANCHOR_PROMINENCE_FRAC is scaled to the
+        # FULL ROI range while the low bands are 2-9% of it. '-' = not gated.
         print(
-            f"\nguard probe at {LOWER_ANCHOR_MID_CM1:.0f} and 1795 -- prominence "
-            "as a fraction of\nfull-ROI signal range, against the "
-            "ANCHOR_PROMINENCE_FRAC = 0.5 threshold.\n'-' means no extremum "
-            "within +/-25 cm-1 clears it: the anchor is NOT gated.\n"
+            f"\nmid-segment probe at {LOWER_MID_PROBE_CM1:.0f} -- "
+            "data(1800) - baseline(1800), as % of\nsignal range. Unconstrained "
+            "under the two-anchor set; this is what the\nremoved third anchor "
+            "used to hold. 'guard' is its prominence if gated.\n"
         )
         for item in comparison.files:
-            probe = item.traces[0]
             cells = []
-            for where in (LOWER_ANCHOR_MID_CM1, 1795.0):
-                hit = gating_extremum(probe.wavenumbers, probe.raw, where)
-                cells.append("-" if hit is None else f"{hit[1]:.2f}@{hit[0]:.0f}")
+            for trace in item.traces:
+                asc = np.argsort(trace.wavenumbers)
+                value = anchor_data_value(
+                    trace.wavenumbers, trace.raw, LOWER_MID_PROBE_CM1
+                )
+                fitted = float(
+                    np.interp(
+                        LOWER_MID_PROBE_CM1,
+                        trace.wavenumbers[asc],
+                        trace.baseline[asc],
+                    )
+                )
+                miss = 100 * (value - fitted) / signal_range(trace.raw)
+                cells.append(f"{trace.label}: {miss:+6.2f}")
+            hit = gating_extremum(
+                item.traces[0].wavenumbers, item.traces[0].raw, LOWER_MID_PROBE_CM1
+            )
+            guard = "-" if hit is None else f"{hit[1]:.2f}@{hit[0]:.0f}"
+            print(f"  {item.subifg_path.name}   guard {guard}")
+            for cell in cells:
+                print(f"      {cell}")
+
+        # The seam is now PREDICTABLE, and that is the check. With two lower
+        # anchors the lower baseline hits the data estimate at 1955 exactly,
+        # while the upper side still misses by its own least-squares residual
+        # -- so seam == -(anchored's residual at 1955), up to the ~1.4 cm-1 gap
+        # between the anchor and the lower segment's top sample. A disagreement
+        # bigger than that gap explains means the splice is wrong (14.10.1).
+        print(
+            "\nseam prediction -- with two lower anchors the seam is fixed by the\n"
+            "UPPER side alone: it should equal -(anchored residual at 1955).\n"
+            "Both as % of signal range; 'gap' is the difference.\n"
+        )
+        for item in comparison.files:
+            anchored = next(
+                (t for t in item.traces if t.label == "anchored"), None
+            )
+            lower_anchored = next(
+                (
+                    t
+                    for t in item.traces
+                    if t.lower_anchors_applied and t.split_applied is not None
+                ),
+                None,
+            )
+            if anchored is None or lower_anchored is None:
+                continue
+            asc = np.argsort(anchored.wavenumbers)
+            residual = anchor_data_value(
+                anchored.wavenumbers, anchored.raw, LOWER_SPLIT_POINT_CM1
+            ) - float(
+                np.interp(
+                    LOWER_SPLIT_POINT_CM1,
+                    anchored.wavenumbers[asc],
+                    anchored.baseline[asc],
+                )
+            )
+            rng = signal_range(anchored.raw)
+            predicted = -100 * residual / rng
+            actual = 100 * lower_anchored.seam_jump / rng
             print(
-                f"  1800 {cells[0]:<12} 1795 {cells[1]:<12} "
-                f"{item.subifg_path.name}"
+                f"  predicted {predicted:+7.3f}  actual {actual:+7.3f}  "
+                f"gap {actual - predicted:+7.3f}  {item.subifg_path.name}"
             )
 
     else:

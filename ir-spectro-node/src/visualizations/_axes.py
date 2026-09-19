@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import numpy as np
+from matplotlib.ticker import AutoMinorLocator, MaxNLocator, MultipleLocator
 
 XLim = tuple[float, float]
 
@@ -77,3 +78,40 @@ def rescale_y_to_window(
     low, high = float(values.min()), float(values.max())
     pad = (high - low) * margin or abs(high) * margin or 1e-6
     ax.set_ylim(low - pad, high + pad)
+
+
+# (span in cm-1, major tick, minor tick). First row whose span covers the window
+# wins; the last row is the fallback for anything narrower.
+_X_TICK_STEPS = ((300.0, 50.0, 10.0), (100.0, 25.0, 5.0), (0.0, 10.0, 2.0))
+
+
+def apply_reference_grid(ax, xlim: tuple[float, float]) -> None:
+    """Put a read-off grid on an axes: major + minor ticks on both axes.
+
+    These figures are judged by eye against specific wavenumbers -- an anchor at
+    1955, a band at 1795, a seam at the cut -- and the default four or five
+    ticks across a 500 cm-1 span make that a guess. Tick density is chosen from
+    the window width so a zoom gets finer lines rather than the same five:
+    50/10 cm-1 over the full ROI, 25/5 in the middle, 10/2 on a tight zoom.
+
+    y is left to a denser :class:`MaxNLocator` rather than a fixed step, because
+    the scale differs between the raw and subtracted panels and between files.
+
+    Call it **after** the y limits are set (``rescale_y_to_window``), since the
+    locator is applied to whatever range the axes ends up with.
+    """
+    span = abs(float(xlim[0]) - float(xlim[1]))
+    for threshold, major, minor in _X_TICK_STEPS:
+        if span > threshold:
+            break
+    ax.xaxis.set_major_locator(MultipleLocator(major))
+    ax.xaxis.set_minor_locator(MultipleLocator(minor))
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=10, steps=[1, 2, 2.5, 5, 10]))
+    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+
+    # Under the traces: a grid drawn over a 1.1pt line reads as a dashed trace.
+    ax.set_axisbelow(True)
+    ax.grid(which="major", color="0.75", linewidth=0.5, alpha=0.6)
+    ax.grid(which="minor", color="0.85", linewidth=0.4, alpha=0.4)
+    ax.tick_params(which="major", labelsize=7, length=3.5)
+    ax.tick_params(which="minor", length=2)
