@@ -12,6 +12,14 @@
 
 ## Current Session
 
+- [decided] Restored `src/utils/ir_fitting/api.py` to the §14.19 lower-split
+  experiment: full `(2250, 1750)` window, upper anchors `(2240, 2006, 1955)`,
+  lower-only cut at `1955`, and lower anchors `(1955, 1790, 1800, 1810, 1820)`.
+  The lower segment is 1955–1750; the five anchors are experiment-only.
+- [verified] The restored constants and both lower-split variants construct
+  successfully, and `api.py` compiles. Ruff and pytest are unavailable in the
+  current environment.
+
 - [decided] Supersede the 1790 truncation trial for the active baseline run.
   Restore the full `(2250, 1750)` window, the three upper anchors
   `(2240, 2006, 1955)`, and a lower-only cut at `1955`.

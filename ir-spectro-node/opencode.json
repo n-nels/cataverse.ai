@@ -5,7 +5,7 @@
     "coder": {
       "description": "Safely refactors legacy code.md",
       "mode": "primary",
-      "model": "github-copilot/gpt-5.2-codex",
+      "model": "opencode-go/gpt-5.6-luna",
       "variant": "high",
       "instructions": ".opencode/agent/coder.md",
       "temperature": 0.2,

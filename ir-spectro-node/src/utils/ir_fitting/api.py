@@ -31,11 +31,11 @@ from src.utils.ir_fitting import runner, writer
 from src.utils.ir_fitting.baseline import (
     ANCHOR_POINTS_CM1,
     DEFAULT_WINDOW,
-    FULL_ROI_ANCHOR_POINTS_SEVEN_CM1,
     INT_SHARED_WINDOW_CM1,
     INT_WINDOW_CM1,
     JUDGED_FILES,
     LOWER_ANCHOR_POINTS_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
+    LOWER_ANCHOR_POINTS_FIVE_CM1,
     LOWER_CONTINUATION_LAM,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_CONTINUATION_SETTINGS,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_FLOOR_POINT_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
@@ -834,11 +834,12 @@ if __name__ == "__main__":
         # with two Nones in the middle it no longer does. Both are accepted.
         #
         # lower_anchors are anchors for the second baseline lower_split_cm1
-        # creates, and require it. Their own affine correction on their own
-        # array, so they cannot reach above the cut. LOWER_ANCHOR_POINTS_CM1 is
-        # both segment endpoints -- exactly two, so both are hit exactly rather
-        # than pulled (spec.md 14.10.1). Reported in lower_anchors /
-        # lower_anchors_gated, separately from the full-ROI ones.
+        # creates, and require it. Their own affine correction runs on its own
+        # array, so it cannot reach above the cut. The five-anchor experiment
+        # below uses (1955, 1790, 1800, 1810, 1820) over the lower segment
+        # 1955-1750; it is a least-squares correction, not an exact fit at each
+        # point. Reported in lower_anchors / lower_anchors_gated, separately
+        # from the full-ROI anchors.
         #
         # lower_settings are std_distribution overrides for the lower segment
         # ONLY -- the place to try different params, since that segment is ~106
@@ -855,7 +856,7 @@ if __name__ == "__main__":
         # with lower_settings, whose keys belong to std_distribution.
         # ------------------------------------------------------------------
         folder_name = "nn1120-4_pd_ceo2_000"
-        run_name = "full_roi_anchors_2250_1750"
+        run_name = "lower_anchors_1955"
 
         variants = [
             ("current", {}),
@@ -865,57 +866,27 @@ if __name__ == "__main__":
             #
             # Keep this second so it remains the ORANGE trace in the figures.
             ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
-            # Same full ROI and settings, with the four additional lower points
-            # from the last iteration added to the three established anchors.
-            # This is a single affine correction over 2250-1750: no split and
-            # no second lower baseline.
+            # Lower-only split: retain the anchored full-ROI baseline at and
+            # above 1955, then recompute only the lower 1955-1750 segment.
             BaselineVariant(
-                label="anchored + four lower anchors",
-                anchors=FULL_ROI_ANCHOR_POINTS_SEVEN_CM1,
+                label="lower split 1955",
+                anchors=ANCHOR_POINTS_CM1,
+                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
             ),
-            # The C1 continuation of spec.md 14.14: no second baseline below
-            # the cut at all. The anchored curve is continued downward from it
-            # -- value and slope pinned at the two nodes above the cut, the
-            # region below fitted under a curvature penalty to whatever
-            # std_distribution classified there. Built because finding 42
-            # measured the defect as an UNDER-CONSTRAINED curve (3 classified
-            # samples over 205 cm-1 on ...-021), not a misclassified one, which
-            # is why every mask-style fix was a bit-for-bit no-op.
-            #
-            # The historical continuation comparison used `anchored` as its
-            # full-ROI containment twin. No continuation or lower split is
-            # active in the current seven-anchor run.
-            #
-            # lower_settings here configures the CLASSIFIER, not a second
-            # baseline -- there is none. It is on because at the unmodified
-            # num_std the classifier supplies nothing below ~1910 on the
-            # pre-crossing files, so the continuation extrapolates the whole
-            # `int` window and misses it at every lam (14.15 findings 44/45).
-            # Read LOWER_CONTINUATION_SETTINGS before changing it: what makes
-            # it work is a regime coincidence, not a design property.
-            # BaselineVariant(
-            #     label="lower continuation 1955",
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            #     lower_continuation_lam=LOWER_CONTINUATION_LAM,
-            #     lower_settings=dict(LOWER_CONTINUATION_SETTINGS),
-            # ),
-            # The literal form spec.md 14.14 proposed -- same continuation, the
-            # classifier left alone. Off because it is strictly worse on `int`
-            # (pre |int| 6.17 against 3.70 judged, breadth mean 6.35 against
-            # 0.58) while being no better on `mid` or `und`; kept named because
-            # the difference between the two IS finding 45.
-            # BaselineVariant(
-            #     label="lower continuation 1955 (classifier unchanged)",
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            #     lower_continuation_lam=LOWER_CONTINUATION_LAM,
-            # ),
+            # Historical §14.19 form: the lower segment is still 1955-1750,
+            # but its own baseline gets five anchors. Change the cut with
+            # lower_split_cm1 and change these lower anchors independently.
+            BaselineVariant(
+                label="lower split 1955 + five lower anchors",
+                anchors=ANCHOR_POINTS_CM1,
+                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+                lower_anchors=LOWER_ANCHOR_POINTS_FIVE_CM1,
+            ),
             # ---- previous lower-split experiments ----
             # Colours: raw is black, then variants take tab10 in list order --
             # `current` is blue and the established three-anchor `anchored`
-            # curve is ORANGE. The active comparison above deliberately keeps
-            # that ordering so the extra full-ROI anchors are green.
+            # curve is ORANGE. The active comparison above keeps that ordering;
+            # the lower-only forms follow it.
             #
             # The two-endpoint lower anchors of 14.10.1, the pspline_arpls of
             # 14.12, the 1800 floor of 14.13 and the continuation of 14.15 are
@@ -926,7 +897,7 @@ if __name__ == "__main__":
             # No anchors below 1955: the correction is gone and the curve is
             # whatever the algorithm produces. These historical lower-split
             # variants remain commented out because this run is intentionally
-            # the full-ROI three-anchor versus seven-anchor comparison.
+            # the lower-split five-anchor comparison.
             # BaselineVariant(
             #     label="lower pspline_arpls",
             #     anchors=ANCHOR_POINTS_CM1,
