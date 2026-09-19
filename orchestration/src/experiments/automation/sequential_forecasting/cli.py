@@ -21,6 +21,10 @@ from .data.adapter import build_examples_from_artifacts, write_examples_artifact
 from .data.validation import run_validation
 from .evaluation import run_evaluation
 from .inference import run_inference
+from .gated_blend_model import DEFAULT_BIN_COUNTS as DEFAULT_GATED_BLEND_BIN_COUNTS
+from .trajectory_extrapolation_model import (
+    DEFAULT_MIN_TRAJECTORY_POINTS as DEFAULT_TRAJECTORY_MIN_POINTS,
+)
 from .sequential_model import DEFAULT_RIDGE_ALPHAS, train_initial_model
 from .rf.artifacts import build_artifacts
 from .rf.validation import validate_rf_boundary
@@ -72,6 +76,12 @@ def main() -> None:
     model_parser.add_argument("--artifact-dir", default=str(DEFAULT_ARTIFACT_DIR))
     model_parser.add_argument("--output-dir", default=None)
     model_parser.add_argument("--ridge-alpha", dest="ridge_alphas", action="append", type=float)
+    model_parser.add_argument(
+        "--gated-blend-bins", dest="gated_blend_bin_counts", action="append", type=int
+    )
+    model_parser.add_argument(
+        "--trajectory-min-points", dest="trajectory_min_points", action="append", type=int
+    )
     model_parser.add_argument("--ode-timeout-seconds", type=float, default=None)
 
     inference_parser = subparsers.add_parser("run-inference")
@@ -143,6 +153,16 @@ def main() -> None:
                 tuple(args.ridge_alphas)
                 if args.ridge_alphas is not None
                 else DEFAULT_RIDGE_ALPHAS
+            ),
+            gated_blend_bin_counts=(
+                tuple(args.gated_blend_bin_counts)
+                if args.gated_blend_bin_counts is not None
+                else DEFAULT_GATED_BLEND_BIN_COUNTS
+            ),
+            trajectory_min_points=(
+                tuple(args.trajectory_min_points)
+                if args.trajectory_min_points is not None
+                else DEFAULT_TRAJECTORY_MIN_POINTS
             ),
             timeout_seconds=args.ode_timeout_seconds,
         )

@@ -19,12 +19,21 @@ from .data.adapter import build_examples_from_artifacts
 from .data.contract import AREA_COLUMN, TARGET_COLUMNS, TIME_COLUMN
 from .data.examples import SequentialExample
 from .data.observations import flatten_monomer_rows
+from .gated_blend_model import (
+    DEFAULT_BIN_COUNTS as DEFAULT_GATED_BLEND_BIN_COUNTS,
+    fit_gated_blend_model,
+)
+from .model_prediction import ModelPrediction
 from .models.secondary_pfo import (
     OdeForecastError,
     SecondaryPfoParameters,
     build_cutoff_forecast,
     remaining_curve_rmse,
     validate_secondary_pfo_parameters,
+)
+from .trajectory_extrapolation_model import (
+    DEFAULT_MIN_TRAJECTORY_POINTS as DEFAULT_TRAJECTORY_MIN_POINTS,
+    fit_trajectory_extrapolation_model,
 )
 
 
@@ -147,15 +156,6 @@ class FittedCorrectionModel:
         return ModelPrediction(parameters, MODEL_NAME, None)
 
 
-@dataclass(frozen=True)
-class ModelPrediction:
-    """Structured correction-model prediction result."""
-
-    parameters: SecondaryPfoParameters | None
-    source: str
-    reason: str | None
-
-
 def fit_correction_model(
     examples: tuple[SequentialExample, ...],
     *,
@@ -206,22 +206,36 @@ def _fingerprint_examples(examples: tuple[SequentialExample, ...]) -> str:
 
 
 def _evaluate_model(
-    model: FittedCorrectionModel,
+    model: object,
     examples: tuple[SequentialExample, ...],
     observations: dict[str, tuple[np.ndarray, np.ndarray]] | None,
     *,
     timeout_seconds: float,
 ) -> dict[str, object]:
-    """Evaluate one candidate on validation examples only."""
+    """Evaluate one candidate on validation examples, with RF fallback.
+
+    Every validation cutoff is scored, matching production inference
+    (`inference.py`): when the candidate returns no valid parameters, the RF
+    prediction is scored instead rather than the example being dropped.
+    Silently dropping invalid predictions (spec.md #12 forbids exactly this)
+    would let a candidate that fails on hard cutoffs look artificially more
+    accurate than one, like RF-only, that is scored on every cutoff.
+    """
     validation = tuple(example for example in examples if example.assignment == "validation")
     errors_by_group: dict[str, list[np.ndarray]] = {"early": [], "middle": [], "late": []}
     curve_by_group: dict[str, list[float]] = {"early": [], "middle": [], "late": []}
     forecast_cache: dict[tuple[str, tuple[float, ...]], tuple[np.ndarray, np.ndarray]] = {}
+    model_valid_count = 0
     for example in validation:
         prediction = model.predict_parameters(example)
-        if prediction.parameters is None:
+        if prediction.parameters is not None:
+            model_valid_count += 1
+            parameters = prediction.parameters
+        else:
+            parameters = baseline_prediction(example, "rf_only").parameters
+        if parameters is None:
             continue
-        errors = prediction.parameters.as_array()[:-1] - np.asarray(
+        errors = parameters.as_array()[:-1] - np.asarray(
             example.reference_target[:-1], dtype=float
         )
         group = "early" if example.observation_fraction < 1 / 3 else (
@@ -231,14 +245,14 @@ def _evaluate_model(
         if observations is None:
             continue
         times_s, observed_area = observations[example.experiment_id]
-        key = (example.experiment_id, tuple(float(value) for value in prediction.parameters.as_array()))
+        key = (example.experiment_id, tuple(float(value) for value in parameters.as_array()))
         try:
             if key not in forecast_cache:
                 forecast = build_cutoff_forecast(
                     times_s,
                     observed_area,
                     example.cutoff_time_s,
-                    prediction.parameters,
+                    parameters,
                     final_time_s=example.final_time_s,
                     timeout_seconds=timeout_seconds,
                 )
@@ -278,6 +292,7 @@ def _evaluate_model(
     return {
         "validation_example_count": len(validation),
         "valid_prediction_count": len(parameter_values),
+        "model_valid_prediction_count": model_valid_count,
         "parameter_rmse": overall_parameter,
         "parameter_rmse_by_progress": parameter_rmse_by_group,
         "curve_rmse_by_progress": curve_rmse_by_group,
@@ -360,27 +375,61 @@ def _evaluate_baseline(
     }
 
 
+_BASELINE_NAMES = ("rf_only", "current_ode", "rf_ode_blend")
+
+
 def select_initial_model(
     examples: tuple[SequentialExample, ...],
     *,
     observations: dict[str, tuple[np.ndarray, np.ndarray]] | None = None,
     ridge_alphas: tuple[float, ...] = DEFAULT_RIDGE_ALPHAS,
+    gated_blend_bin_counts: tuple[int, ...] = (),
+    trajectory_min_points: tuple[int, ...] = (),
     timeout_seconds: float = DEFAULT_ODE_TIMEOUT_SECONDS,
-) -> tuple[FittedCorrectionModel, dict[str, object]]:
-    """Select Ridge regularization using validation evidence only."""
+) -> tuple[object | None, dict[str, object]]:
+    """Select the best candidate using validation evidence only.
+
+    Candidates are Ridge corrections, elapsed-time-gated RF/ODE blends,
+    per-experiment convergence extrapolations, and the three required
+    baselines. Every learned candidate is scored with `_evaluate_model`,
+    which falls back to RF for cutoffs the candidate cannot predict, so no
+    candidate can look better merely by being scored on fewer, easier
+    cutoffs.
+    """
     candidates: dict[str, object] = {}
-    fitted: dict[float, FittedCorrectionModel] = {}
+    fitted: dict[str, object] = {}
     for alpha in ridge_alphas:
         model = fit_correction_model(examples, ridge_alpha=alpha)
-        fitted[alpha] = model
-        candidates[str(float(alpha))] = _evaluate_model(
+        key = str(float(alpha))
+        fitted[key] = model
+        candidates[key] = _evaluate_model(
+            model,
+            examples,
+            observations,
+            timeout_seconds=timeout_seconds,
+        )
+    for bin_count in gated_blend_bin_counts:
+        model = fit_gated_blend_model(examples, bin_count=bin_count)
+        key = f"gated_blend_{bin_count}"
+        fitted[key] = model
+        candidates[key] = _evaluate_model(
+            model,
+            examples,
+            observations,
+            timeout_seconds=timeout_seconds,
+        )
+    for min_points in trajectory_min_points:
+        model = fit_trajectory_extrapolation_model(min_trajectory_points=min_points)
+        key = f"trajectory_{min_points}"
+        fitted[key] = model
+        candidates[key] = _evaluate_model(
             model,
             examples,
             observations,
             timeout_seconds=timeout_seconds,
         )
     if observations is not None:
-        for baseline in ("rf_only", "current_ode", "rf_ode_blend"):
+        for baseline in _BASELINE_NAMES:
             candidates[baseline] = _evaluate_baseline(
                 baseline,
                 examples,
@@ -388,26 +437,41 @@ def select_initial_model(
                 timeout_seconds=timeout_seconds,
             )
     valid_candidates = {
-        alpha: result
-        for alpha, result in candidates.items()
+        key: result
+        for key, result in candidates.items()
         if result["selection_score"] is not None
     }
     if not valid_candidates:
-        raise ValueError("No correction-model candidate produced validation predictions")
+        raise ValueError("No sequential candidate produced validation predictions")
     selected_key = min(
         valid_candidates,
         key=lambda key: float(valid_candidates[key]["selection_score"]),
     )
-    selected_alpha = float(selected_key) if selected_key not in {
-        "rf_only",
-        "current_ode",
-        "rf_ode_blend",
-    } else None
+    learned_model_selected = selected_key not in _BASELINE_NAMES
+    is_gated_blend = learned_model_selected and selected_key.startswith("gated_blend_")
+    is_trajectory = learned_model_selected and selected_key.startswith("trajectory_")
+    selected_alpha = (
+        float(selected_key)
+        if learned_model_selected and not is_gated_blend and not is_trajectory
+        else None
+    )
+    selected_bin_count = int(selected_key.split("_")[-1]) if is_gated_blend else None
+    selected_trajectory_min_points = int(selected_key.split("_")[-1]) if is_trajectory else None
+    if not learned_model_selected:
+        model_name = selected_key
+    elif is_gated_blend:
+        model_name = "gated_blend"
+    elif is_trajectory:
+        model_name = "trajectory_extrapolation"
+    else:
+        model_name = MODEL_NAME
     manifest = {
-        "model_name": MODEL_NAME,
+        "model_name": model_name,
         "selected_ridge_alpha": selected_alpha,
+        "selected_gated_blend_bin_count": selected_bin_count,
+        "selected_trajectory_min_points": selected_trajectory_min_points,
         "selected_candidate": selected_key,
-        "learned_model_selected": selected_alpha is not None,
+        "learned_model_selected": learned_model_selected,
         "candidate_results": candidates,
         "training_experiment_count": len({
             example.experiment_id for example in examples if example.assignment == "train"
@@ -425,7 +489,7 @@ def select_initial_model(
         "feature_names": list(feature_names()),
         "target_names": list(LEARNED_TARGET_COLUMNS),
     }
-    return (fitted[selected_alpha] if selected_alpha is not None else None), manifest
+    return (fitted[selected_key] if learned_model_selected else None), manifest
 
 
 def train_initial_model(
@@ -433,6 +497,8 @@ def train_initial_model(
     *,
     output_dir: str | Path | None = None,
     ridge_alphas: tuple[float, ...] = DEFAULT_RIDGE_ALPHAS,
+    gated_blend_bin_counts: tuple[int, ...] = DEFAULT_GATED_BLEND_BIN_COUNTS,
+    trajectory_min_points: tuple[int, ...] = DEFAULT_TRAJECTORY_MIN_POINTS,
     timeout_seconds: float | None = None,
 ) -> Path:
     """Train and persist the validation-selected initial correction model."""
@@ -453,6 +519,8 @@ def train_initial_model(
         examples,
         observations=observations,
         ridge_alphas=ridge_alphas,
+        gated_blend_bin_counts=gated_blend_bin_counts,
+        trajectory_min_points=trajectory_min_points,
         timeout_seconds=(
             float(config.get("ode_timeout_seconds", DEFAULT_ODE_TIMEOUT_SECONDS))
             if timeout_seconds is None
@@ -465,7 +533,7 @@ def train_initial_model(
         joblib.dump(model, output_path / "model.joblib")
     else:
         (output_path / "model_not_selected.txt").write_text(
-            "Validation selected a required baseline instead of the Ridge correction model.\n",
+            "Validation selected a required baseline instead of a learned candidate.\n",
             encoding="utf-8",
         )
     (output_path / "manifest.json").write_text(

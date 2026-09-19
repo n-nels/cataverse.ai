@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "payload=$(cat); case \"$payload\" in *\"git commit\"*) b=$(git branch --show-current 2>/dev/null); if [ \"$b\" != \"feature/nucleation-classifier\" ]; then printf \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"PreToolUse\\\",\\\"permissionDecision\\\":\\\"deny\\\",\\\"permissionDecisionReason\\\":\\\"Blocked: commits are restricted to branch feature/nucleation-classifier (current: %s). Switch branches, or edit the allowed branch in .claude/settings.local.json.\\\"}}\" \"${b:-detached HEAD}\"; fi;; esac; exit 0",
+            "shell": "bash",
+            "timeout": 10,
+            "statusMessage": "Checking branch..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "enabled=false; if [ \"$enabled\" = \"true\" ]; then python \"$HOME/.claude/skills/context-graph/scripts/context_lookup.py\" --orphans; fi; exit 0",
+            "shell": "bash",
+            "timeout": 15,
+            "statusMessage": "Checking context-graph orphans..."
+          }
+        ]
+      }
+    ]
+  }
+}

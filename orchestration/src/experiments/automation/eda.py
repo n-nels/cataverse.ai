@@ -153,6 +153,11 @@ def generate_eda_plots(
         time_actual = monomer["Time (s)"].values.astype(np.float64)
         q_actual = monomer["Cumulative_Peak_Area"].values
 
+        # Sort by time so line plots render cleanly (scatter is order-independent)
+        sort_order = np.argsort(time_actual)
+        time_actual = time_actual[sort_order]
+        q_actual = q_actual[sort_order]
+
         # Fitted params from CSV (last fully-populated row)
         if not all(c in monomer.columns for c in TARGET_COLUMNS):
             logger.warning("CSV %s missing target columns, skipping", csv_path)
@@ -186,30 +191,30 @@ def generate_eda_plots(
         )
 
         # --- Plot ---
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(3.5, 2.5))
 
         ax.scatter(
             time_actual / 3600, q_actual,
-            s=8, alpha=0.6, label="Actual data",
+            s=8, alpha=0.6, label="Measured",
         )
 
         if fitted_result is not None:
             q_fitted, _ = fitted_result
-            ax.scatter(
+            ax.plot(
                 time_actual / 3600, q_fitted,
-            s=8, alpha=0.6, label="Fitted ODE (CSV params)",
+                alpha=0.6, label="Fitted",
             )
 
         if predicted_result is not None:
             q_pred, _ = predicted_result
-            ax.scatter(
+            ax.plot(
                 time_actual / 3600, q_pred,
-            s=8, alpha=0.6, label="Predicted ODE (model)",
+                alpha=0.6, label="Predicted",
             )
 
         ax.set_xlabel("Time (h)")
-        ax.set_ylabel("Cumulative Peak Area (au)")
-        ax.set_title(f"Test sample: {idx}")
+        ax.set_ylabel("Monomer Density (au)")
+        # ax.set_title(f"Test sample: {idx}")
         ax.legend()
         ax.grid(True, alpha=0.3)
 
@@ -241,7 +246,7 @@ def main() -> None:
     print(f"Loaded {len(records)} records")
 
     print("\n=== Loading model ===")
-    model_path = DEFAULT_MODEL_DIR / "lightgbm.joblib"
+    model_path = DEFAULT_MODEL_DIR / "random_forest.joblib"
     trained = load_model(model_path)
 
     print("\n=== Splitting dataset ===")
