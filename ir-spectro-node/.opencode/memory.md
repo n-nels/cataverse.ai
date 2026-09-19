@@ -12,6 +12,12 @@
 
 ## Current Session
 
+- [decided] Lock the current `api.py` experiment in `src/utils/ir_fitting/spec.md`:
+  full `(2250, 1750)` ROI; lower-only cut at `1955`; selected upper anchors
+  `(*ANCHOR_POINTS_CM1, 2011, 2010, ..., 2000)`; lower anchors
+  `(1955, 1790, 1800, 1810, 1820)`. The added upper set includes `2006` twice,
+  preserving the current least-squares weighting exactly.
+
 - [decided] Restored `src/utils/ir_fitting/api.py` to the §14.19 lower-split
   experiment: full `(2250, 1750)` window, upper anchors `(2240, 2006, 1955)`,
   lower-only cut at `1955`, and lower anchors `(1955, 1790, 1800, 1810, 1820)`.

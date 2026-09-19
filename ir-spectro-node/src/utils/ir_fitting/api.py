@@ -878,7 +878,7 @@ if __name__ == "__main__":
             # lower_split_cm1 and change these lower anchors independently.
             BaselineVariant(
                 label="lower split 1955 + five lower anchors",
-                anchors=ANCHOR_POINTS_CM1,
+                anchors=(*ANCHOR_POINTS_CM1, 2011,2010,2009,2008,2007,2006,2005,2004,2003,2002,2001,2000),
                 lower_split_cm1=LOWER_SPLIT_POINT_CM1,
                 lower_anchors=LOWER_ANCHOR_POINTS_FIVE_CM1,
             ),
