@@ -11,6 +11,235 @@ recoverable by reading the code or `plan.md`'s decision log.
 
 ---
 
+## 2026-09-19 (later) — Ran the proposed three steps. The ceiling is flat and low, the scoreboard is fixed, and the raw-measurement model is the best parameter predictor in the project and the worst curve forecaster — which identifies the real problem as the training objective, not the architecture
+
+**Starting point.** The user said "let's try the new approach," meaning the
+three steps proposed at the end of the previous entry. All three were done in
+order. Working tree changes are listed at the end.
+
+### Step 1 — the ceiling is flat, low, and says early is wide open
+
+Each validation experiment's own reference parameters were run through the ODE
+at every cutoff and scored on the remaining curve. Result: **0.033 early,
+0.025 middle, 0.026 late** across 2,004 scored cutoffs from 39 experiments.
+Per-cutoff median 0.027, worst single cutoff 0.12. (The 39 unscored cutoffs
+are each experiment's last one, which has no remainder.)
+
+Two things follow, and they reframe the project:
+
+1. **The ODE is not the limitation.** Given the right parameters it
+   reproduces these curves to roughly a fortieth of the signal range, and it
+   does so just as well from the first cutoff as from the last.
+2. **The early/late gradient every candidate shows is entirely prediction
+   error.** The best early number any method has ever produced is 0.279
+   (RF-only) against a ceiling of 0.033 — a factor of eight. Late, the ODE fit
+   reaches 0.064 against a ceiling of 0.026, a factor of 2.5. So late is
+   *closer* to solved but not solved, and early has enormous headroom. The
+   previous entry's guess that a poor early ceiling might mean "no
+   architecture will rescue early" is **ruled out**.
+
+Caveat to carry forward: the reference fit is itself chosen to minimize error
+over the whole series, so this is the best achievable by anything aiming at
+the reference parameters, not a hard lower bound on remainder error.
+
+### Step 2 — the scoreboard now measures the objective, and both evaluators share one aggregation
+
+`selection_score` was `pooled parameter RMSE + early curve RMSE`. It is now
+the **equal-weighted mean of the early, middle, and late remaining-curve
+RMSE**. Equal weighting was chosen because spec.md §14 asks for early, middle
+and late to be visible, and because no evidence yet justifies favouring one
+stage; the choice is now recorded in the manifest instead of being an
+unexamined default. Every candidate record also carries per-target parameter
+RMSE and a scale-normalized average (per-target error divided by the training
+reference spread), so the rate constants are no longer invisible.
+
+The learned-candidate and baseline evaluators previously each had their own
+copy of the aggregation — the mechanism behind the earlier validation/test
+mismatch. They now call one shared function, so that class of bug cannot
+recur.
+
+Validation standings under the new score (39 experiments, 2,043 cutoffs, all
+candidates scored on all cutoffs with RF fallback):
+
+| Candidate | Score | Early | Middle | Late | Norm. param |
+|---|---:|---:|---:|---:|---:|
+| **current_ode** | **0.2096** | 0.3956 | 0.1694 | **0.0637** | 2.798 |
+| gated_blend_4 | 0.2402 | 0.3447 | 0.2418 | 0.1341 | 1.137 |
+| rf_ode_blend | 0.2704 | 0.3369 | 0.2568 | 0.2176 | 1.888 |
+| rf_only | 0.2957 | **0.2787** | 0.2990 | 0.3093 | 1.250 |
+| raw_series_mlp_gated | 0.3834 | 0.4433 | 0.3808 | 0.3259 | **1.060** |
+| trajectory_10 | 0.4778 | 0.3519 | 0.5626 | 0.5190 | 1.223 |
+| ridge (best alpha) | 0.5224 | 0.5032 | 0.5461 | 0.5180 | 1.198 |
+
+This confirms Finding 3 of the previous entry: the plain ODE fit wins, and no
+learned candidate beats it. Written to a **new** artifact directory
+(`sequential_model_curve_score/`) so the deployed `rf_only` artifacts and the
+frozen test report remain accurate. **The test set was not reopened.**
+
+### Step 3 — the raw-measurement model, and the result that matters
+
+Built `raw_series_model.py`: one supervised regressor that reads the
+measurements collected so far — resampled onto a fixed log-spaced grid of
+absolute seconds with an availability mask, plus shape descriptors, the RF
+prediction and the current fit — and outputs the final parameter vector end to
+end. No blending, no switching rule. Two deliberate design choices, both
+responses to earlier failures recorded in this log:
+
+- **Constraints by construction.** `k_a` is predicted in log space, `k_p` as a
+  bounded fraction of `k_a` (the fitter's own parameterization), capacities as
+  non-negative values. Nothing can be driven onto a degenerate boundary by
+  clipping, which is exactly what killed the trajectory model.
+- **Scale-standardized targets**, so the three rate constants carry equal
+  weight with the two capacities during fitting.
+
+`observation_fraction` was deliberately excluded because its denominator is
+the experiment's total observation count, which is not known during an
+experiment. **Note for a future session: that field is still an input to the
+older Ridge candidate, so that candidate has a real, if small, leak.**
+
+**It is the best parameter predictor in the project.** Average scale-normalized
+error 1.04 (MLP) and 1.05 (gradient boosting), against RF-only 1.25,
+predicting the training mean 1.31, and the current ODE fit 2.80. Restricted to
+the four identifiable parameters (excluding `q_inf`, where every method
+including the mean is hopeless because 40% of experiments have it at exactly
+zero) it scores 0.46 against RF-only's 0.75. The user's instinct that the raw
+series carries learnable signal is **correct and now measured**.
+
+**And its curves are the worst of any serious candidate**: 0.383 mean, versus
+0.210 for the plain ODE fit and 0.296 for RF-only. Three things were checked
+before drawing any conclusion from that:
+
+- **Not outlier-driven.** It is worse at the *median* too (0.266 vs 0.217 for
+  RF-only). The worst 10% of cutoffs contribute 30% of the mean, which is
+  normal, not pathological.
+- **Not a scale artifact.** The pooled and the normalized parameter metrics
+  agree it is the most accurate, and both disagree with the curve metric.
+- **Not overfitting.** This one needed a real experiment, described next.
+
+### The overfitting objection, tested and rejected
+
+The model memorizes: training error is 0.08 normalized against validation
+1.05 for the boosted trees. An overfit model makes erratic *joint* predictions,
+which is an alternative explanation for bad curves that has nothing to do with
+the choice of objective. Six variants were therefore scored, spanning heavy to
+light regularization, with the decision rule fixed before running: if any
+variant reached a mean curve RMSE near 0.25, the objective story was wrong and
+this entry would have to be rewritten.
+
+| Variant | Curve mean | Early | Middle | Late | Norm. param | 4-param | Train |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| current_ode | **0.210** | 0.396 | 0.169 | **0.064** | 2.798 | 2.676 | — |
+| rf_only | 0.296 | **0.279** | 0.299 | 0.309 | 1.250 | 0.753 | — |
+| mlp_light (alpha 1) | 0.383 | 0.443 | 0.381 | 0.326 | 1.060 | **0.503** | 0.326 |
+| gbm_light | 0.447 | 0.443 | 0.465 | 0.431 | 1.069 | 0.532 | 0.080 |
+| gbm_medium | 0.465 | 0.463 | 0.493 | 0.440 | 1.065 | 0.521 | 0.347 |
+| mlp_medium (alpha 10) | 0.492 | 0.511 | 0.501 | 0.463 | 1.071 | 0.541 | 0.628 |
+| gbm_heavy | 0.598 | 0.576 | 0.641 | 0.576 | 1.126 | 0.603 | 0.613 |
+| mlp_heavy (alpha 100) | 0.623 | 0.593 | 0.662 | 0.615 | 1.145 | 0.628 | 0.712 |
+
+**Regularization makes both metrics worse, monotonically.** Closing the
+train/validation gap (training error 0.08 to 0.71) degrades curves from 0.45 to
+0.62. Nothing comes near 0.25. Overfitting is real but is not what is producing
+the bad curves.
+
+### The finding this session actually produced
+
+**Within any given stage of an experiment, better parameters do not produce
+better curves.** The comparison has to be made stage by stage, because
+comparing pooled figures mixes early and late cutoffs and produces a spurious
+result — see the correction below.
+
+Stage-matched, against RF-only, the raw-series model has better parameters and
+worse curves in *every* stage:
+
+| Stage | Raw-series param | RF-only param | Raw-series curve | RF-only curve |
+|---|---:|---:|---:|---:|
+| Early | **1.126** | 1.249 | 0.443 | **0.279** |
+| Middle | **1.037** | 1.254 | 0.381 | **0.299** |
+| Late | **0.997** | 1.249 | 0.326 | **0.309** |
+
+The sharpest single comparison is late-stage against the plain ODE fit, where
+parameter accuracy is essentially *identical* — 0.997 for the raw-series model
+versus 0.975 for the ODE fit — and curve accuracy differs by a factor of five,
+0.326 versus 0.064.
+
+The reason is that the fitting process lands on a parameter combination whose
+errors cancel along the curve; it was fitted to that curve. A regressor trained
+on coordinate-wise parameter error lands near the reference in each coordinate
+separately, which is not the same thing, and the resulting combination sits off
+the low-error valley. The ceiling result shows how narrow that valley is: the
+right combination gives 0.027, and being close in each coordinate separately
+gives 0.33.
+
+### Correction to this entry's own first draft, and to the previous entry
+
+An earlier draft argued the dissociation "runs in both directions," citing the
+ODE fit's terrible pooled parameter error (2.80) alongside its best curves.
+**That is a stage-mixing artifact and is withdrawn.** Per stage, the ODE fit's
+normalized parameter error is 4.32 early, 1.22 middle, 0.975 late while its
+curves are 0.396, 0.169, 0.064 — parameters and curves move *together* for
+that method, which is the opposite of dissociation. Its pooled figure is
+dominated by early-cutoff wildness.
+
+The same caveat applies to Finding 1's table in the previous entry: the
+"best parameters, worst curves" ordering there was also pooled across stages
+and should not be cited as evidence on its own. The stage-matched raw-series
+versus RF-only comparison above is the evidence that survives.
+
+**Therefore: further architecture work on parameter prediction is wasted
+effort.** The objective is wrong, not the model. Tuning the raw-series model
+would improve the metric that has just been shown not to predict curve
+quality.
+
+### Proposed next step, not started
+
+Train against curve error by putting the ODE inside the objective. The
+cleanest version, which also matches spec.md §1's actual goal: **forecast the
+remaining curve directly with a sequence model, then recover the parameter
+vector by fitting the existing ODE to the forecast complete series.** Curve
+and parameters are then consistent by construction, the quantity optimized is
+the quantity reported, and the existing fitter does the identifiability work
+it already does well. The ceiling result says the achievable target is roughly
+0.03 at every stage.
+
+### Two smaller things a future session should not have to rediscover
+
+- **The new normalized parameter metric has its own blind spot.** Averaged
+  over all five parameters it is essentially a `q_inf` number: `q_inf` is
+  exactly zero for 40% of experiments and near zero for 70%, so its training
+  spread is tiny and every method including predicting the training mean
+  scores above 3 on it. The manifest therefore also carries the average over
+  the four better-determined parameters, which is the figure to read. This is
+  the same disease as the pooled RMSE it replaced, in a different organ.
+- **Selecting `current_ode` cannot actually be deployed.** The inference path
+  only loads a learned model or falls back to RF-only, so a manifest naming a
+  baseline and carrying no model file would silently run RF-only in
+  production. This has not been changed and is not urgent — it only matters if
+  someone decides to deploy the new selection — but it should not be
+  discovered by surprise.
+
+**If resuming this thread:** do not tune `raw_series_model.py` to improve
+parameter RMSE — six regularization settings were swept and the metric and the
+curves move independently. Do not re-derive blends or gates. Do not cite pooled
+cross-stage parameter comparisons as evidence about curve quality. The open
+question is no longer which parameter predictor is best — it is whether a
+curve-objective model can get below the plain ODE fit's 0.210, especially
+early, where the ceiling says there is a factor of eight available.
+
+**State at end of session:** nothing committed. New files:
+`raw_series_model.py`, `artifacts/phase0/sequential_model_curve_score/`.
+Modified: `sequential_model.py` (shared aggregation, new selection score,
+normalized metrics, raw-series candidate), `cli.py`
+(`--raw-series-estimator`), `inference.py` (the learned-candidate gate now
+honours a model's own eligibility rule instead of hard-coding the valid-fit
+requirement), `tests/test_sequential_model.py` (four new tests), `plan.md`.
+Deployed candidate is still `rf_only` and `artifacts/phase0/` is otherwise
+untouched, so the existing test report remains accurate. Full suite: 63
+passed, 1 skipped, plus the same pre-existing unrelated `test_get_strategy_default`
+failure.
+
+---
+
 ## 2026-09-19 — Analysis-only session: the selection metric is measuring the wrong two parameters, no learned candidate beats the raw ODE fit under a curve objective, and no model has ever been shown the raw measurement series
 
 **No code was written or changed this session.** Nothing was retrained, no

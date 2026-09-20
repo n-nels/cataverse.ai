@@ -24,6 +24,15 @@ from sequential_forecasting.sequential_model import (  # noqa: E402
     fit_correction_model,
     select_initial_model,
 )
+from sequential_forecasting.raw_series_model import (  # noqa: E402
+    GRID_OFFSETS_S,
+    K_UPPER,
+    fit_raw_series_model,
+    from_latent,
+    series_feature_names,
+    series_features,
+    to_latent,
+)
 from sequential_forecasting.trajectory_extrapolation_model import (  # noqa: E402
     fit_trajectory_extrapolation_model,
 )
@@ -160,6 +169,113 @@ def test_model_selection_can_select_gated_blend_candidate():
     assert manifest["learned_model_selected"] is True
     assert manifest["selected_gated_blend_bin_count"] == 1
     assert model.bin_count == 1
+
+
+def test_raw_series_latent_round_trip_keeps_parameters_physically_valid():
+    values = np.asarray([[0.002, 0.9, 0.003, 0.001, 0.05]])
+    recovered = from_latent(to_latent(values)[0])
+
+    assert recovered[0] == pytest.approx(0.002)
+    assert recovered[3] == pytest.approx(0.001)
+    # Any latent vector at all, including an extreme one, must still decode to
+    # parameters the ODE accepts — the constraint is structural, not clipped on.
+    for latent in (
+        np.full(5, -50.0),
+        np.full(5, 50.0),
+        np.asarray([0.0, -3.0, -3.0, 0.0, -3.0]),
+    ):
+        decoded = from_latent(latent)
+        assert 0.0 < decoded[0] <= K_UPPER
+        assert 0.0 <= decoded[3] <= decoded[0]
+        assert 0.0 <= decoded[2] <= K_UPPER
+        assert decoded[1] >= 0.0 and decoded[4] >= 0.0
+
+
+def test_raw_series_features_ignore_observations_after_the_cutoff():
+    """The grid is masked past the last observed time, so two experiments that
+    agree up to a cutoff and diverge afterwards must produce identical
+    features at that cutoff."""
+    early, _ = _examples("leak-a", "train", 0.0001)
+    frame = pd.DataFrame(
+        {
+            "Peak_Name": ["monomer_sum"] * 3,
+            "Time (s)": [1.0, 2.0, 3.0],
+            "Cumulative_Peak_Area": [0.2, 0.3, 9.9],
+        }
+    )
+    fit_values = [0.001, 0.5, 0.0001, 0.00005, 0.4, 0.2]
+    for column, value in zip(TARGET_COLUMNS, fit_values, strict=True):
+        frame[column] = [np.nan, value, value]
+    diverging = build_sequential_examples(
+        frame,
+        experiment_id="leak-a",
+        successful=True,
+        min_points=2,
+        assignment="train",
+        rf_prediction=tuple(value + 0.0001 for value in fit_values[:-1]) + (0.2,),
+        rf_prediction_provenance="out_of_fold",
+    )
+
+    np.testing.assert_allclose(
+        series_features(early[1]), series_features(diverging[1])
+    )
+    assert "observation_fraction" not in series_feature_names()
+    seen = series_features(early[1])[len(GRID_OFFSETS_S) : 2 * len(GRID_OFFSETS_S)]
+    assert seen.sum() == 0.0  # one second elapsed is before the first grid point
+
+
+def test_raw_series_model_is_selectable_and_respects_its_own_gate():
+    train_a, _ = _examples("raw-train-1", "train", 0.01)
+    train_b, _ = _examples("raw-train-2", "train", 0.02)
+    validation, _ = _examples("raw-validation-1", "validation", 0.015)
+    examples = tuple(train_a) + tuple(train_b) + tuple(validation)
+
+    gated = fit_raw_series_model(examples, estimator_name="gbm", require_valid_fit=True)
+    always = fit_raw_series_model(examples, estimator_name="gbm", require_valid_fit=False)
+
+    # The first cutoff has only one observation and therefore no valid fit.
+    assert gated.predict_parameters(train_a[0]).parameters is None
+    assert always.predict_parameters(train_a[0]).parameters is not None
+
+    prediction = always.predict_parameters(validation[-1])
+    assert prediction.parameters is not None
+    assert prediction.parameters.q_0 == validation[-1].q_0
+    assert 0.0 <= prediction.parameters.k_p <= prediction.parameters.k_a
+
+    model, manifest = select_initial_model(
+        examples,
+        ridge_alphas=(),
+        gated_blend_bin_counts=(),
+        raw_series_estimators=("gbm",),
+        observations=None,
+    )
+
+    assert manifest["selected_candidate"].startswith("raw_series_gbm_")
+    assert manifest["learned_model_selected"] is True
+    assert model.estimator_name == "gbm"
+
+
+def test_selection_score_is_the_mean_stage_curve_rmse_and_reports_scaled_error():
+    train_a, _ = _examples("score-train-1", "train", 0.01)
+    train_b, _ = _examples("score-train-2", "train", 0.02)
+    validation, _ = _examples("score-validation-1", "validation", 0.015)
+    examples = tuple(train_a) + tuple(train_b) + tuple(validation)
+
+    _, manifest = select_initial_model(
+        examples,
+        ridge_alphas=(1.0,),
+        gated_blend_bin_counts=(),
+        observations=None,
+    )
+
+    result = manifest["candidate_results"]["1.0"]
+    # Without observations there are no curves, so the fallback basis applies —
+    # but it must be the scale-normalized parameter error, never the pooled one
+    # that is blind to the rate constants.
+    assert result["selection_basis"] == "avg_normalized_parameter_rmse"
+    assert result["selection_score"] == pytest.approx(result["avg_normalized_rmse"])
+    assert set(result["parameter_rmse_by_target"]) == set(LEARNED_TARGET_COLUMNS)
+    assert manifest["selection_metric"].startswith("mean of early/middle/late")
 
 
 def _examples_with_csv(tmp_path, name: str, assignment: str, rf_offset: float, fit_values=None):

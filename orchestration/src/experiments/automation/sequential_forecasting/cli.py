@@ -25,6 +25,7 @@ from .gated_blend_model import DEFAULT_BIN_COUNTS as DEFAULT_GATED_BLEND_BIN_COU
 from .trajectory_extrapolation_model import (
     DEFAULT_MIN_TRAJECTORY_POINTS as DEFAULT_TRAJECTORY_MIN_POINTS,
 )
+from .raw_series_model import ESTIMATOR_NAMES as RAW_SERIES_ESTIMATORS
 from .sequential_model import DEFAULT_RIDGE_ALPHAS, train_initial_model
 from .rf.artifacts import build_artifacts
 from .rf.validation import validate_rf_boundary
@@ -81,6 +82,12 @@ def main() -> None:
     )
     model_parser.add_argument(
         "--trajectory-min-points", dest="trajectory_min_points", action="append", type=int
+    )
+    model_parser.add_argument(
+        "--raw-series-estimator",
+        dest="raw_series_estimators",
+        action="append",
+        choices=list(RAW_SERIES_ESTIMATORS),
     )
     model_parser.add_argument("--ode-timeout-seconds", type=float, default=None)
 
@@ -163,6 +170,11 @@ def main() -> None:
                 tuple(args.trajectory_min_points)
                 if args.trajectory_min_points is not None
                 else DEFAULT_TRAJECTORY_MIN_POINTS
+            ),
+            raw_series_estimators=(
+                tuple(args.raw_series_estimators)
+                if args.raw_series_estimators is not None
+                else RAW_SERIES_ESTIMATORS
             ),
             timeout_seconds=args.ode_timeout_seconds,
         )

@@ -24,6 +24,10 @@ from .gated_blend_model import (
     fit_gated_blend_model,
 )
 from .model_prediction import ModelPrediction
+from .raw_series_model import (
+    ESTIMATOR_NAMES as RAW_SERIES_ESTIMATORS,
+    fit_raw_series_model,
+)
 from .models.secondary_pfo import (
     OdeForecastError,
     SecondaryPfoParameters,
@@ -205,12 +209,113 @@ def _fingerprint_examples(examples: tuple[SequentialExample, ...]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def reference_target_scales(examples: tuple[SequentialExample, ...]) -> np.ndarray:
+    """Return per-target reference spread measured on training experiments.
+
+    One row per training experiment, not per cutoff, so experiments with more
+    cutoffs do not widen the scale. The scales convert per-target RMSE into a
+    comparable quantity: without them a pooled parameter RMSE is dominated by
+    `q_e`/`q_inf` and is blind to the three rate constants, which are four
+    orders of magnitude smaller but drive the shape of the curve.
+    """
+    seen: dict[str, tuple[float, ...]] = {}
+    for example in examples:
+        if example.assignment != "train" or example.experiment_id in seen:
+            continue
+        seen[example.experiment_id] = tuple(
+            float(value) for value in example.reference_target[:-1]
+        )
+    if not seen:
+        raise ValueError("Reference scales require training examples")
+    values = np.asarray(list(seen.values()), dtype=float)
+    scales = np.std(values, axis=0)
+    return np.where(scales > 0.0, scales, 1.0)
+
+
+def _aggregate_scores(
+    errors_by_group: dict[str, list[np.ndarray]],
+    curve_by_group: dict[str, list[float]],
+    target_scales: np.ndarray | None,
+) -> dict[str, object]:
+    """Aggregate one candidate's errors identically for every candidate.
+
+    Shared by the learned-candidate and baseline evaluators so a candidate can
+    never be ranked against a differently-computed score.
+
+    `selection_score` is the equal-weighted mean of the early, middle, and late
+    remaining-curve RMSEs. Curve accuracy is the stated objective (spec.md
+    #14); weighting the three stages equally keeps early, middle, and late
+    performance visible without assuming in advance which matters most. When no
+    curve information is supplied, the scale-normalized parameter error is used
+    instead so every candidate is still ranked on the same basis.
+    """
+    parameter_rmse_by_group = {
+        group: float(np.sqrt(np.mean(np.asarray(errors) ** 2))) if errors else None
+        for group, errors in errors_by_group.items()
+    }
+    curve_rmse_by_group = {
+        group: float(np.mean(values)) if values else None
+        for group, values in curve_by_group.items()
+    }
+    parameter_values = [error for errors in errors_by_group.values() for error in errors]
+    overall_parameter = (
+        float(np.sqrt(np.mean(np.asarray(parameter_values) ** 2)))
+        if parameter_values
+        else None
+    )
+    parameter_rmse_by_target: dict[str, float] | None = None
+    avg_normalized_rmse: float | None = None
+    avg_normalized_rmse_four: float | None = None
+    if parameter_values:
+        stacked = np.asarray(parameter_values, dtype=float)
+        per_target = np.sqrt(np.mean(stacked**2, axis=0))
+        parameter_rmse_by_target = {
+            name: float(value)
+            for name, value in zip(LEARNED_TARGET_COLUMNS, per_target, strict=True)
+        }
+        if target_scales is not None:
+            normalized = per_target / target_scales
+            avg_normalized_rmse = float(np.mean(normalized))
+            # `q_inf` is exactly zero for 40% of experiments and near zero for
+            # 70%, so its training spread is tiny and every method — including
+            # predicting the training mean — scores above 3 on it. Left in the
+            # average it dominates the figure the same way `q_e` dominated the
+            # pooled RMSE this metric replaced, so the average over the four
+            # better-determined parameters is reported alongside it.
+            avg_normalized_rmse_four = float(np.mean(normalized[:4]))
+
+    stage_curves = [value for value in curve_rmse_by_group.values() if value is not None]
+    if stage_curves:
+        selection_score = float(np.mean(stage_curves))
+        selection_basis = "mean_stage_curve_rmse"
+    else:
+        selection_score = avg_normalized_rmse if avg_normalized_rmse is not None else overall_parameter
+        selection_basis = (
+            "avg_normalized_parameter_rmse"
+            if avg_normalized_rmse is not None
+            else "pooled_parameter_rmse"
+        )
+    return {
+        "valid_prediction_count": len(parameter_values),
+        "parameter_rmse": overall_parameter,
+        "parameter_rmse_by_target": parameter_rmse_by_target,
+        "avg_normalized_rmse": avg_normalized_rmse,
+        "avg_normalized_rmse_four_parameters": avg_normalized_rmse_four,
+        "parameter_rmse_by_progress": parameter_rmse_by_group,
+        "curve_rmse_by_progress": curve_rmse_by_group,
+        "curve_rmse_stage_mean": float(np.mean(stage_curves)) if stage_curves else None,
+        "selection_basis": selection_basis,
+        "selection_score": selection_score,
+    }
+
+
 def _evaluate_model(
     model: object,
     examples: tuple[SequentialExample, ...],
     observations: dict[str, tuple[np.ndarray, np.ndarray]] | None,
     *,
     timeout_seconds: float,
+    target_scales: np.ndarray | None = None,
 ) -> dict[str, object]:
     """Evaluate one candidate on validation examples, with RF fallback.
 
@@ -269,34 +374,10 @@ def _evaluate_model(
         except (OdeForecastError, ValueError):
             continue
 
-    parameter_rmse_by_group = {
-        group: float(np.sqrt(np.mean(np.asarray(errors) ** 2))) if errors else None
-        for group, errors in errors_by_group.items()
-    }
-    curve_rmse_by_group = {
-        group: float(np.mean(values)) if values else None
-        for group, values in curve_by_group.items()
-    }
-    parameter_values = [error for errors in errors_by_group.values() for error in errors]
-    overall_parameter = (
-        float(np.sqrt(np.mean(np.asarray(parameter_values) ** 2)))
-        if parameter_values
-        else None
-    )
-    early_curve = curve_rmse_by_group["early"]
-    selection_score = (
-        overall_parameter + early_curve
-        if overall_parameter is not None and early_curve is not None
-        else overall_parameter
-    )
     return {
         "validation_example_count": len(validation),
-        "valid_prediction_count": len(parameter_values),
         "model_valid_prediction_count": model_valid_count,
-        "parameter_rmse": overall_parameter,
-        "parameter_rmse_by_progress": parameter_rmse_by_group,
-        "curve_rmse_by_progress": curve_rmse_by_group,
-        "selection_score": selection_score,
+        **_aggregate_scores(errors_by_group, curve_by_group, target_scales),
     }
 
 
@@ -307,6 +388,7 @@ def _evaluate_baseline(
     *,
     blend_weight: float = 0.5,
     timeout_seconds: float,
+    target_scales: np.ndarray | None = None,
 ) -> dict[str, object]:
     """Evaluate a Phase 5 baseline on validation examples for comparison."""
     validation = tuple(example for example in examples if example.assignment == "validation")
@@ -349,29 +431,9 @@ def _evaluate_baseline(
         except (OdeForecastError, ValueError):
             continue
 
-    errors = [error for values in errors_by_group.values() for error in values]
-    parameter_rmse = float(np.sqrt(np.mean(np.asarray(errors) ** 2))) if errors else None
-    parameter_by_progress = {
-        group: float(np.sqrt(np.mean(np.asarray(values) ** 2))) if values else None
-        for group, values in errors_by_group.items()
-    }
-    curve_by_progress = {
-        group: float(np.mean(values)) if values else None
-        for group, values in curve_by_group.items()
-    }
-    early_curve = curve_by_progress["early"]
-    selection_score = (
-        parameter_rmse + early_curve
-        if parameter_rmse is not None and early_curve is not None
-        else parameter_rmse
-    )
     return {
         "validation_example_count": len(validation),
-        "valid_prediction_count": len(errors),
-        "parameter_rmse": parameter_rmse,
-        "parameter_rmse_by_progress": parameter_by_progress,
-        "curve_rmse_by_progress": curve_by_progress,
-        "selection_score": selection_score,
+        **_aggregate_scores(errors_by_group, curve_by_group, target_scales),
     }
 
 
@@ -385,6 +447,7 @@ def select_initial_model(
     ridge_alphas: tuple[float, ...] = DEFAULT_RIDGE_ALPHAS,
     gated_blend_bin_counts: tuple[int, ...] = (),
     trajectory_min_points: tuple[int, ...] = (),
+    raw_series_estimators: tuple[str, ...] = (),
     timeout_seconds: float = DEFAULT_ODE_TIMEOUT_SECONDS,
 ) -> tuple[object | None, dict[str, object]]:
     """Select the best candidate using validation evidence only.
@@ -396,6 +459,7 @@ def select_initial_model(
     candidate can look better merely by being scored on fewer, easier
     cutoffs.
     """
+    target_scales = reference_target_scales(examples)
     candidates: dict[str, object] = {}
     fitted: dict[str, object] = {}
     for alpha in ridge_alphas:
@@ -407,6 +471,7 @@ def select_initial_model(
             examples,
             observations,
             timeout_seconds=timeout_seconds,
+            target_scales=target_scales,
         )
     for bin_count in gated_blend_bin_counts:
         model = fit_gated_blend_model(examples, bin_count=bin_count)
@@ -417,6 +482,7 @@ def select_initial_model(
             examples,
             observations,
             timeout_seconds=timeout_seconds,
+            target_scales=target_scales,
         )
     for min_points in trajectory_min_points:
         model = fit_trajectory_extrapolation_model(min_trajectory_points=min_points)
@@ -427,7 +493,25 @@ def select_initial_model(
             examples,
             observations,
             timeout_seconds=timeout_seconds,
+            target_scales=target_scales,
         )
+    for estimator_name in raw_series_estimators:
+        for require_valid_fit in (True, False):
+            model = fit_raw_series_model(
+                examples,
+                estimator_name=estimator_name,
+                require_valid_fit=require_valid_fit,
+            )
+            suffix = "gated" if require_valid_fit else "always"
+            key = f"raw_series_{estimator_name}_{suffix}"
+            fitted[key] = model
+            candidates[key] = _evaluate_model(
+                model,
+                examples,
+                observations,
+                timeout_seconds=timeout_seconds,
+                target_scales=target_scales,
+            )
     if observations is not None:
         for baseline in _BASELINE_NAMES:
             candidates[baseline] = _evaluate_baseline(
@@ -435,6 +519,7 @@ def select_initial_model(
                 examples,
                 observations,
                 timeout_seconds=timeout_seconds,
+                target_scales=target_scales,
             )
     valid_candidates = {
         key: result
@@ -450,9 +535,13 @@ def select_initial_model(
     learned_model_selected = selected_key not in _BASELINE_NAMES
     is_gated_blend = learned_model_selected and selected_key.startswith("gated_blend_")
     is_trajectory = learned_model_selected and selected_key.startswith("trajectory_")
+    is_raw_series = learned_model_selected and selected_key.startswith("raw_series_")
     selected_alpha = (
         float(selected_key)
-        if learned_model_selected and not is_gated_blend and not is_trajectory
+        if learned_model_selected
+        and not is_gated_blend
+        and not is_trajectory
+        and not is_raw_series
         else None
     )
     selected_bin_count = int(selected_key.split("_")[-1]) if is_gated_blend else None
@@ -463,6 +552,8 @@ def select_initial_model(
         model_name = "gated_blend"
     elif is_trajectory:
         model_name = "trajectory_extrapolation"
+    elif is_raw_series:
+        model_name = selected_key
     else:
         model_name = MODEL_NAME
     manifest = {
@@ -486,6 +577,11 @@ def select_initial_model(
             tuple(example for example in examples if example.assignment == "validation")
         ),
         "test_used_for_selection": False,
+        "selection_metric": "mean of early/middle/late remaining-curve RMSE",
+        "reference_target_scales": {
+            name: float(value)
+            for name, value in zip(LEARNED_TARGET_COLUMNS, target_scales, strict=True)
+        },
         "feature_names": list(feature_names()),
         "target_names": list(LEARNED_TARGET_COLUMNS),
     }
@@ -499,6 +595,7 @@ def train_initial_model(
     ridge_alphas: tuple[float, ...] = DEFAULT_RIDGE_ALPHAS,
     gated_blend_bin_counts: tuple[int, ...] = DEFAULT_GATED_BLEND_BIN_COUNTS,
     trajectory_min_points: tuple[int, ...] = DEFAULT_TRAJECTORY_MIN_POINTS,
+    raw_series_estimators: tuple[str, ...] = RAW_SERIES_ESTIMATORS,
     timeout_seconds: float | None = None,
 ) -> Path:
     """Train and persist the validation-selected initial correction model."""
@@ -521,6 +618,7 @@ def train_initial_model(
         ridge_alphas=ridge_alphas,
         gated_blend_bin_counts=gated_blend_bin_counts,
         trajectory_min_points=trajectory_min_points,
+        raw_series_estimators=raw_series_estimators,
         timeout_seconds=(
             float(config.get("ode_timeout_seconds", DEFAULT_ODE_TIMEOUT_SECONDS))
             if timeout_seconds is None

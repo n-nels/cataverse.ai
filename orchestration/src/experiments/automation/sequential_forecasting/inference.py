@@ -137,10 +137,16 @@ def _model_candidate(
     model: Any | None,
     selected_candidate: str,
 ) -> tuple[SecondaryPfoParameters | None, str | None]:
-    """Produce a learned candidate only after a valid current ODE fit."""
+    """Produce a learned candidate, honouring the model's own eligibility rule.
+
+    Candidates that correct or blend the current ODE fit require that fit to be
+    valid. A candidate that reads the raw measurements can declare otherwise by
+    setting `require_valid_fit`; gating it here anyway would make production
+    behave differently from the validation scoring that selected it.
+    """
     if model is None or selected_candidate == "rf_only":
         return None, None
-    if example.fit_status != FIT_VALID:
+    if getattr(model, "require_valid_fit", True) and example.fit_status != FIT_VALID:
         return None, f"current_fit_{example.fit_status}"
     prediction = model.predict_parameters(example)
     if prediction.parameters is None:
