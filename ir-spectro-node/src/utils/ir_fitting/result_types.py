@@ -18,8 +18,13 @@ import pandas as pd
 LOGGER = logging.getLogger(__name__)
 
 
-def _matches(file_key: str, delta_group: str, pattern: str) -> bool:
+def matches_file_key(file_key: str, delta_group: str, pattern: str) -> bool:
     """Return True if ``pattern`` selects this file.
+
+    The single file-selection vocabulary for the package: both
+    :meth:`MeasurementFitResult.select` (the plotting path) and
+    ``api.subifg_files`` (the baseline-experiment path) go through here, so
+    ``["delta10"]`` means the same thing in both.
 
     A pattern is one of:
 
@@ -121,7 +126,7 @@ class MeasurementFitResult:
             pattern
             for pattern in patterns
             if not any(
-                _matches(result.file_key, result.delta_group, pattern)
+                matches_file_key(result.file_key, result.delta_group, pattern)
                 for result in self.files
             )
         ]
@@ -138,7 +143,7 @@ class MeasurementFitResult:
             result
             for result in self.files
             if any(
-                _matches(result.file_key, result.delta_group, pattern)
+                matches_file_key(result.file_key, result.delta_group, pattern)
                 for pattern in patterns
             )
         ]

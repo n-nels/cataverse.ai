@@ -95,6 +95,13 @@ baseline plots as a plausible-looking curve. Confirmed to fire for
 ``num_std: 0.8`` on ``20260717_203829_pd_ceo2_000-008_delta10.0042``.
 """
 
+JUDGED_FOLDER = "nn1120-4_pd_ceo2_000"
+"""The one dataset :data:`JUDGED_FILES` belongs to.
+
+The stems below carry no folder, so anything keying on them has to check this
+first -- a file of the same name in another dataset is not a judged file.
+"""
+
 JUDGED_FILES: tuple[tuple[str, str], ...] = (
     ("20260715_094622_pd_ceo2_000-007_delta10.0042", "bad"),
     ("20260717_203829_pd_ceo2_000-008_delta10.0042", "bad"),

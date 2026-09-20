@@ -190,6 +190,50 @@ def plot_file_baseline(
     return output_path
 
 
+def _group_gated(
+    gated: Sequence[tuple[float, float, float]],
+) -> list[tuple[list[float], float, float]]:
+    """Group gated anchors by the extremum that gated them.
+
+    One band gates every anchor within ``ANCHOR_GUARD_CM1`` of it, so a dense
+    anchor set produces a dozen rejections that are all the *same* rejection.
+    Rendering them one-per-anchor drew ten dotted lines 1 cm-1 apart -- which
+    reads as a hatched block, not as anchors -- and wrote ten near-identical
+    legend entries, one of which is the duplicated 2006 of spec.md 14.21.
+
+    Grouping keeps every anchor (the duplicate included, because it carries
+    double weight and hiding it would misreport the correction) while saying
+    the thing once.
+
+    Returns:
+        ``[(anchors, where, fraction), ...]`` in first-appearance order.
+        ``where`` is ``inf`` for the "outside window" rejections, which group
+        together for the same reason.
+    """
+    groups: dict[tuple[float, float], list[float]] = {}
+    order: list[tuple[float, float]] = []
+    for anchor, where, fraction in gated:
+        key = (round(float(where), 1), round(float(fraction), 3))
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(float(anchor))
+    return [(groups[key], key[0], key[1]) for key in order]
+
+
+def _gated_label(anchors: Sequence[float], where: float, fraction: float) -> str:
+    """One legend entry for one group of gated anchors."""
+    if len(anchors) == 1:
+        span = f"{anchors[0]:.0f}"
+    else:
+        # High-low, matching the descending x axis, plus the count -- which is
+        # the only place the duplicated 2006 is still visible once grouped.
+        span = f"{max(anchors):.0f}-{min(anchors):.0f} ({len(anchors)} anchors)"
+    if not np.isfinite(where):
+        return f"GATED {span} (outside window)"
+    return f"GATED {span}<-{where:.0f} p={fraction:.2f}"
+
+
 def _anchor_label(trace) -> str:
     """Legend fragment describing what the split and anchor guards did."""
     parts = []
@@ -206,11 +250,8 @@ def _anchor_label(trace) -> str:
         parts.append(f"SPLIT GATED {split:.0f}<-{where:.0f} p={fraction:.2f}")
     if trace.anchors_applied:
         parts.append("@" + "/".join(f"{a:.0f}" for a in trace.anchors_applied))
-    for anchor, where, fraction in trace.anchors_gated:
-        if np.isfinite(where):
-            parts.append(f"GATED {anchor:.0f}<-{where:.0f} p={fraction:.2f}")
-        else:
-            parts.append(f"GATED {anchor:.0f} (outside window)")
+    for anchors, where, fraction in _group_gated(trace.anchors_gated):
+        parts.append(_gated_label(anchors, where, fraction))
     # The lower segment's own anchors, marked "lo@" because they are a second
     # correction on a second array, not more points on the same line (spec.md
     # 14.10.1). A legend that merged the two could not say which one lost a
@@ -222,12 +263,40 @@ def _anchor_label(trace) -> str:
         )
     if trace.lower_anchors_applied:
         parts.append("lo@" + "/".join(f"{a:.0f}" for a in trace.lower_anchors_applied))
-    for anchor, where, fraction in trace.lower_anchors_gated:
-        if np.isfinite(where):
-            parts.append(f"LOW GATED {anchor:.0f}<-{where:.0f} p={fraction:.2f}")
-        else:
-            parts.append(f"LOW GATED {anchor:.0f} (outside segment)")
+    for anchors, where, fraction in _group_gated(trace.lower_anchors_gated):
+        label = _gated_label(anchors, where, fraction)
+        parts.append("LOW " + label.replace("(outside window)", "(outside segment)"))
     return ", ".join(parts)
+
+
+def _draw_gated(
+    axes,
+    anchors: Sequence[float],
+    where: float,
+    color: str,
+    drawn: set,
+    tag: str,
+) -> None:
+    """Mark one group of gated anchors and the extremum responsible.
+
+    A single anchor keeps the dotted line it always had. A run gets one shaded
+    band instead of one line per anchor -- at 1 cm-1 spacing the lines merged
+    into a block that looked like plot furniture rather than a guard verdict.
+
+    ``drawn`` keys on the group so variants sharing a rejection do not stack
+    markers, and the red ``where`` line keys on its own wavenumber so one band
+    gating both anchor sets draws it once.
+    """
+    low, high = min(anchors), max(anchors)
+    if (low, high, tag) not in drawn:
+        drawn.add((low, high, tag))
+        if low == high:
+            axes.axvline(low, color=color, linestyle=":", linewidth=1.0)
+        else:
+            axes.axvspan(low, high, color=color, alpha=0.15, linewidth=0)
+    if np.isfinite(where) and (where, "where") not in drawn:
+        drawn.add((where, "where"))
+        axes.axvline(where, color="tab:red", linestyle=":", linewidth=1.0)
 
 
 def plot_baseline_comparison(
@@ -352,13 +421,11 @@ def plot_baseline_comparison(
                 anchor, value, "o", color="black", markersize=5,
                 markerfacecolor="black", zorder=10,
             )
-        for anchor, where, _ in trace.anchors_gated:
-            if (anchor, False) in drawn:
-                continue
-            drawn.add((anchor, False))
-            ax_raw.axvline(anchor, color="0.5", linestyle=":", linewidth=1.0)
-            if np.isfinite(where):
-                ax_raw.axvline(where, color="tab:red", linestyle=":", linewidth=1.0)
+        # One marker per REJECTION, not per anchor: a run of gated anchors is
+        # shaded as a band and the extremum that gated them gets a single red
+        # line, however many anchors it took out.
+        for anchors, where, _ in _group_gated(trace.anchors_gated):
+            _draw_gated(ax_raw, anchors, where, "0.5", drawn, "upper")
         # Lower-segment anchors: squares, not circles. They sit on a different
         # curve fitted by a different line, and at 1955 the two sets share a
         # wavenumber -- two markers at one x is the point, so they key on a
@@ -374,13 +441,8 @@ def plot_baseline_comparison(
                 anchor, value, "s", color="tab:green", markersize=5,
                 markerfacecolor="tab:green", zorder=10,
             )
-        for anchor, where, _ in trace.lower_anchors_gated:
-            if (anchor, "lower_gated") in drawn:
-                continue
-            drawn.add((anchor, "lower_gated"))
-            ax_raw.axvline(anchor, color="tab:green", linestyle=":", linewidth=1.0)
-            if np.isfinite(where):
-                ax_raw.axvline(where, color="tab:red", linestyle=":", linewidth=1.0)
+        for anchors, where, _ in _group_gated(trace.lower_anchors_gated):
+            _draw_gated(ax_raw, anchors, where, "tab:green", drawn, "lower")
 
     # The seam of a split baseline, on both panels: the interface is where a
     # two-segment baseline is most likely to be wrong (spec.md section 14.4),

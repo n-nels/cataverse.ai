@@ -87,6 +87,8 @@ recommendation.
 ```bash
 # Baseline experiments — change settings and/or window, get figures + a CSV.
 # Edit the `variants` list in the __main__ block; MODE = "baseline".
+# To sample a different dataset, set folder_name / MEASUREMENTS / DELTA_GROUPS
+# at the top of that block and give the run a new run_name (section 10).
 uv run python src\utils\ir_fitting\api.py
 
 # Peak fitting. Same file, MODE = "fit".
@@ -611,6 +613,58 @@ compare_baselines(
     run_name="sweep",
 )
 ```
+
+#### Choosing which files to run on — `subifg_files`
+
+`files=None` means `JUDGED_FILES`, and those eight stems live **only** in
+`nn1120-4_pd_ceo2_000`. So `folder_name` alone never changed which data was
+looked at: point it at another dataset with `files=None` and every file is
+reported missing. `files` wanted fully qualified stems typed by hand
+(`20260304_145524_pd_ceo2_004-000_delta10.0012`), which is why sampling an
+arbitrary folder had effectively stopped being available.
+
+`api.subifg_files` is the bridge. It takes the folder and the two things a
+person actually picks — which measurement, which delta group — and returns the
+stems:
+
+```python
+compare_baselines(
+    variants,
+    folder_name="nn1120-3_pd_ceo2_004",
+    files=subifg_files(
+        "nn1120-3_pd_ceo2_004",
+        measurements=["20260304_145524_pd_ceo2_004-000"],  # or ["*-000"], or None
+        file_keys=["delta10"],           # or ["delta10.0042"], ["delta10.00*"], None
+    ),
+    run_name="my_run",
+)
+```
+
+`file_keys` is the **same vocabulary** `plot_baselines` already used —
+`result_types.matches_file_key`, now public, is the one matcher behind both, so
+`["delta10"]` selects the same thing on either path. `measurements` is an exact
+base name or a glob against it. `None` on either axis means "all", and `None` on
+both means every subIFG file in the folder.
+
+That last case is the reason for `limit`, defaulting to
+`DEFAULT_FIGURE_BUDGET = 40`. A dataset folder holds ~12k subIFG files and a
+delta group spans every measurement in it: `file_keys=["delta10"]` on
+`nn1120-4_pd_ceo2_000` matches **385 files**, one figure each per variant. Over
+the limit the helper raises and says how many matched and how many measurements
+the folder has, rather than starting the run. Raise `limit` deliberately.
+A pattern matching nothing also raises, listing the delta groups that do exist —
+a typo would otherwise produce a silent empty run.
+
+A stem that is one of the judged eight keeps its `bad` / `guard` verdict when
+named explicitly, so a hand-built or `subifg_files`-built list of them produces
+the same figure titles and `verdict` column as `files=None`.
+
+In `api.py`'s `__main__` this is exposed as `MEASUREMENTS`, `DELTA_GROUPS` and
+`FILE_LIMIT` beside `folder_name`; both selectors `None` falls back to
+`JUDGED_FILES`. The block prints the selected stems and the destination
+directory **before** computing, because `baseline_experiment_dir` reuses a
+directory — a second run under an unchanged `run_name` overwrites the first
+run's figures and CSV.
 
 Every variant is measured against the **first**, so put the baseline being
 compared to at the front. A variant is a `BaselineVariant` or a
@@ -3579,6 +3633,9 @@ figures; no automatic baseline-quality score exists.
 
 ### 14.21 Current locked experiment — dense upper anchors with the lower split
 
+**Superseded as a comparison by §14.22, which runs variant 4 below on its own.
+The recipe is unchanged; only the other three traces are gone.**
+
 The active `api.py` comparison is now the lower-split experiment selected after
 the §14.20 full-ROI run. It uses the full `DEFAULT_WINDOW = (2250, 1750)` and
 these four variants, in order:
@@ -3607,3 +3664,59 @@ The lower segment remains **1955–1750 cm⁻¹**. The run name is
 `lower_anchors_1955`; figures and `baseline_comparison.csv` are written under
 the dataset's `baseline_experiments` directory. This is the locked offline
 experiment, not a change to live or production baseline defaults.
+
+### 14.22 The final candidate, shown alone
+
+The user selected variant 4 of §14.21 — the lower-only split at 1955 with
+**anchors on both segments** — and asked to see only it. `api.py`'s `variants`
+list is now that one entry; `current`, `anchored` and the unanchored
+`lower split 1955` are commented out directly beneath it, in the order that
+restores their established colours.
+
+The recipe is byte-identical to §14.21's variant 4, including the duplicated
+`2006` in the dense upper set. Nothing about the baseline changed. What changed
+is the figure: raw subIFG in black against one trace, with both anchor sets
+drawn — black circles for the full-ROI anchors (the 2000–2011 cluster renders as
+one blob at ROI scale), green squares for the lower anchors, and the purple
+dash-dot cut at 1955. The `anchored` twin's orange trace is gone, so the
+candidate takes `tab10[0]` and is blue.
+
+Two consequences of running one variant, both reported by the run rather than
+left to be inferred:
+
+- **Every reference-relative column is self-referential.** The single variant
+  *is* the reference, so `moved_pct_of_range` is 0 and each `_x_ref` ratio is
+  1.0000 by construction — not a measurement, and specifically not the "near 2
+  means the band stopped being halved" reading those columns otherwise carry.
+  The block prints this warning whenever `len(variants) == 1`. The raw
+  `height_*` columns and the lower-region targets remain real.
+- **`upper_max_abs_diff` is not checked.** It needs an unsplit twin with the
+  *same* settings, window and anchors, and the dense upper set has none here.
+  This was already true in §14.21 — variant 4's anchors differ from
+  `anchored`'s, so its `upper_max_abs_diff` was `nan` there too, and the
+  printed PASS came from the other split variant. With that variant gone the
+  summary would have called `nan` a FAIL; it now prints **NOT CHECKED** and
+  names what to add. A nan in that column has always meant an unperformed
+  check, never a failed one.
+
+Measured on the eight judged files: 8 figures, no degenerate baselines.
+
+**Two of those eight figures do not show the candidate.** On both `...-022`
+guard files the prominence guard fired twice — the guard runs on the 1955
+*anchor* and on the 1955 *cut* independently, and 1955 failed both. The CSV
+records `anchors_gated = 1955` and `split_gated = 1955` with `split` empty.
+With no cut there is no lower segment, so the five lower anchors were neither
+applied nor gated: `lower_anchors` and `lower_anchors_gated` are both blank.
+What those two traces actually are is the dense upper set *minus* 1955 on an
+uncut full ROI — the §14.19 fallback, not the candidate. `seam_pct_of_range` is
+`nan` there because there is no seam, and their `mid` ≈ −24 / `int` ≈ +31 % of
+range belong to that fallback curve, not to the form under judgement. The six
+ungated files are the candidate; read those.
+
+This is the guard doing its stated job — `...-022`'s raw subIFG minimum sits at
+1942 cm⁻¹, which is what makes those files guard cases rather than baselines
+certified correct (§14.2) — and it is unchanged from §14.21. It is only more
+visible now: with the comparison traces gone, nothing else in the figure shows
+what the candidate would have done.
+
+Restoring the comparison is uncommenting three lines.

@@ -14,6 +14,7 @@ from src.utils.ir_fitting.api import (
     measurement_names,
     resolve_folder,
     subifg_dir,
+    subifg_files,
 )
 from src.utils.ir_fitting.baseline import (
     DEFAULT_WINDOW,
@@ -33,4 +34,5 @@ __all__ = [
     "measurement_names",
     "resolve_folder",
     "subifg_dir",
+    "subifg_files",
 ]

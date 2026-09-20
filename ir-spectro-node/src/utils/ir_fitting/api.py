@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import sys
 from collections.abc import Sequence
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import numpy as np
@@ -30,10 +31,11 @@ from src.utils.ir_fitting import config as ir_config
 from src.utils.ir_fitting import runner, writer
 from src.utils.ir_fitting.baseline import (
     ANCHOR_POINTS_CM1,
-    DEFAULT_WINDOW,
+    DEFAULT_WINDOW,  # noqa: F401  (used by the commented-out variants in __main__)
     INT_SHARED_WINDOW_CM1,
     INT_WINDOW_CM1,
     JUDGED_FILES,
+    JUDGED_FOLDER,
     LOWER_ANCHOR_POINTS_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
     LOWER_ANCHOR_POINTS_FIVE_CM1,
     LOWER_CONTINUATION_LAM,  # noqa: F401  (used by the commented-out variants in __main__)
@@ -58,6 +60,7 @@ from src.utils.ir_fitting.result_types import (
     BatchFitResult,
     FileBaselineComparison,
     MeasurementFitResult,
+    matches_file_key,
 )
 from src.utils.ir_fitting.runner import ExistingPeakRowsError, fit_subifg_file
 
@@ -111,6 +114,123 @@ def measurement_names(folder: str | Path) -> list[str]:
         }
         - {""}
     )
+
+
+DEFAULT_FIGURE_BUDGET = 60
+"""How many subIFG files :func:`subifg_files` will return before refusing.
+
+A dataset folder holds ~12k subIFG files, and one delta group spans every
+measurement in it -- ``["delta10"]`` on ``nn1120-4_pd_ceo2_000`` is 385 files,
+which at four variants and 300 dpi is a 385-figure run nobody asked for. So the
+helper stops and says what it found; raise ``limit`` deliberately, or narrow
+``measurements``.
+"""
+
+
+def subifg_files(
+    folder: str | Path,
+    *,
+    measurements: Sequence[str] | None = None,
+    file_keys: Sequence[str] | None = None,
+    limit: int | None = DEFAULT_FIGURE_BUDGET,
+) -> list[str]:
+    """Pick subIFG filenames out of a dataset folder by measurement and delta group.
+
+    The bridge between how a dataset is named on disk and what
+    :func:`compare_baselines` wants. ``compare_baselines`` takes fully qualified
+    stems (``20260715_094622_pd_ceo2_000-007_delta10.0042``) and otherwise falls
+    back to :data:`~src.utils.ir_fitting.baseline.JUDGED_FILES`, which are
+    hardcoded to ``nn1120-4_pd_ceo2_000`` -- so *any other folder* needed the
+    stems typed out by hand. This builds them::
+
+        compare_baselines(
+            variants,
+            folder_name="nn1120-3_pd_ceo2_004",
+            files=subifg_files(
+                "nn1120-3_pd_ceo2_004",
+                measurements=["20260304_145524_pd_ceo2_004-000"],
+                file_keys=["delta10"],
+            ),
+            run_name="my_run",
+        )
+
+    Args:
+        folder: Dataset name or absolute subIFG directory, as
+            :func:`resolve_folder` takes.
+        measurements: Measurement base names, e.g.
+            ``["20260715_094622_pd_ceo2_000-007"]``. Each entry is an exact
+            name or a glob (``["*-007", "*-01?"]``). ``None`` = every
+            measurement in the folder, which is what ``limit`` exists for.
+        file_keys: Which files within each measurement, in the same vocabulary
+            :meth:`MeasurementFitResult.select` uses -- an exact key
+            (``"delta10.0042"``), a whole delta group (``"delta10"``), or a glob
+            (``"delta10.00*"``). ``None`` = every file, i.e. all ten delta
+            groups.
+        limit: Refuse to return more than this many files. ``None`` disables
+            the check; see :data:`DEFAULT_FIGURE_BUDGET` for why it is on.
+
+    Returns:
+        Sorted subIFG filenames (stems, no directory), ready to hand to
+        ``compare_baselines(files=...)``.
+
+    Raises:
+        ValueError: When nothing matched, or when more than ``limit`` files did.
+    """
+    folder_path = resolve_folder(folder)
+    measurement_patterns = None if measurements is None else list(measurements)
+    key_patterns = None if file_keys is None else list(file_keys)
+    for name, value in (("measurements", measurements), ("file_keys", file_keys)):
+        if isinstance(value, str):
+            raise TypeError(
+                f"{name} must be a list of patterns, not a string; "
+                f"pass [{value!r}] instead."
+            )
+
+    selected: list[str] = []
+    seen_measurements: set[str] = set()
+    seen_keys: set[str] = set()
+    for item in sorted(folder_path.iterdir()):
+        if not item.is_file() or "_delta" not in item.name:
+            continue
+        base_name = "_".join(item.name.split("_")[:-1])
+        file_key = runner.file_key_for(item)
+        delta_group, _ = runner.split_file_key(file_key)
+        seen_measurements.add(base_name)
+        seen_keys.add(delta_group)
+        if measurement_patterns is not None and not any(
+            base_name == pattern or fnmatchcase(base_name, pattern)
+            for pattern in measurement_patterns
+        ):
+            continue
+        if key_patterns is not None and not any(
+            matches_file_key(file_key, delta_group, pattern)
+            for pattern in key_patterns
+        ):
+            continue
+        selected.append(item.name)
+
+    if not selected:
+        raise ValueError(
+            f"no subIFG files in {folder_path} matched measurements="
+            f"{measurement_patterns} file_keys={key_patterns}. "
+            f"Available delta groups: {sorted(seen_keys)}. "
+            f"{len(seen_measurements)} measurements, first few: "
+            f"{sorted(seen_measurements)[:3]}"
+        )
+    if limit is not None and len(selected) > limit:
+        raise ValueError(
+            f"{len(selected)} files matched, over the limit of {limit}. That is "
+            f"one figure each, per variant. Narrow `measurements` (this folder "
+            f"has {len(seen_measurements)}) or `file_keys`, or pass a larger "
+            f"`limit` on purpose."
+        )
+    LOGGER.info(
+        "%s: selected %d subIFG files from %d measurements",
+        folder_path.name,
+        len(selected),
+        len({"_".join(name.split("_")[:-1]) for name in selected}),
+    )
+    return selected
 
 
 def _resolve_measurement(measurement: str | Path) -> tuple[str, str, Path]:
@@ -402,7 +522,10 @@ def compare_baselines(
         files: subIFG filenames, e.g.
             ``["20260715_094622_pd_ceo2_000-007_delta10.0042"]``. ``None`` uses
             :data:`~src.utils.ir_fitting.baseline.JUDGED_FILES` -- the eight
-            eye-judged files of ``spec.md`` sections 14.2/14.3.
+            eye-judged files of ``spec.md`` sections 14.2/14.3, which all belong
+            to ``nn1120-4_pd_ceo2_000``. **Pass this whenever `folder_name` is
+            not that dataset**, or every file will be reported missing; build
+            the list with :func:`subifg_files` rather than by hand.
         run_name: Subfolder under the dataset's baseline-experiment directory.
             Use a different name per experiment so runs do not overwrite.
         plot: Render one figure per file.
@@ -423,8 +546,16 @@ def compare_baselines(
     if len(set(labels)) != len(labels):
         raise ValueError(f"variant labels must be unique; got {labels}")
 
+    # An explicitly named file keeps its verdict when it happens to be one of
+    # the judged eight, so naming them by hand -- or reaching them through
+    # `subifg_files` -- produces the same figure titles as `files=None`.
+    # Keyed on the bare stem, so only consult it for the dataset the judged
+    # files belong to -- another folder's file must not inherit a `bad` tag.
+    verdicts = dict(JUDGED_FILES) if folder_name == JUDGED_FOLDER else {}
     selected: list[tuple[str, str]] = (
-        list(JUDGED_FILES) if files is None else [(str(name), "") for name in files]
+        list(JUDGED_FILES)
+        if files is None
+        else [(str(name), verdicts.get(str(name), "")) for name in files]
     )
     if not selected:
         raise ValueError("files must contain at least one subIFG filename")
@@ -855,33 +986,66 @@ if __name__ == "__main__":
         # std_distribution's parameters, never the algorithm. Mutually exclusive
         # with lower_settings, whose keys belong to std_distribution.
         # ------------------------------------------------------------------
+        # ---- WHICH DATA TO LOOK AT -------------------------------------
+        # These four constants are the sampling controls. The variants below
+        # are the locked §14.21 recipe; these say what to run it on.
+        #
+        #   folder_name   any dataset under utility.subtract_ifg.sub_ifg_output
+        #                 (nn1120-2_pd_ceo2_000, nn1120-3_pd_ceo2_00{0..4},
+        #                 nn1120-4_pd_ceo2_000, ...)
+        #   MEASUREMENTS  base names or globs, e.g.
+        #                 ["20260715_094622_pd_ceo2_000-007"] or ["*-007"].
+        #                 None = every measurement in the folder.
+        #   DELTA_GROUPS  ["delta10"] whole group, ["delta10.0042"] one file,
+        #                 ["delta10.00*"] a glob. None = all ten groups.
+        #   FILE_LIMIT    guard against a 385-figure run; raise it on purpose.
+        #
+        # Set MEASUREMENTS *and* DELTA_GROUPS to None to fall back to the eight
+        # judged files of §14.2 -- which only exist in nn1120-4_pd_ceo2_000, so
+        # that fallback is only right for that folder.
+        #
+        # run_name is the output subfolder. CHANGE IT when you change the data
+        # or the variants: the directory is reused, so a second run under the
+        # same name overwrites the first run's figures and CSV. The locked
+        # §14.21 experiment owns "lower_anchors_1955".
         folder_name = "nn1120-4_pd_ceo2_000"
+        MEASUREMENTS: list[str] | None = ['20260908_063922_pd_ceo2_000-034']
+        DELTA_GROUPS: list[str] | None = ['delta10', 'delta5']
+        FILE_LIMIT = DEFAULT_FIGURE_BUDGET
         run_name = "lower_anchors_1955"
 
         variants = [
-            ("current", {}),
-            # Anchored: same settings, same full ROI, baseline pinned to the
-            # data at ANCHOR_POINTS_CM1 where the guard allows it. This is the
-            # recommended form (spec.md 14.7).
+            # THE FINAL CANDIDATE, ALONE (spec.md §14.21). The lower-only split
+            # at 1955 with anchors on BOTH segments: the dense upper set
+            # corrects the full-ROI curve that stands at and above the cut, and
+            # the five-point lower set corrects the segment below it. Two
+            # corrections, two arrays, sharing only the wavenumber 1955.
             #
-            # Keep this second so it remains the ORANGE trace in the figures.
-            ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
-            # Lower-only split: retain the anchored full-ROI baseline at and
-            # above 1955, then recompute only the lower 1955-1750 segment.
-            BaselineVariant(
-                label="lower split 1955",
-                anchors=ANCHOR_POINTS_CM1,
-                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            ),
-            # Historical §14.19 form: the lower segment is still 1955-1750,
-            # but its own baseline gets five anchors. Change the cut with
-            # lower_split_cm1 and change these lower anchors independently.
+            # The figure is raw (black) against this one trace. `current`,
+            # `anchored` and the unanchored `lower split 1955` are kept below,
+            # commented out -- put any of them back and it becomes a
+            # comparison again, with the FIRST entry as the reference.
+            #
+            # The anchor expression is reproduced exactly as §14.21 locked it:
+            # ANCHOR_POINTS_CM1 already contains 2006, so 2006 appears twice
+            # and carries double weight in the least-squares correction. Do not
+            # deduplicate it without a new comparison run.
             BaselineVariant(
                 label="lower split 1955 + five lower anchors",
                 anchors=(*ANCHOR_POINTS_CM1, 2011,2010,2009,2008,2007,2006,2005,2004,2003,2002,2001,2000),
                 lower_split_cm1=LOWER_SPLIT_POINT_CM1,
                 lower_anchors=LOWER_ANCHOR_POINTS_FIVE_CM1,
             ),
+            # ---- the comparison this candidate was selected out of ----
+            # Restore in this order to get the established colours back:
+            # `current` blue, `anchored` ORANGE, then the split forms.
+            # ("current", {}),
+            # ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
+            # BaselineVariant(
+            #     label="lower split 1955",
+            #     anchors=ANCHOR_POINTS_CM1,
+            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
+            # ),
             # ---- previous lower-split experiments ----
             # Colours: raw is black, then variants take tab10 in list order --
             # `current` is blue and the established three-anchor `anchored`
@@ -987,15 +1151,33 @@ if __name__ == "__main__":
             # ("window 2200", {}, (2225.0, 1775.0)),
         ]
 
-        # files=None uses JUDGED_FILES: 8 files -- 6 judged wrong, plus 2
-        # judged good (both from measurement ...-022, so the good gate is n=1
-        # measurement, not n=2 independent ones).
-        # Pass subIFG filenames to look at others, e.g.
-        #     files=["20260715_094622_pd_ceo2_000-007_delta10.0082"]
+        # MEASUREMENTS/DELTA_GROUPS -> explicit subIFG stems; both None ->
+        # files=None -> JUDGED_FILES: 8 files from nn1120-4_pd_ceo2_000 -- 6
+        # judged wrong plus the 2 guard files of ...-022, which are the cases
+        # the anchor rule must detect and skip, not baselines certified correct.
+        if MEASUREMENTS is None and DELTA_GROUPS is None:
+            files = None
+            print(f"Files -> the {len(JUDGED_FILES)} judged files (spec.md 14.2)")
+        else:
+            files = subifg_files(
+                folder_name,
+                measurements=MEASUREMENTS,
+                file_keys=DELTA_GROUPS,
+                limit=FILE_LIMIT,
+            )
+            print(f"Files -> {len(files)} selected:")
+            for stem in files:
+                print(f"    {stem}")
+
+        # Printed before the run, not after: this directory is reused, so
+        # seeing the destination is the only warning that a run is about to
+        # land on top of an earlier one's figures.
+        print(f"Writing to -> {baseline_experiment_dir(folder_name, run_name)}")
+
         comparison = compare_baselines(
             variants,
             folder_name=folder_name,
-            files=None,
+            files=files,
             run_name=run_name,
         )
 
@@ -1007,6 +1189,19 @@ if __name__ == "__main__":
             "20% of signal range. It says the baseline MOVED, not that moving it\n"
             "was an improvement -- judge the figures.\n"
         )
+        if len(variants) == 1:
+            # With one variant it IS the reference, so every column measured
+            # against the reference compares it to itself: moved_pct_of_range
+            # is 0 and the _x_ref ratios are 1 by construction. Neither is a
+            # result, and 1.0000 in a column whose whole point is "near 2 means
+            # the band stopped being halved" reads like a failure otherwise.
+            print(
+                "\nONE VARIANT: it is its own reference, so moved_pct_of_range "
+                "is 0.0000\nand every '_x_ref' ratio is 1.0000 by construction. "
+                "Read the raw\nheight_* columns, the lower-region targets and "
+                "the figure; add a second\nvariant to get the comparison "
+                "columns back.\n"
+            )
         print(
             "'height_2040' / 'height_1980' are those bands' heights "
             "above the baseline; '_x_ref' is the ratio to the first variant. "
@@ -1044,8 +1239,23 @@ if __name__ == "__main__":
             )
             for _, row in checked.iterrows():
                 print(f"  {row['lower_moved_pct']:8.3f}  {row['file']}")
+            # nan is an UNPERFORMED check, not a failed one: it means no
+            # variant with this one's settings, window and anchors ran without
+            # a cut, so there was nothing to compare against. Showing the
+            # candidate alone is exactly that case -- its dense anchor set has
+            # no unsplit twin here, and calling that FAIL would be a lie.
             worst = checked["upper_max_abs_diff"].max()
-            print(f"\n  worst: {worst:.3e} -- " + ("PASS" if worst == 0.0 else "FAIL"))
+            if np.isnan(worst):
+                print(
+                    "\n  NOT CHECKED -- no unsplit twin in this run. Add the "
+                    "matching\n  no-cut variant (same settings, window and "
+                    "anchors) to check it."
+                )
+            else:
+                print(
+                    f"\n  worst: {worst:.3e} -- "
+                    + ("PASS" if worst == 0.0 else "FAIL")
+                )
 
             # The seam is the metric for spec.md 14.10: 1955 is in BOTH anchor
             # sets, so both sides are pulled toward the same data value there,
