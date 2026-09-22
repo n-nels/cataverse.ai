@@ -11,6 +11,7 @@ python scripts\run_server.py     # OPUS ZMQ instrument server (production entry 
 python scripts\run_norhoff.py    # Norhof LN2 pump control loop (separate process)
 python scripts\run_analysis.py   # batch/offline analysis — see note below
 python scripts\run_kinetics_classification.py  # batch classification CLI — see note below
+python scripts\run_baseline_experiment.py      # baseline experiment CLI — see note below
 
 uvx ruff check .                 # lint (ruff is not a declared dependency; run via uvx)
 uvx ruff format .
@@ -24,7 +25,8 @@ how batch work is run (`scripts/run_analysis.py`, `src/analysis/main.py`).
 To run a single file through the pipeline, edit those constants rather than
 adding argparse.
 
-**Batch classification is the one exception**: `scripts/run_kinetics_classification.py`
+**Two CLIs are the exceptions.** The first is batch classification:
+`scripts/run_kinetics_classification.py`
 (wrapping `src/utils/kinetics/classify_cli.py`) is an argparse CLI, added because the
 classification algorithm itself is under active iteration (see
 `src/utils/kinetics/classification.py` and `docs/spec.md`) and needs a
@@ -35,6 +37,19 @@ original detector is still available as `--classifier default` (264/288) for
 comparison. Batch *fitting* (`fit_file`/`fit_folder`/`fit_folder_by_sum_models`)
 is **not** covered by this CLI and still follows the edit-constants convention,
 via `src/utils/kinetics/api.py`'s own `__main__` block.
+
+The second is **baseline experiments**: `scripts/run_baseline_experiment.py`
+(wrapping `src/utils/ir_fitting/baseline_cli.py`), for the same reason — the
+baseline recipe is under active iteration and needs A/B flags. With no arguments
+it reproduces the selected form of `src/utils/ir_fitting/spec.md` §14.22 on the
+eight judged files, which is what that package's `api.py` `__main__` block used
+to do. The flags are the inputs §14 actually introduced — `--window`,
+`--anchors`, `--lower-split`, `--lower-anchors` and the two anchor-guard
+thresholds — plus `--with-twin`, which adds the uncut twin that makes
+`upper_max_abs_diff` a real check rather than `NOT CHECKED`. The full inventory,
+including why the `std_distribution` settings are deliberately *not* a flag, is
+spec.md §16. Batch **fitting** in `ir_fitting` is not covered and still follows
+edit-constants, via that package's `api.py` `__main__`.
 
 `src/utils/kinetics/` is the tidier programmatic wrapper over the batch writer:
 `from src.utils.kinetics import fit_file, fit_folder, classify_file`. It defaults

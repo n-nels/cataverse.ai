@@ -1,7 +1,15 @@
 """User-facing API for offline IR peak fitting.
 
-No CLI: entry points are importable, and batch work follows the repo convention
-of editing the constants in the ``__main__`` block below.
+Entry points are importable. Batch **fitting** follows the repo convention of
+editing the constants in the ``__main__`` block below; batch **baseline
+experiments** have an argparse CLI, because the recipe is what gets swept::
+
+    uv run python scripts\run_baseline_experiment.py --help
+
+That split mirrors ``src/utils/kinetics``, where the classification algorithm
+under active iteration got a CLI and batch fitting did not (see CLAUDE.md).
+``compare_baselines`` below is what that CLI calls; nothing about it is
+CLI-only.
 
     from src.utils.ir_fitting import fit_file, fit_folder
 
@@ -30,26 +38,10 @@ from src.core import config
 from src.utils.ir_fitting import config as ir_config
 from src.utils.ir_fitting import runner, writer
 from src.utils.ir_fitting.baseline import (
-    ANCHOR_POINTS_CM1,
-    DEFAULT_WINDOW,  # noqa: F401  (used by the commented-out variants in __main__)
-    INT_SHARED_WINDOW_CM1,
-    INT_WINDOW_CM1,
     JUDGED_FILES,
     JUDGED_FOLDER,
-    LOWER_ANCHOR_POINTS_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
-    LOWER_ANCHOR_POINTS_FIVE_CM1,
-    LOWER_CONTINUATION_LAM,  # noqa: F401  (used by the commented-out variants in __main__)
-    LOWER_CONTINUATION_SETTINGS,  # noqa: F401  (used by the commented-out variants in __main__)
-    LOWER_FLOOR_POINT_CM1,  # noqa: F401  (used by the commented-out variants in __main__)
-    LOWER_METHOD_CANDIDATE,  # noqa: F401  (used by the commented-out variants in __main__)
-    LOWER_MID_PROBE_CM1,
-    LOWER_SPLIT_POINT_CM1,
-    SPLIT_POINT_CM1,  # noqa: F401 -- for the commented-out split variant in __main__
     BaselineVariant,
-    anchor_data_value,
     band_height,
-    gating_extremum,
-    int_shared,
     lower_target_metrics,
     overlap_shift,
     signal_range,
@@ -203,8 +195,7 @@ def subifg_files(
         ):
             continue
         if key_patterns is not None and not any(
-            matches_file_key(file_key, delta_group, pattern)
-            for pattern in key_patterns
+            matches_file_key(file_key, delta_group, pattern) for pattern in key_patterns
         ):
             continue
         selected.append(item.name)
@@ -448,13 +439,23 @@ def _recipe_key(variant: BaselineVariant) -> tuple:
     """Everything about a variant except which cut, if any, it makes.
 
     Two variants share a key when they hand ``create_baseline`` the same array
-    with the same settings and ask for the same anchors. That is what makes one
-    of them the other's "same recipe, no cut" twin.
+    with the same settings and ask for the same anchors, **under the same guard
+    thresholds**. That is what makes one of them the other's "same recipe, no
+    cut" twin.
+
+    The guard values are part of the key and not an afterthought: two variants
+    with identical ``anchors`` but different thresholds can gate *different*
+    anchors, so the affine corrections differ and they are not each other's
+    twin. Matching them anyway would measure ``upper_max_abs_diff`` against the
+    wrong curve and report a PASS -- precisely the silent failure that check
+    exists to catch (see :func:`_twin_max_abs_diff`).
     """
     return (
         tuple(sorted(variant.settings.items(), key=lambda kv: kv[0])),
         tuple(variant.window),
         tuple(variant.anchors),
+        float(variant.anchor_guard_cm1),
+        float(variant.anchor_prominence_frac),
     )
 
 
@@ -614,24 +615,17 @@ def compare_baselines(
                 lower_anchors_gated=outcome.lower_anchors_gated,
                 split_applied=outcome.split_applied,
                 split_gated=outcome.split_gated,
-                split_form=outcome.split_form,
                 segment_edges=outcome.segment_edges,
                 seam_jump=outcome.seam_jump,
-                seam_excess_jump=outcome.seam_excess_jump,
-                lower_continuation_lam_applied=outcome.lower_continuation_lam_applied,
-                lower_continuation_points=outcome.lower_continuation_points,
-                lower_floor_applied=outcome.lower_floor_applied,
-                floor_edges=outcome.floor_edges,
-                floor_seam_jump=outcome.floor_seam_jump,
                 band_heights={
                     center: band_height(wavenumbers, intensity, values, center)
                     for center in REPORTED_BANDS_CM1
                 },
             )
             recipe = _recipe_key(variant)
-            if variant.split_cm1 is None and variant.lower_split_cm1 is None:
+            if variant.lower_split_cm1 is None:
                 unsplit_twins.setdefault(recipe, trace)
-            elif variant.lower_split_cm1 is not None:
+            else:
                 twin = unsplit_twins.get(recipe)
                 cut = variant.lower_split_cm1
                 if twin is None:
@@ -704,39 +698,12 @@ def compare_baselines(
                     "lower_anchors_gated": "/".join(
                         f"{a:.0f}" for a, _, _ in outcome.lower_anchors_gated
                     ),
-                    # Which algorithm actually ran below the cut (spec.md
-                    # 14.12). Blank means std_distribution -- including on a
-                    # variant that asked for a method but had its cut gated, so
-                    # this says what ran rather than what was requested.
-                    "lower_method": outcome.lower_method_applied,
-                    # The continuation of spec.md 14.14 and the one parameter
-                    # it has. Blank on every other form -- including a variant
-                    # that asked for one but had its cut gated, which is why
-                    # this reads the outcome and not the variant.
-                    "lower_cont_lam": (
-                        ""
-                        if outcome.lower_continuation_lam_applied is None
-                        else f"{outcome.lower_continuation_lam_applied:g}"
-                    ),
-                    # How many classified samples the continuation was fitted
-                    # to (14.14 finding 42). -1 = no continuation; 0 = the
-                    # straight extrapolation of the anchored slope.
-                    "lower_cont_pts": outcome.lower_continuation_points,
-                    # `int` restricted to the samples EVERY variant covers, so
-                    # a window-truncated form can be ranked against a full-ROI
-                    # one (spec.md 14.16). Scaled by the REFERENCE range, not
-                    # this trace's, for the reason int_shared's docstring gives.
-                    "int_shared": int_shared(
-                        wavenumbers, intensity, values, reference_range
-                    ),
-                    # Where the lower segment stopped (spec.md 14.13). Blank
-                    # means it ran to the ROI floor, which is every variant
-                    # through 14.12.
-                    "lower_floor": (
-                        ""
-                        if outcome.lower_floor_applied is None
-                        else f"{outcome.lower_floor_applied:.0f}"
-                    ),
+                    # What the guard ran with, beside what it did. Without
+                    # these, an empty `anchors_gated` cannot be told apart from
+                    # a threshold raised until nothing gates (spec.md 14.7
+                    # finding 8 calibrated these two once and never swept them).
+                    "anchor_guard_cm1": variant.anchor_guard_cm1,
+                    "anchor_prominence_frac": variant.anchor_prominence_frac,
                     "split": (
                         ""
                         if outcome.split_applied is None
@@ -747,7 +714,6 @@ def compare_baselines(
                         if outcome.split_gated is None
                         else f"{outcome.split_gated[0]:.0f}"
                     ),
-                    "split_form": outcome.split_form,
                     # Must be exactly 0.0 for a lower-only split: above the cut
                     # it is the unsplit anchored baseline by construction
                     # (spec.md 14.9). Blank where there is nothing to check.
@@ -764,24 +730,6 @@ def compare_baselines(
                         float("nan")
                         if outcome.split_applied is None
                         else 100 * outcome.seam_jump / variant_range
-                    ),
-                    # The seam with the ordinary grid step taken out, so the
-                    # continuation (continuous by construction) and the spliced
-                    # forms can be read in the same column. This is the
-                    # discontinuity; seam_pct_of_range above is not, quite.
-                    "seam_excess_pct_of_range": (
-                        float("nan")
-                        if outcome.split_applied is None
-                        else 100 * outcome.seam_excess_jump / variant_range
-                    ),
-                    # The floor's own seam, on the same scale. Not summed with
-                    # the cut's: below the floor the curve is the anchored
-                    # baseline, so this measures how far the two forms disagree
-                    # there, which is a different question from the cut's.
-                    "floor_seam_pct_of_range": (
-                        float("nan")
-                        if outcome.lower_floor_applied is None
-                        else 100 * outcome.floor_seam_jump / variant_range
                     ),
                     # The user's three stated targets for the region below the
                     # cut (spec.md 14.12). Reported together and never summed:
@@ -914,545 +862,27 @@ def fit_folder(
 
 
 if __name__ == "__main__":
-    # Edit the constants under the mode you want, then run:
+    # Edit the constants below, then run:
     #     uv run python src\utils\ir_fitting\api.py
     # See CLAUDE.md on the edit-constants convention used across this repo.
+    #
+    # BASELINE EXPERIMENTS ARE NO LONGER HERE. They moved to an argparse CLI,
+    # because the recipe is what gets swept and re-typing a variant list is how
+    # a sweep goes wrong:
+    #     uv run python scripts\run_baseline_experiment.py --help
+    # With no arguments that reproduces the selected form of spec.md 14.22 on
+    # the eight judged files -- what this block used to do. Batch FITTING stays
+    # here on the edit-constants convention, mirroring src/utils/kinetics,
+    # where classification got a CLI and batch fitting did not.
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     import matplotlib
 
     matplotlib.use("Agg")  # no interactive windows from a batch run
 
-    MODE = "baseline"  # "baseline" = compare baselines; "fit" = run the peak fit
+    folder_name = "nn1120-3_pd_ceo2_004"
+    name = "20260304_145524_pd_ceo2_004-000"
 
-    if MODE == "baseline":
-        # ------------------------------------------------------------------
-        # Baseline experiment. Fits nothing, writes only figures + one CSV.
-        #
-        # Each variant is ("label", {settings}) or ("label", {settings},
-        # (high, low)) to also change the window. The FIRST variant is what
-        # every other one is measured against.
-        #
-        # Settings you can change (anything omitted keeps its
-        # config/analysis.yaml value; a misspelled name raises):
-        #     num_std, half_window, interp_half_window,
-        #     fill_half_window, smooth_half_window
-        #
-        # Window is (high, low) in cm-1 and changes which slice of the
-        # spectrum the algorithm sees -- which changes the baseline
-        # everywhere, not just at the edges (spec.md section 14.3 finding 2).
-        #
-        # A 4th tuple element is the anchor list: wavenumbers the baseline is
-        # forced to pass through, applied after create_baseline as an affine
-        # correction. ANCHOR_POINTS_CM1 is the calibrated (2006, 1955) pair.
-        # An anchor with a dominant band within +/-25 cm-1 is dropped by the
-        # guard and reported in the anchors_gated column (spec.md 14.7).
-        #
-        # A 5th element is the split wavenumber: the ROI is cut there and each
-        # side gets its own baseline -- upper with this variant's settings and
-        # anchors, lower with the current baseline's settings and none. The
-        # same guard gates the cut, independently of the anchors (spec.md 14.8).
-        #
-        # A 6th element is the LOWER-ONLY split wavenumber, and it excludes the
-        # 5th. Same cut point, different operation: create_baseline runs once on
-        # the full window, the anchors are fitted to that full-ROI result, and
-        # only below the cut is a second baseline substituted. Above the cut the
-        # result is bit-for-bit the unsplit anchored baseline, which the
-        # upper_max_abs_diff column checks (spec.md 14.9).
-        #
-        # Past the 5th slot, use the KEYWORD form -- BaselineVariant(label=...,
-        # lower_split_cm1=...) -- as the lower-split variants below do. The
-        # positional tuple exists to keep ("label", {}) short; at eight slots
-        # with two Nones in the middle it no longer does. Both are accepted.
-        #
-        # lower_anchors are anchors for the second baseline lower_split_cm1
-        # creates, and require it. Their own affine correction runs on its own
-        # array, so it cannot reach above the cut. The five-anchor experiment
-        # below uses (1955, 1790, 1800, 1810, 1820) over the lower segment
-        # 1955-1750; it is a least-squares correction, not an exact fit at each
-        # point. Reported in lower_anchors / lower_anchors_gated, separately
-        # from the full-ROI anchors.
-        #
-        # lower_settings are std_distribution overrides for the lower segment
-        # ONLY -- the place to try different params, since that segment is ~106
-        # samples against the ROI's ~259 and the sample-count knobs
-        # (half_window and friends) are ~2.4x larger relative to it than where
-        # they were tuned. None = the current baseline's own parameters, which
-        # is what every measurement in 14.8-14.10 used.
-        # ------------------------------------------------------------------
-        #
-        # lower_method replaces the lower segment's ALGORITHM rather than its
-        # parameters -- any pybaselines.Baseline method (spec.md 14.12). It is
-        # the knob 14.3 finding 1 and 14.11 could not turn: both swept
-        # std_distribution's parameters, never the algorithm. Mutually exclusive
-        # with lower_settings, whose keys belong to std_distribution.
-        # ------------------------------------------------------------------
-        # ---- WHICH DATA TO LOOK AT -------------------------------------
-        # These four constants are the sampling controls. The variants below
-        # are the locked §14.21 recipe; these say what to run it on.
-        #
-        #   folder_name   any dataset under utility.subtract_ifg.sub_ifg_output
-        #                 (nn1120-2_pd_ceo2_000, nn1120-3_pd_ceo2_00{0..4},
-        #                 nn1120-4_pd_ceo2_000, ...)
-        #   MEASUREMENTS  base names or globs, e.g.
-        #                 ["20260715_094622_pd_ceo2_000-007"] or ["*-007"].
-        #                 None = every measurement in the folder.
-        #   DELTA_GROUPS  ["delta10"] whole group, ["delta10.0042"] one file,
-        #                 ["delta10.00*"] a glob. None = all ten groups.
-        #   FILE_LIMIT    guard against a 385-figure run; raise it on purpose.
-        #
-        # Set MEASUREMENTS *and* DELTA_GROUPS to None to fall back to the eight
-        # judged files of §14.2 -- which only exist in nn1120-4_pd_ceo2_000, so
-        # that fallback is only right for that folder.
-        #
-        # run_name is the output subfolder. CHANGE IT when you change the data
-        # or the variants: the directory is reused, so a second run under the
-        # same name overwrites the first run's figures and CSV. The locked
-        # §14.21 experiment owns "lower_anchors_1955".
-        folder_name = "nn1120-4_pd_ceo2_000"
-        MEASUREMENTS: list[str] | None = ['20260908_063922_pd_ceo2_000-034']
-        DELTA_GROUPS: list[str] | None = ['delta10', 'delta5']
-        FILE_LIMIT = DEFAULT_FIGURE_BUDGET
-        run_name = "lower_anchors_1955"
-
-        variants = [
-            # THE FINAL CANDIDATE, ALONE (spec.md §14.21). The lower-only split
-            # at 1955 with anchors on BOTH segments: the dense upper set
-            # corrects the full-ROI curve that stands at and above the cut, and
-            # the five-point lower set corrects the segment below it. Two
-            # corrections, two arrays, sharing only the wavenumber 1955.
-            #
-            # The figure is raw (black) against this one trace. `current`,
-            # `anchored` and the unanchored `lower split 1955` are kept below,
-            # commented out -- put any of them back and it becomes a
-            # comparison again, with the FIRST entry as the reference.
-            #
-            # The anchor expression is reproduced exactly as §14.21 locked it:
-            # ANCHOR_POINTS_CM1 already contains 2006, so 2006 appears twice
-            # and carries double weight in the least-squares correction. Do not
-            # deduplicate it without a new comparison run.
-            BaselineVariant(
-                label="lower split 1955 + five lower anchors",
-                anchors=(*ANCHOR_POINTS_CM1, 2011,2010,2009,2008,2007,2006,2005,2004,2003,2002,2001,2000),
-                lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-                lower_anchors=LOWER_ANCHOR_POINTS_FIVE_CM1,
-            ),
-            # ---- the comparison this candidate was selected out of ----
-            # Restore in this order to get the established colours back:
-            # `current` blue, `anchored` ORANGE, then the split forms.
-            # ("current", {}),
-            # ("anchored", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
-            # BaselineVariant(
-            #     label="lower split 1955",
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            # ),
-            # ---- previous lower-split experiments ----
-            # Colours: raw is black, then variants take tab10 in list order --
-            # `current` is blue and the established three-anchor `anchored`
-            # curve is ORANGE. The active comparison above keeps that ordering;
-            # the lower-only forms follow it.
-            #
-            # The two-endpoint lower anchors of 14.10.1, the pspline_arpls of
-            # 14.12, the 1800 floor of 14.13 and the continuation of 14.15 are
-            # still built and measured in spec.md; they are out of these
-            # figures, not out of the package.
-            #
-            # ---- a different ALGORITHM below the cut (spec.md 14.12) ----
-            # No anchors below 1955: the correction is gone and the curve is
-            # whatever the algorithm produces. These historical lower-split
-            # variants remain commented out because this run is intentionally
-            # the lower-split five-anchor comparison.
-            # BaselineVariant(
-            #     label="lower pspline_arpls",
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            #     lower_method=LOWER_METHOD_CANDIDATE,
-            # ),
-            # ---- the same method, tied off at 1800 (spec.md 14.13) ----
-            # The lower segment stops above the ROI floor, so the algorithm no
-            # longer sees the array edge 14.12's figures faulted on
-            # ...-012_delta10.0052. Below 1800 the anchored baseline stands --
-            # the second interface that made this the form the user removed.
-            # BaselineVariant(
-            #     label="lower pspline_arpls floor 1800",
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            #     lower_method=LOWER_METHOD_CANDIDATE,
-            #     lower_floor_cm1=LOWER_FLOOR_POINT_CM1,
-            # ),
-            # The two other methods that clear all three stated targets once the
-            # floor is in (spec.md 14.13 finding 38). mixture_model has the
-            # smallest cut seam of the three; cwt_br has the worst.
-            # BaselineVariant(
-            #     label="lower mixture_model floor 1800",
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            #     lower_method="mixture_model",
-            #     lower_floor_cm1=LOWER_FLOOR_POINT_CM1,
-            # ),
-            # Other methods measured in 14.12; loess is the seam's best showing,
-            # irsqr the case for why a near-zero low-window residual is not on
-            # its own a good baseline (it is a strict lower envelope and misses
-            # the 1850 midpoint by 8.9% of range).
-            # BaselineVariant(
-            #     label="lower loess",
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            #     lower_method="loess",
-            # ),
-            # BaselineVariant(
-            #     label="lower pspline_arpls lam1e2",
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            #     lower_method="pspline_arpls",
-            #     lower_method_kwargs={"lam": 1e2},
-            # ),
-            # ---- std_distribution settings, swept under the anchor (14.11) ----
-            # `settings` on an anchored variant reaches the FULL-ROI/upper
-            # baseline, and through it the anchor residuals and the seam.
-            # num_std and half_window only move it together; the other three
-            # keys are inert (14.11 finding 27). Nothing is recommended: this
-            # halves the seam and makes the 2040 recovery slightly worse
-            # (finding 29), and the 60-file breadth check ranks hw15 above
-            # hw20 where the judged six rank them the other way (finding 30).
-            # ("anchored ns2.5 hw20", {"num_std": 2.5, "half_window": 20},
-            #  DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
-            # ("anchored ns2.5 hw15", {"num_std": 2.5, "half_window": 15},
-            #  DEFAULT_WINDOW, ANCHOR_POINTS_CM1),
-            # Same settings carried onto the split form -- this is what the
-            # seam of 14.11 finding 28 was measured on. Its unsplit twin above
-            # is not optional, for the reason `anchored` is not.
-            # BaselineVariant(
-            #     label="lo anchors ns2.5 hw20",
-            #     settings={"num_std": 2.5, "half_window": 20},
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            #     lower_anchors=LOWER_ANCHOR_POINTS_CM1,
-            # ),
-            # Different params for the LOWER segment only -- add variants here.
-            # Nothing is recommended; these are the knobs, and the reason they
-            # might want changing is the segment's length (see above). 14.11
-            # finding 26 measured this arm: it cannot move the seam at all, by
-            # construction, and below 1955 there is no proxy -- so it is a
-            # figures-only comparison.
-            # BaselineVariant(
-            #     label="lower split 1955 + anchors + half_window 4",
-            #     anchors=ANCHOR_POINTS_CM1,
-            #     lower_split_cm1=LOWER_SPLIT_POINT_CM1,
-            #     lower_anchors=LOWER_ANCHOR_POINTS_CM1,
-            #     lower_settings={"half_window": 4},
-            # ),
-            # Truncating both sides was tried and is worse than the anchors
-            # alone (spec.md 14.8); split_cm1 stays available:
-            # ("split 1955", {}, DEFAULT_WINDOW, ANCHOR_POINTS_CM1, SPLIT_POINT_CM1),
-            # ("num_std 1.4", {"num_std": 1.4}),
-            # ("half_window 20", {"half_window": 20}),
-            # # Window change: same settings, top edge at 2200 instead of 2250.
-            # ("window 2200", {}, (2225.0, 1775.0)),
-        ]
-
-        # MEASUREMENTS/DELTA_GROUPS -> explicit subIFG stems; both None ->
-        # files=None -> JUDGED_FILES: 8 files from nn1120-4_pd_ceo2_000 -- 6
-        # judged wrong plus the 2 guard files of ...-022, which are the cases
-        # the anchor rule must detect and skip, not baselines certified correct.
-        if MEASUREMENTS is None and DELTA_GROUPS is None:
-            files = None
-            print(f"Files -> the {len(JUDGED_FILES)} judged files (spec.md 14.2)")
-        else:
-            files = subifg_files(
-                folder_name,
-                measurements=MEASUREMENTS,
-                file_keys=DELTA_GROUPS,
-                limit=FILE_LIMIT,
-            )
-            print(f"Files -> {len(files)} selected:")
-            for stem in files:
-                print(f"    {stem}")
-
-        # Printed before the run, not after: this directory is reused, so
-        # seeing the destination is the only warning that a run is about to
-        # land on top of an earlier one's figures.
-        print(f"Writing to -> {baseline_experiment_dir(folder_name, run_name)}")
-
-        comparison = compare_baselines(
-            variants,
-            folder_name=folder_name,
-            files=files,
-            run_name=run_name,
-        )
-
-        print(f"\nOutput -> {baseline_experiment_dir(folder_name, run_name)}")
-        print(
-            "\n'moved_pct_of_range' = how far that baseline sits from the first\n"
-            "variant, as a percentage of the file's signal range, over the\n"
-            "wavenumbers the two share. For scale, the 2040 cm-1 peak is about\n"
-            "20% of signal range. It says the baseline MOVED, not that moving it\n"
-            "was an improvement -- judge the figures.\n"
-        )
-        if len(variants) == 1:
-            # With one variant it IS the reference, so every column measured
-            # against the reference compares it to itself: moved_pct_of_range
-            # is 0 and the _x_ref ratios are 1 by construction. Neither is a
-            # result, and 1.0000 in a column whose whole point is "near 2 means
-            # the band stopped being halved" reads like a failure otherwise.
-            print(
-                "\nONE VARIANT: it is its own reference, so moved_pct_of_range "
-                "is 0.0000\nand every '_x_ref' ratio is 1.0000 by construction. "
-                "Read the raw\nheight_* columns, the lower-region targets and "
-                "the figure; add a second\nvariant to get the comparison "
-                "columns back.\n"
-            )
-        print(
-            "'height_2040' / 'height_1980' are those bands' heights "
-            "above the baseline; '_x_ref' is the ratio to the first variant. "
-            "The current baseline cuts these two in half, so a variant that "
-            "fixes that shows a ratio near 2. This measures two named bands "
-            "-- it is NOT a baseline quality score (spec.md 14.3 finding 4)."
-        )
-        # Keep the raw height_* columns beside the ratios: where a band sits
-        # below the current baseline the ratio is NaN, and the raw height is
-        # then the only thing carrying the result.
-        print(
-            comparison.table.drop(
-                columns=["settings", "upper_max_abs_diff", "lower_moved_pct"]
-            ).to_string(index=False, float_format=lambda v: f"{v:9.4f}")
-        )
-
-        # Printed apart from the table because the table's float format rounds
-        # to 4 decimals, which would render 1e-9 as 0.0000 -- and "is it
-        # exactly zero" is the whole question here (spec.md 14.9).
-        checked = comparison.table[comparison.table["split_form"] == "lower_only"]
-        if not checked.empty:
-            print(
-                "\nupper_max_abs_diff -- max |lower-split - anchored| ABOVE the cut.\n"
-                "Must be exactly 0.0: above the cut the lower-only split IS the\n"
-                "anchored baseline by construction. Anything else, or nan (no\n"
-                "'anchored' twin in this run), means the check did not pass.\n"
-            )
-            for _, row in checked.iterrows():
-                print(f"  {row['upper_max_abs_diff']:.3e}  {row['file']}")
-            print(
-                "\nlower_moved_pct -- max |lower-split - anchored| BELOW the cut, "
-                "as %\nof signal range. This is what the cut actually did; the "
-                "band-height\ncolumns cannot show it, because 2040 and 1980 are "
-                "both above the cut.\n"
-            )
-            for _, row in checked.iterrows():
-                print(f"  {row['lower_moved_pct']:8.3f}  {row['file']}")
-            # nan is an UNPERFORMED check, not a failed one: it means no
-            # variant with this one's settings, window and anchors ran without
-            # a cut, so there was nothing to compare against. Showing the
-            # candidate alone is exactly that case -- its dense anchor set has
-            # no unsplit twin here, and calling that FAIL would be a lie.
-            worst = checked["upper_max_abs_diff"].max()
-            if np.isnan(worst):
-                print(
-                    "\n  NOT CHECKED -- no unsplit twin in this run. Add the "
-                    "matching\n  no-cut variant (same settings, window and "
-                    "anchors) to check it."
-                )
-            else:
-                print(
-                    f"\n  worst: {worst:.3e} -- "
-                    + ("PASS" if worst == 0.0 else "FAIL")
-                )
-
-            # The seam is the metric for spec.md 14.10: 1955 is in BOTH anchor
-            # sets, so both sides are pulled toward the same data value there,
-            # and 14.9's only cost over 14.7 was a seam of 0% -> up to 5.6% of
-            # range. The band-height columns cannot score this -- 2040 and 1980
-            # sit above the cut and are guaranteed equal to `anchored`.
-            print(
-                "\nseam_pct_of_range -- the jump across the cut, as % of signal\n"
-                "range. This is the column 14.10 is judged on: anchoring the\n"
-                "lower segment at 1955 pulls it toward the same data value the\n"
-                "full-ROI correction was pulled toward, so the seam should\n"
-                "shrink. Pulled, not pinned -- with five anchors the correction\n"
-                "is least-squares and no anchor is hit exactly.\n"
-            )
-            for label in checked["variant"].unique():
-                print(f"  {label}")
-                for _, row in checked[checked["variant"] == label].iterrows():
-                    print(
-                        f"    seam {row['seam_pct_of_range']:8.3f}  "
-                        f"lower_moved {row['lower_moved_pct']:7.3f}  "
-                        f"lo@{row['lower_anchors'] or '-':<16} "
-                        f"gated {row['lower_anchors_gated'] or '-':<12} "
-                        f"{row['file']}"
-                    )
-
-        # The three targets the user stated for the lower region
-        # (spec.md 14.12), rebuilt as real columns in 14.14 because 14.12 and
-        # 14.13 each re-derived them in a scratchpad probe that was not kept.
-        #
-        # They are printed together and never summed: `irsqr` was the best of 44
-        # methods on `int` alone while sitting 9% of range below where it
-        # belongs (14.12 finding 33). Which `mid` target applies is a REGIME
-        # judgement -- 0 on post-crossing files, `pre` on pre-crossing ones --
-        # so both are shown and neither is subtracted.
-        print(
-            "\nthe three stated lower-region targets, all as % of signal range:\n"
-            "  mid  baseline(1850) - midpoint of the 1866-1838 trough/peak\n"
-            "       target 0 on POST-crossing files; on PRE-crossing ones the\n"
-            "       target is the 'pre' column beside it (the baseline sitting\n"
-            "       on the flanking trough = 'under the base of those peaks')\n"
-            "  und  max(baseline - data) over 1885-1840; target 0 FROM BELOW,\n"
-            "       positive means the baseline cuts into the 1850/1870-1880 bands\n"
-            "  int  mean(data - baseline) over 1838-1750; target 0\n"
-            "Read all three. Each one alone ranks a wrong baseline first.\n"
-            "\n"
-            f"  int_sh  the same statistic over "
-            f"{INT_SHARED_WINDOW_CM1[0]:.0f}-{INT_SHARED_WINDOW_CM1[1]:.0f}\n"
-            "       ONLY -- the samples every variant covers -- and scaled by\n"
-            "       the REFERENCE range. This is the column that ranks a\n"
-            "       window-truncated form against a full-ROI one; plain `int`\n"
-            "       cannot, and spec.md 14.16 got that wrong before measuring.\n"
-            "\n"
-            "'n' is how many samples plain `int` averaged and 'rng' is that\n"
-            "trace's OWN signal range -- both per trace, because a truncated\n"
-            "variant has its own array. A variant windowed to 1790 keeps only\n"
-            "1838-1790 of the `int` window, so its `int` is a DIFFERENT\n"
-            "STATISTIC under the same name: compare plain `int` only where n\n"
-            "matches, and read int_sh otherwise (spec.md 14.16 finding 48).\n"
-        )
-        for item in comparison.files:
-            print(f"  {item.subifg_path.name}  [{item.verdict}]")
-            reference_range = signal_range(item.traces[0].raw)
-            for trace in item.traces:
-                metrics = lower_target_metrics(
-                    trace.wavenumbers, trace.raw, trace.baseline
-                )
-                int_n = int(
-                    np.count_nonzero(
-                        (trace.wavenumbers <= INT_WINDOW_CM1[0])
-                        & (trace.wavenumbers >= INT_WINDOW_CM1[1])
-                    )
-                )
-                shared = int_shared(
-                    trace.wavenumbers, trace.raw, trace.baseline, reference_range
-                )
-                print(
-                    f"      mid {metrics['mid']:+7.2f} (pre "
-                    f"{metrics['mid_pre_target']:+6.2f})  "
-                    f"und {metrics['und']:+7.2f}  "
-                    f"int {metrics['int']:+7.2f} (n {int_n:>3})  "
-                    f"int_sh {shared:+7.2f}  "
-                    f"rng {signal_range(trace.raw):.5f}   {trace.label}"
-                )
-
-        # The claim 14.14 is built on, and the only column that can check it:
-        # a continuation does not MEET the anchored curve at the cut, it STARTS
-        # from it, so the discontinuity should be zero rather than small. The
-        # raw seam cannot show that -- adjacent samples of a continuous curve
-        # still differ by ~slope x the 1.9 cm-1 grid step.
-        continuations = comparison.table[
-            comparison.table["lower_method"] == "continuation"
-        ]
-        if not continuations.empty:
-            print(
-                "\nseam_excess -- the seam with the ordinary grid step taken "
-                "out, as % of\nsignal range. For a spliced form it is the seam; "
-                "for the continuation it\nis the part that is a genuine "
-                "discontinuity, and it should be ~0.\n'pts' is how many "
-                "classified samples the continuation was fitted to\n(14.14 "
-                "finding 42): 3 on ...-021 is the whole diagnosis, and 0 means "
-                "the\ncurve is the straight extrapolation of the anchored "
-                "slope and nothing more.\n"
-            )
-            for label in checked["variant"].unique():
-                print(f"  {label}")
-                for _, row in checked[checked["variant"] == label].iterrows():
-                    pts = int(row["lower_cont_pts"])
-                    print(
-                        f"    seam {row['seam_pct_of_range']:8.3f}  "
-                        f"excess {row['seam_excess_pct_of_range']:8.3f}  "
-                        f"pts {'-' if pts < 0 else pts:>4}  "
-                        f"{row['file']}"
-                    )
-
-        # What the three-anchor comparison gives up: the lower region is only
-        # extrapolated from its 1955 residual. The seven-anchor variant adds
-        # four lower constraints, including 1800; this probe keeps that
-        # comparison visible for every trace.
-        #
-        # The guard's verdict is printed beside it because it is the standing
-        # limit it documents: 1800 sits ~5 cm-1 from the 1795 band and the
-        # guard passes it anyway, since ANCHOR_PROMINENCE_FRAC is scaled to the
-        # FULL ROI range while the low bands are 2-9% of it. '-' = not gated.
-        print(
-            f"\nmid-segment probe at {LOWER_MID_PROBE_CM1:.0f} -- "
-            "data(1800) - baseline(1800), as % of\nsignal range. It is "
-            "extrapolated under the three-anchor set and constrained by the "
-            "seven-anchor variant. 'guard' is its prominence if gated.\n"
-        )
-        for item in comparison.files:
-            cells = []
-            for trace in item.traces:
-                asc = np.argsort(trace.wavenumbers)
-                value = anchor_data_value(
-                    trace.wavenumbers, trace.raw, LOWER_MID_PROBE_CM1
-                )
-                fitted = float(
-                    np.interp(
-                        LOWER_MID_PROBE_CM1,
-                        trace.wavenumbers[asc],
-                        trace.baseline[asc],
-                    )
-                )
-                miss = 100 * (value - fitted) / signal_range(trace.raw)
-                cells.append(f"{trace.label}: {miss:+6.2f}")
-            hit = gating_extremum(
-                item.traces[0].wavenumbers, item.traces[0].raw, LOWER_MID_PROBE_CM1
-            )
-            guard = "-" if hit is None else f"{hit[1]:.2f}@{hit[0]:.0f}"
-            print(f"  {item.subifg_path.name}   guard {guard}")
-            for cell in cells:
-                print(f"      {cell}")
-
-        # With exactly two lower anchors, the seam is predictable from the
-        # upper residual at 1955. The active five-anchor form does not have that
-        # identity: its lower correction is a least-squares pull, so this is
-        # reported only as an upper-side reference, not as a pass/fail check.
-        print(
-            "\nseam reference -- predicted from the anchored residual at 1955;\n"
-            "the five-anchor lower correction is not expected to equal it.\n"
-            "Both as % of signal range; 'gap' is actual minus reference.\n"
-        )
-        for item in comparison.files:
-            anchored = next((t for t in item.traces if t.label == "anchored"), None)
-            lower_anchored = next(
-                (
-                    t
-                    for t in item.traces
-                    if t.lower_anchors_applied and t.split_applied is not None
-                ),
-                None,
-            )
-            if anchored is None or lower_anchored is None:
-                continue
-            asc = np.argsort(anchored.wavenumbers)
-            residual = anchor_data_value(
-                anchored.wavenumbers, anchored.raw, LOWER_SPLIT_POINT_CM1
-            ) - float(
-                np.interp(
-                    LOWER_SPLIT_POINT_CM1,
-                    anchored.wavenumbers[asc],
-                    anchored.baseline[asc],
-                )
-            )
-            rng = signal_range(anchored.raw)
-            predicted = -100 * residual / rng
-            actual = 100 * lower_anchored.seam_jump / rng
-            print(
-                f"  predicted {predicted:+7.3f}  actual {actual:+7.3f}  "
-                f"gap {actual - predicted:+7.3f}  {item.subifg_path.name}"
-            )
-
-    else:
-        folder_name = "nn1120-3_pd_ceo2_004"
-        name = "20260304_145524_pd_ceo2_004-000"
-
-        run = fit_file(subifg_dir(folder_name) / name)
-        print(run.summary())
-        for output_kind, output_path in run.output_paths.items():
-            print(f"  {output_kind}: {output_path}")
+    run = fit_file(subifg_dir(folder_name) / name)
+    print(run.summary())
+    for output_kind, output_path in run.output_paths.items():
+        print(f"  {output_kind}: {output_path}")

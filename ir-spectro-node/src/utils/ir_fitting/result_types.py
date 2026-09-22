@@ -218,10 +218,10 @@ class BaselineTrace:
     lower_anchors_gated: tuple[tuple[float, float, float], ...] = ()
     """``(anchor, extremum wavenumber, prominence)`` per rejected lower anchor.
 
-    Worth reading on any lower-anchored run: the default set is two anchors, so
-    losing one drops the correction from an exact line through both segment ends
-    to a constant shift (spec.md section 14.10.1). A half-corrected lower
-    baseline looks much like one where correcting did little.
+    Worth reading on any lower-anchored run: the correction is a least-squares
+    line through whichever points survive, so losing one re-weights it rather
+    than failing loudly (spec.md section 14.19). A half-corrected lower baseline
+    looks much like one where correcting did little.
     """
 
     split_applied: float | None = None
@@ -235,29 +235,6 @@ class BaselineTrace:
     to split.
     """
 
-    split_form: str = ""
-    """Which cut this was -- ``""``, ``"truncate"`` (spec.md 14.8) or
-    ``"lower_only"`` (14.9).
-
-    Both cut at a wavenumber and both report through :attr:`split_applied`, so
-    without this a table carrying the two forms cannot be read.
-    """
-
-    lower_floor_applied: float | None = None
-    """Wavenumber the lower segment was tied off at, or ``None`` for the ROI
-    floor (spec.md section 14.13). Below it the curve is the anchored full-ROI
-    baseline, so a reader who does not know the floor cannot tell which of two
-    baselines a point down there came from."""
-
-    floor_edges: tuple[float, float] | None = None
-    """``(lowest wavenumber of the lower segment, highest below the floor)``."""
-
-    floor_seam_jump: float = float("nan")
-    """Discontinuity at the floor, in raw units -- the price of tying the lower
-    segment off early, reported beside :attr:`seam_jump` rather than merged with
-    it. They are two different interfaces: the cut has a fitted curve on both
-    sides, the floor has one fitted and one inherited."""
-
     segment_edges: tuple[float, float] | None = None
     """``(lowest wavenumber above the cut, highest below it)`` -- the seam."""
 
@@ -266,32 +243,6 @@ class BaselineTrace:
 
     The segment interface is the known weak point of a split baseline (spec.md
     section 14.4); it is measured and drawn, not blended away.
-    """
-
-    seam_excess_jump: float = float("nan")
-    """:attr:`seam_jump` less the unsplit anchored curve's own step across the
-    same sample pair, in raw units.
-
-    What makes the seam comparable between a form built from two independent
-    curves (spec.md sections 14.9-14.13) and one built by continuing the first
-    (section 14.14). Adjacent samples of a *continuous* curve differ by roughly
-    slope x the ~1.9 cm-1 grid step, so a continuation reports a non-zero
-    ``seam_jump`` while having no discontinuity at all; this is the part that is
-    one.
-    """
-
-    lower_continuation_lam_applied: float | None = None
-    """Curvature penalty the continuation ran with, or ``None`` for every other
-    form (spec.md section 14.14)."""
-
-    lower_continuation_points: int = -1
-    """Samples below the cut the classifier called background -- the
-    continuation's fidelity points, or ``-1`` where no continuation was built.
-
-    Finding 42's number as a per-run column. On ``...-021`` it is 3 over 205
-    cm-1, which is the measured reason the region is under-constrained rather
-    than misclassified; a run returning 0 produced the straight extrapolation of
-    the anchored slope, which looks fitted and is not.
     """
 
     upper_max_abs_diff: float = float("nan")

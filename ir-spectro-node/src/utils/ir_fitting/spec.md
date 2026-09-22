@@ -19,13 +19,15 @@ dormant.**
 | **Baseline investigation** (§14) | Active. Tuning and bare truncation ruled out (§14.3, §14.6). The isosbestic point is measured (~1957) and an **anchored baseline is built and calibrated** (§14.7). It recovers the halved bands on the post-crossing files and is a no-op on the pre-crossing ones. **Splitting at the crossing is built and rejected** (§14.8) — though the post-mortem shows it was tested in its worst form, and names the variant worth trying — **that variant is now built and measured (§14.9)**: it keeps all of the anchor's band recovery, verified, and replaces the anchored baseline's unconstrained 205 cm⁻¹ extrapolation below the lowest anchor, at the cost of a seam §14.7 does not have. **Whether to prefer it over §14.7 alone is open — the visual call has not been made.** A fourth anchor at 1854 was tried and removed (§14.7.1). **The lower segment now has anchors of its own — both its endpoints, `(1955, 1750)` (§14.10, §14.10.1)**: containment above the cut still verified at exactly zero, and the seam improved against the unanchored split on five of six files. An interior third anchor at 1800 was built, measured and **removed by the user on the figures** (§14.10.1); with two anchors the correction is exact at both ends, so the seam is now *predicted* by the upper anchor's residual at 1955 and confirmed to 0.05% of range. The `.0022` regime is still unfixed — §14.10's apparent movement there was measured on a proxy that §14.10.1 finding 24 withdraws. `lower_settings` now exposes the lower segment's own `std_distribution` parameters (no default changed). **The settings are now re-swept under the anchor (§14.11)**: the three anchor residuals are one scalar, `lower_settings` provably cannot move the seam, and tuning the *upper* side halves both that scalar and the seam — while making the 2040 recovery slightly worse and ranking differently on a 60-file sample. **Then the algorithm itself was changed (§14.12), which is the knob no earlier section turned**: below the cut, with `lower_anchors` removed on the user's instruction, `pspline_arpls` at its defaults is the only one of 44 `pybaselines` methods that hits all three targets the user stated this session — baseline through the midpoint of the dispersive ~1850 feature on post-crossing files, under the base of the 1850/1870-1880 bands on pre-crossing ones, near-zero mean residual over 1838-1750. **It is the first thing in §14 to fix the `.0022` regime.** Containment above the cut is still exactly 0.0 and the `...-022` gate still a no-op; the cost is a seam ~1.5x the two-anchor form. **The user judged that form's lower segment no good on the figures, and named the fix: tie the second baseline off at 1800 rather than 1750 (§14.13)** — built and measured. Over the region it now fits, the artefact is gone: `...-012`'s residual drops from +1.11 to +0.19 and all six judged files land inside ±0.22, `und` improves on every one, and the 1955 seam improves on five of six. The 44-method ranking was re-derived on the shortened array and does not move. **The cost moved rather than went away** — below 1800 the anchored baseline stands, and the jump there is 6.5–16.6% of range, the largest discontinuity in §14. **The user then removed the floored form, and the splice with it, from consideration on the figures (§14.13.1)** — the comparison is back to four traces and nothing below 1955 is recommended. **§14.14 then resolves what §14.13.1 could not: *"the splice"* meant `pspline_arpls`, not the 1955 cut.** The cut stays, its seam is tolerated, and `lower split 1955` is the preferred form. `pspline_arpls` is rejected on a third ground (*"caused major problems elsewhere"*), a full-ROI algorithm swap is out of scope (historical datasets), and a cross-file/stack estimate is shelved. Three new measurements say why the region below the cut is wrong and what will not fix it: `weights` — the sixth setting §14.3 finding 1 never swept — is **bit-for-bit a no-op** on the `.0022` files (finding 41), because `std_distribution` classified **0 of 17** samples in 1870–1836 as background and, on `…-021`, only **3 of 106** in the whole lower segment (finding 42); it is neither degenerate nor an endpoint line (finding 43). So the band is not being mistaken for background — the curve is **under-constrained**, which retires every mask-style fix and points at a **C¹ continuation** of the anchored baseline below the cut. **That continuation is now built — as the continuation **plus** `num_std: 3.0` on the lower classifier, which is load-bearing and is the one knob the rest of §14 leaves alone — swept and checked on both samples (§14.15), and it is the best-measured form in §14.** Everything §14.14 required is exact — containment 0.0 over 688 rows, band heights bit-identical, the `…-022` gate a no-op — and the property §14.14 called a prediction holds: one construction serves both regimes, **the first time without `pspline_arpls`**. Post `mid` 0.25 and pre `und` 0.54 beat every earlier form including the rejected one; the seam, measured properly for the first time as `seam_excess`, is **0.36 against the splice's 5.58**. Two things make it work that §14.14 did not foresee: finding 44 — the classified points are not sparse but **confined above ~1910** on the pre-crossing files, so the `int` window has *nothing* in it and no `lam` over seven decades can help — and finding 45, that `lower_settings` under a continuation configures the **classifier**, which is the one lever that fixes it (`num_std` 3.0 reaches to ~1807). The 60-file breadth sample **agrees with the judged six** for once (51/53), where §14.11 finding 30 warned it would not. Costs: pre `int` +3.3/+3.7, unfixed; and `num_std` 3.0 works through a **regime coincidence** in where the threshold falls, which is the section's largest risk. **The visual call has not been made and nothing is recommended.** **§14.16 then goes back to §14.7's form — three anchors, no split, no continuation — on an array truncated to 2250–1800, at the user's instruction.** It moves the pre-crossing `.0022` regime **without a cut**: against `anchored`, `mid` crosses to the correct side of zero on both files, `und` falls from +5.2/+6.2 to +2.4/+2.5, and `int_shared` improves by 7.4/7.5 points — with no seam, no second curve and no `num_std` change, so none of §14.15's classifier risk. **It is nonetheless a clear third: §14.12's `pspline_arpls` and §14.15's continuation beat it on all three targets on both pre-crossing files** (finding 50, whose first draft claimed the opposite before the comparison had been run). On the post-crossing regime it is very nearly a **no-op**: band heights bit-identical on three of four files, `mid`/`und` identical on three of four (finding 49). The denominator confound truncation could have introduced is measured and **confined to the two guard files** (finding 48), which do degrade (finding 51). `int_shared` is a new column because plain `int` is **not comparable across a window change**. **Breadth has not been checked and the visual call has not been made; no default is changed and the production ROI is untouched.**|
 | **Two extra low-wavenumber peaks** (§4) | Dormant — `ir_fitting.extra_peaks_base` is `[]`, so nothing fits them. The machinery works; the peaks are simply not configured. |
 
-**Current experiment status:** §14.21 records the active configuration in
-`api.py`. It retains the full `(2250, 1750)` ROI, the current and three-anchor
-comparison traces, and the lower-only cut at 1955. The selected trace uses the
-three established anchors plus the dense upper set `2011–2000`, and the five
-lower anchors `(1955, 1790, 1800, 1810, 1820)`. The lower experiment's range is
-1955–1750 cm⁻¹. §14.19 and §14.20 remain the preceding measured iterations; no
-production recommendation or default changed.
+**Current experiment status:** §14.21/§14.22 record the selected
+configuration, and it is now the **default of the CLI** (§16) rather than a
+variants list in `api.py`. It retains the full `(2250, 1750)` ROI and the
+lower-only cut at 1955; the selected trace uses the three established anchors
+plus the dense upper set `2011–2000`, and the five lower anchors
+`(1955, 1790, 1800, 1810, 1820)`. The lower experiment's range is 1955–1750
+cm⁻¹. `run_baseline_experiment.py` with no arguments is that form, and
+`--compare` restores §14.21's other three traces. §14.19 and §14.20 remain the
+preceding measured iterations; no production recommendation or default changed.
 
 ### The open question — answered, and replaced by a harder one
 
@@ -85,17 +87,23 @@ recommendation.
 ### How to run things
 
 ```bash
-# Baseline experiments — change settings and/or window, get figures + a CSV.
-# Edit the `variants` list in the __main__ block; MODE = "baseline".
-# To sample a different dataset, set folder_name / MEASUREMENTS / DELTA_GROUPS
-# at the top of that block and give the run a new run_name (section 10).
+# Baseline experiments. With NO arguments this is the selected form of §14.22
+# on the eight judged files — what api.py's __main__ block used to do.
+uv run python scripts\run_baseline_experiment.py
+uv run python scripts\run_baseline_experiment.py --help
+
+# The flags are the knobs §14 actually introduced (§16): --window, --anchors,
+# --lower-split, --lower-anchors, and the two guard thresholds. --with-twin
+# adds the uncut twin that turns upper_max_abs_diff from NOT CHECKED into a
+# real check; --compare restores §14.21's four traces.
+uv run python scripts\run_baseline_experiment.py --with-twin
+uv run python scripts\run_baseline_experiment.py --anchor-prominence-frac 0.9
+
+# Peak fitting. Still edit-constants, in api.py's __main__ (MODE is gone —
+# the baseline branch moved to the CLI, so what remains is the fit path).
 uv run python src\utils\ir_fitting\api.py
 
-# Peak fitting. Same file, MODE = "fit".
-uv run python src\utils\ir_fitting\api.py
-
-# The run now prints mid/und/int per file per variant, and seam_excess
-# beside seam -- so §14.15's findings 46/47 need no scratchpad probe.
+# The run prints mid/und/int per file per variant beside the seam.
 
 # View saved baselines for one measurement (computes nothing new).
 uv run python src\visualizations\plot_baseline.py
@@ -104,9 +112,12 @@ uv run python src\visualizations\plot_baseline.py
 uv run python src\visualizations\plot_individual_fit.py
 ```
 
-Batch work follows the repo's edit-constants convention: change the constants in
-an `if __name__ == "__main__":` block rather than adding argparse. There is no
-CLI.
+Batch **fitting** follows the repo's edit-constants convention: change the
+constants in an `if __name__ == "__main__":` block. Batch **baseline
+experiments** have an argparse CLI (§16), added on the condition §12 named —
+the recipe is what gets swept, and re-typing a variant list is how a sweep goes
+wrong. The split mirrors `src/utils/kinetics`, where the algorithm under active
+iteration got a CLI and batch fitting did not.
 
 ### Traps worth knowing before touching this code
 
@@ -659,12 +670,15 @@ A stem that is one of the judged eight keeps its `bad` / `guard` verdict when
 named explicitly, so a hand-built or `subifg_files`-built list of them produces
 the same figure titles and `verdict` column as `files=None`.
 
-In `api.py`'s `__main__` this is exposed as `MEASUREMENTS`, `DELTA_GROUPS` and
-`FILE_LIMIT` beside `folder_name`; both selectors `None` falls back to
-`JUDGED_FILES`. The block prints the selected stems and the destination
-directory **before** computing, because `baseline_experiment_dir` reuses a
-directory — a second run under an unchanged `run_name` overwrites the first
-run's figures and CSV.
+On the CLI (§16) this is `--measurements`, `--delta-groups` and `--limit`
+beside `--folder`; both selectors omitted falls back to `JUDGED_FILES`. The run
+prints the selected stems, the resolved variants and the destination directory
+**before** computing, because `baseline_experiment_dir` reuses a directory — a
+second run under an unchanged `--run-name` overwrites the first run's figures
+and CSV. `--dry-run` stops after that print.
+
+*(Historical: these were the `MEASUREMENTS` / `DELTA_GROUPS` / `FILE_LIMIT`
+constants in `api.py`'s `__main__` block, which §16 replaced.)*
 
 Every variant is measured against the **first**, so put the baseline being
 compared to at the front. A variant is a `BaselineVariant` or a
@@ -788,7 +802,11 @@ Out of scope:
 - Backfilling peaks missing from historic datasets (§7 — use `append_only=False`).
 - Any change to `src/analysis/`, the ZMQ server, or live output schemas.
 - Fixing the live FSD snapping bug (§5).
-- A CLI. Added only if the workflow needs A/B flags, as `src/utils/kinetics` did.
+
+**No longer out of scope:** *"A CLI. Added only if the workflow needs A/B flags,
+as `src/utils/kinetics` did."* The workflow now does, and the CLI is built —
+§16. It covers baseline experiments only; batch fitting stays on the
+edit-constants convention, exactly as in `src/utils/kinetics`.
 
 Deferred, to revisit:
 
@@ -3720,3 +3738,225 @@ visible now: with the comparison traces gone, nothing else in the figure shows
 what the candidate would have done.
 
 Restoring the comparison is uncommenting three lines.
+
+---
+
+## 15. Cleanup to the selected form — what the code now contains
+
+**§0–§14 above are the historical record of what was tried and are left
+unedited.** This section is the one place that says which of it is still in the
+code. Where a subsection above says a form is "built", "available as a knob" or
+"kept", check the table below before believing it — several of those knobs are
+gone.
+
+The user selected §14.22's form and asked for the other constructions to be
+removed. No baseline behaviour changed: this is a deletion, not a new
+iteration.
+
+### 15.1 What the code is now
+
+The knobs on `BaselineVariant`, and the values the selected form uses:
+
+| Knob | Selected form | Why that value |
+|---|---|---|
+| `settings` | `{}` — unchanged `voigt_fit.baseline` | Swept twice, nothing recommended (§14.3 finding 1, §14.11) |
+| `window` | `DEFAULT_WINDOW` = `(2250, 1750)` | Every truncation was rejected (§14.6 finding 7, §14.16–§14.18) |
+| `anchors` | `DENSE_UPPER_ANCHOR_POINTS_CM1` | §14.7's three calibrated points plus the 2011–2000 cluster (§14.21) |
+| `lower_split_cm1` / `lower_anchors` | `1955` / `(1955, 1790, 1800, 1810, 1820)` | The lower-only cut of §14.9 with the five-point set of §14.19 |
+| `anchor_guard_cm1` / `anchor_prominence_frac` | `25.0` / `0.5` | §14.7 finding 8 calibrated the pair once; **never swept**. Added as fields in §16 — the values are unchanged, so every measurement above still stands |
+
+The last row was function defaults inside `gating_extremum` until §16 and is the
+one part of the construction §14 introduced without ever varying. Making it
+settable changed no default and no measurement; it made the untested thing
+testable.
+
+The inline `(*ANCHOR_POINTS_CM1, 2011, 2010, …, 2000)` expression of §14.21 and
+§14.22 is now the named constant `DENSE_UPPER_ANCHOR_POINTS_CM1`.
+**Value-identical, including the duplicated `2006`** and the double weight it
+carries in the least-squares correction. §14.21's instruction not to
+deduplicate it without a new comparison run stands.
+
+Two properties remain load-bearing, and both are still checked rather than
+argued:
+
+- At and above the cut the result is bit-for-bit the unsplit anchored baseline.
+  `upper_max_abs_diff` must be exactly `0.0`, needs an unsplit twin with the
+  same anchors in the same run, and reports `nan` — an **unperformed** check,
+  never a passed one — when there is none. Running the selected form alone is
+  that case, and `__main__` prints **NOT CHECKED** (§14.22).
+- The anchor at 1955 and the cut at 1955 are gated **independently** by one
+  test. On both `...-022` files each fires, so those two traces are the uncut
+  fallback rather than the selected form. Read the six ungated files.
+
+### 15.2 What was removed
+
+Every entry is still described in its section above. Removing it from the code
+does not withdraw the measurement; re-adding any of it means re-reading that
+section first.
+
+| Removed | Was | Recorded in |
+|---|---|---|
+| `split_cm1`, `split_form` | The truncating split — cut the array and recomputed **both** sides on truncated arrays | §14.8 |
+| `lower_method`, `lower_method_kwargs`, `_segment_pybaselines` | A different **algorithm** below the cut, any `pybaselines.Baseline` method | §14.12, rejected §14.14 decision 1 |
+| `lower_floor_cm1`, `floor_edges`, `floor_seam_jump` | The lower segment tied off at 1800 | §14.13, removed by the user §14.13.1 |
+| `lower_continuation_lam`, `_segment_continuation`, `lower_continuation_points` | The C¹ continuation below the cut | §14.14, §14.15 |
+| `lower_settings`, `LOWER_CONTINUATION_SETTINGS` | `std_distribution` overrides for the lower segment; under a continuation, the classifier lever (`num_std` 3.0) | §14.10.1, §14.11, §14.15 |
+| `TRUNCATED_WINDOW_1790`, `TRUNCATED_ANCHOR_POINTS_1790_CM1` | The truncated-array experiments and their edge anchors | §14.16–§14.18 |
+| `FULL_ROI_ANCHOR_POINTS_SEVEN_CM1` | Seven anchors on an uncut full ROI | §14.20 |
+| Two-endpoint `LOWER_ANCHOR_POINTS_CM1` = `(1955, 1750)` | Exactly two anchors, hit exactly, which made the seam predictable from the upper residual alone | §14.10, §14.10.1 |
+| `int_shared`, `INT_SHARED_WINDOW_CM1` | `int` restricted to the samples a truncated variant also covered | §14.16 |
+| `seam_excess_jump` | The seam with the grid step removed, so a continuous continuation could be compared against a spliced form | §14.14, §14.15 |
+| `LOWER_MID_PROBE_CM1` | The 1800 drift probe — 1800 is now an anchor | §14.10.1 |
+| `LOWER_METHOD_CANDIDATE`, `LOWER_FLOOR_POINT_CM1`, `LOWER_CONTINUATION_LAM` | The named defaults for the above | §14.12–§14.15 |
+| `BaselineVariant.is_default_window`, `BaselineOutcome.anchor_note` | Helpers with no callers | — |
+
+Consequences worth knowing:
+
+- **The seam is no longer predictable before the run.** With exactly two lower
+  anchors it was minus the anchored baseline's residual at the cut (§14.10.1
+  finding 21). The selected form has five, so the lower correction is a
+  least-squares pull and that identity does not hold (§14.19). The
+  predicted-vs-actual probe `__main__` used to print is gone with it.
+- **`seam_pct_of_range` is the seam column again.** `seam_excess` existed only
+  to compare a continuous form against a spliced one; for two independent
+  segments the two were within rounding of each other anyway.
+- **The positional tuple is now at most 6 slots**,
+  `(label, settings[, window[, anchors[, lower_split_cm1[, lower_anchors]]]])`.
+  §10's eight-slot signature is historical.
+- **The CSV lost 8 columns**: `split_form`, `lower_method`, `lower_cont_lam`,
+  `lower_cont_pts`, `lower_floor`, `floor_seam_pct_of_range`,
+  `seam_excess_pct_of_range`, `int_shared`. Nothing downstream reads this file,
+  so it is not the output contract `CLAUDE.md` protects — that one is the
+  `*_Carbonyl*` files, which this package never writes.
+- **The figure legend drops the cut-form tag**: `split 1955 lower_only (seam …)`
+  became `split 1955 (seam …)`, there being one cut form. §14.22's three
+  commented-out comparison variants are unchanged, so restoring the comparison
+  is still uncommenting three lines.
+
+### 15.3 Verification of the cleanup
+
+There is no test suite, so this followed `CLAUDE.md`'s convention: run against
+real data and diff the output. The selected form ran on the eight judged files
+before and after.
+
+| Check | Result |
+|---|---|
+| Baseline curves, all 8 judged files | **bit-identical** — per-file `sum` / `min` / `max` to 12 significant digits |
+| Every surviving CSV column | identical; only the 8 columns of §15.2 dropped, none added |
+| `upper_max_abs_diff` with an unsplit twin present | **0.0e+00** on all 8 files — re-checked by adding `anchored` plus both cut variants, since the selected form alone reports `nan` |
+| Guard on `...-022`, both files | still fires **twice** — `anchors_gated = 1955` *and* `split_gated = 1955`, `split` blank, `lower_anchors` blank, `seam_pct_of_range` `nan`, result identical to `anchored` |
+| Degenerate flag | forced with `num_std: 0.8` on `...-008_delta10.0042`, the reproducer named in `DEGENERATE_WARNING`: `degenerate` `True`, `degenerate_segments == ("full",)`, CSV column `True`, counted in `summary()`. The flag survives the restructured in-place path; it fired in no other run |
+| `ruff check src/` | no new findings; **zero `F821`**, and no unused imports in `ir_fitting` |
+| `src/visualizations` imports | `plot_baseline`, `plot_individual_fit`, `_axes` all import clean |
+
+`src/analysis`, `src/instrument`, `runner.py`, `writer.py`, the fit path
+(`fit_file` / `fit_folder` / `load_measurement`) and §4's dormant extra-peaks
+workstream were not touched. No `config/analysis.yaml` default, production ROI
+or live baseline changed — as at every point in §14.
+
+---
+
+## 16. The CLI — what is exposed, and what is not
+
+`scripts\run_baseline_experiment.py` → `src/utils/ir_fitting/baseline_cli.py`,
+wrapping `api.compare_baselines`. Built when the next workstream (curve fitting
+on top of this package) made the baseline recipe something to sweep rather than
+something to settle, which is the condition §12 named.
+
+**With no arguments it is §14.22**: the selected form alone, on the eight judged
+files, under `run_name = lower_anchors_1955`. That was the acceptance gate —
+see §16.3.
+
+### 16.1 The inventory — everything that feeds the selected baseline
+
+| # | Input | Selected value | Was a knob? | Changed in §14? | Exposed? |
+|---|---|---|---|---|---|
+| 1 | `settings` (`std_distribution` params) | `voigt_fit.baseline`, unmodified | yes | swept twice, **nothing changed** | **no** |
+| 2 | `window` | `(2250, 1750)` | yes | truncations tried, all rejected | **yes** |
+| 3 | `anchors` | `DENSE_UPPER_ANCHOR_POINTS_CM1` | yes | **yes** | **yes** |
+| 4 | `lower_split_cm1` | `1955` | yes | **yes** | **yes** |
+| 5 | `lower_anchors` | `(1955, 1790, 1800, 1810, 1820)` | yes | **yes** | **yes** |
+| 6 | `ANCHOR_GUARD_CM1` | `25.0` cm⁻¹ | **no** — function default | introduced, never swept | **yes** |
+| 7 | `ANCHOR_PROMINENCE_FRAC` | `0.5` of ROI range | **no** — function default | introduced, calibrated once | **yes** |
+| 8 | `anchor_data_value(half_width)` | `10.0` cm⁻¹ | **no** | never touched | no |
+| 9 | reporting windows (`MID_*`, `UND_*`, `INT_*`, `REPORTED_BANDS_CM1`) | — | no | — | no |
+
+Rows 6 and 7 are the answer to *"is there anything else we exposed"* — and
+strictly they were never exposed at all. `gating_extremum`'s two thresholds were
+used by every caller and overridden by none, so exposing them meant new
+`BaselineVariant` fields threaded through `apply_anchors` and the cut's own
+gate, not a flag.
+
+**Why 1 is not a flag.** It was swept twice and nothing was recommended (§14.3
+finding 1, §14.11), so a flag would invite re-running a settled question. It
+remains reachable as `BaselineVariant(settings=...)`. It would also be a trap:
+`settings` reaches the **upper** curve only — `_compute_lower_split` hands the
+lower segment the unmodified `voigt_fit.baseline` on purpose, and
+`lower_settings` was removed in §15.2. The `--help` epilog says so.
+
+**Why 8 and 9 are not flags.** 8 decides *where* an anchor lands, not *whether*
+it survives, and §14 never touched it. 9 is measurement rather than
+construction: changing one changes what a number means, not what the baseline
+is — and §14.16 finding 48 is the worked case of a window change making a metric
+incomparable under an unchanged name.
+
+### 16.2 Things the flags have to preserve
+
+- **`--anchors` keeps order and duplicates.** The default set contains `2006`
+  twice on purpose, for double weight in the least-squares correction (§14.21,
+  §15.1). The parser builds an ordered list and never deduplicates, sorts or
+  rejects a repeat. Checked directly.
+- **The guard values are part of `_recipe_key`.** Two variants with identical
+  `anchors` but different thresholds can gate *different* anchors, so they are
+  not each other's unsplit twin. Keying without the guards would measure
+  `upper_max_abs_diff` against the wrong curve and print PASS — the one failure
+  that check exists to catch.
+- **One guard, three gate sites.** `--anchor-guard-cm1` / `--anchor-prominence-frac`
+  configure each full-ROI anchor, each lower anchor **and** the cut together.
+  The anchor guard and the cut guard are two verdicts from one test (§14.22); a
+  variant that set them apart would not be the form §14 measured.
+- **`--with-twin` is the flag that pays for the CLI.** §14.22 records
+  `upper_max_abs_diff` as **NOT CHECKED**, because the check needs an unsplit
+  twin with the *same* anchors and `anchored` carries the three-point set.
+  `--with-twin` synthesizes an uncut variant from this run's own window, anchors
+  and guards, placed immediately before the candidate — so the twin table sees
+  it, and `current` stays the reference under `--compare` where §14.21's colours
+  depend on the order. Measured: **0.0e+00 on all eight files, PASS**, the first
+  time the selected form has been checked rather than asserted.
+- Two new CSV columns, `anchor_guard_cm1` and `anchor_prominence_frac`. Without
+  them an empty `anchors_gated` cannot be told from a threshold raised until
+  nothing gates. Nothing downstream reads this file (§15.2).
+- **`--with-twin` shifts every trace's colour by one.** `plot_baseline.py`
+  assigns `tab10[index % 10]` by position in the variant list, so inserting the
+  twin ahead of the candidate gives the *twin* `tab10[0]` and the candidate
+  `tab10[1]`. §14.22's "the candidate takes `tab10[0]` and is blue" therefore
+  describes the no-argument run only; under `--with-twin` the blue trace is the
+  uncut twin and the candidate is orange. Nothing about the baselines changes —
+  this is a reading note for the figure, and the legend names both traces.
+  `--compare` is unaffected: `current` is still first and still blue.
+
+### 16.3 Verification
+
+Repo convention — run against real data and diff (`CLAUDE.md`). The pre-CLI
+`__main__` was run on the eight judged files first and kept.
+
+| Check | Result |
+|---|---|
+| No-argument CLI vs. the pre-CLI `__main__` | 8 rows; **every pre-existing column identical value-for-value**; exactly the 2 guard columns added, none dropped |
+| The three-target report block | **character-identical** |
+| `NOT CHECKED` still printed with one variant | yes |
+| Guard on `...-022`, both files | still fires **twice** — `anchors_gated` and `split_gated` both 1955, `split` blank, `lower_anchors` blank, `seam` `nan` |
+| Degenerate baselines | 0, as before |
+| `--with-twin` | `upper_max_abs_diff` **0.0e+00** on all 8 files → **PASS** instead of NOT CHECKED. Read it as 6 + 2: on the six ungated files this is the real check that the splice left the region above the cut untouched; on the two `...-022` files the cut is gated, so there is no second segment and 0.0 is trivially true rather than a measurement (§14.22's "read the six ungated files") |
+| `--compare` | reproduces §14.21's four traces in order, `lower split 1955` PASSes against `anchored` |
+| `--anchor-prominence-frac 0.9` | `...-022` **stops** being gated (it scores 0.75–0.82) and gains a cut + lower segment |
+| `--anchor-prominence-frac 0.2` | `...-021` **becomes** gated (it scores ≤ 0.24) and falls back to the uncut form |
+| `--anchor-guard-cm1 5` | `...-022` stops being gated — its band at 1942 is 13 cm⁻¹ from the anchor, outside ±5 |
+| Both gates move together in every sweep | `anchors_gated` and `split_gated` never disagree |
+| `--anchors` duplicate `2006` | survives parsing, twice; order preserved, not sorted |
+| Bad `--window`, out-of-window anchor, `--lower-anchors` above the cut, negative guard, zero prominence, out-of-range cut | each rejected at variant construction with the existing message |
+| `ruff check src/utils/ir_fitting/` | zero `F401`; the 3 remaining `BLE001` are the pre-existing deliberate catches |
+
+No `config/analysis.yaml` default, production ROI, live baseline or output
+schema changed. `src/analysis`, `src/instrument`, `runner.py`, `writer.py`, the
+fit path and §4's dormant extra-peaks workstream were not touched.
