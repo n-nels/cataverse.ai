@@ -41,9 +41,10 @@ via `src/utils/kinetics/api.py`'s own `__main__` block.
 The second is **baseline experiments**: `scripts/run_baseline_experiment.py`
 (wrapping `src/utils/ir_fitting/baseline_cli.py`), for the same reason — the
 baseline recipe is under active iteration and needs A/B flags. With no arguments
-it reproduces the selected form of `src/utils/ir_fitting/spec.md` §14.22 on the
-eight judged files, which is what that package's `api.py` `__main__` block used
-to do. The flags are the inputs §14 actually introduced — `--window`,
+it runs the default recipe on the eight judged files. That is §14.22's form with upper
+anchors `2240 2006 1955 1955 1955` and lower anchors `1955 1800 1820`, under
+`--run-name default`. `src/utils/ir_fitting/spec.md` §16.5 gives the flags that
+reproduce §14.22 itself. The flags are the inputs §14 actually introduced — `--window`,
 `--anchors`, `--lower-split`, `--lower-anchors` and the two anchor-guard
 thresholds — plus `--with-twin`, which adds the uncut twin that makes
 `upper_max_abs_diff` a real check rather than `NOT CHECKED`. The full inventory,

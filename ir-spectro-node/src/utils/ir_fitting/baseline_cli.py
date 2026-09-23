@@ -62,10 +62,8 @@ from src.utils.ir_fitting.baseline import (
     ANCHOR_POINTS_CM1,
     ANCHOR_PROMINENCE_FRAC,
     DEFAULT_WINDOW,
-    DENSE_UPPER_ANCHOR_POINTS_CM1,
     INT_WINDOW_CM1,
     JUDGED_FILES,
-    LOWER_ANCHOR_POINTS_CM1,
     LOWER_SPLIT_POINT_CM1,
     BaselineVariant,
 )
@@ -73,17 +71,46 @@ from src.utils.ir_fitting.result_types import BaselineComparison
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_RUN_NAME = "lower_anchors_1955"
-"""The run name the locked section 14.21/14.22 experiment owns."""
+DEFAULT_RUN_NAME = "default"
+"""Run name of the default recipe.
 
-DEFAULT_LABEL = "lower split 1955 + five lower anchors"
-"""Label of the selected form, so a no-argument run reproduces section 14.22."""
+Not ``lower_anchors_1955``: that directory holds the section 14.21/14.22
+figures, and a no-argument run under it would overwrite them with a different
+recipe. Pass ``--run-name lower_anchors_1955`` with the 14.22 anchor sets to
+reproduce that run.
+"""
+
+DEFAULT_LABEL = "default"
+"""Label of the default recipe."""
+
+DEFAULT_ANCHORS_CM1: tuple[float, ...] = (2240.0, 2006.0, 1955.0, 1955.0, 1955.0)
+"""Default full-ROI anchors. 1955 is listed three times on purpose.
+
+Each entry is one residual in the least-squares affine correction, so a repeat
+is an integer weight: 1955 pulls the line with three times the weight of 2240
+or 2006. Order and duplicates are kept -- never deduplicate this.
+
+Replaces :data:`~src.utils.ir_fitting.baseline.DENSE_UPPER_ANCHOR_POINTS_CM1`
+(section 14.21/14.22) as the CLI default; that constant is unchanged and is
+still what section 14 was measured with.
+"""
+
+DEFAULT_LOWER_ANCHORS_CM1: tuple[float, ...] = (1955.0, 1800.0, 1820.0)
+"""Default lower-segment anchors.
+
+Replaces :data:`~src.utils.ir_fitting.baseline.LOWER_ANCHOR_POINTS_CM1`
+(1955/1790/1800/1810/1820) as the CLI default; that constant is unchanged.
+"""
 
 
 EPILOG = """\
-With no arguments this runs the selected form of spec.md section 14.22 -- the
-lower-only cut at 1955 with anchors on both segments -- alone, on the eight
-judged files of section 14.2, exactly as api.py's __main__ block used to.
+With no arguments this runs the default recipe -- the lower-only cut at 1955, upper
+anchors 2240 2006 1955 1955 1955 (1955 at triple weight), lower anchors
+1955 1800 1820 -- alone, on the eight judged files of section 14.2, under
+--run-name default. To reproduce the section 14.22 selected form instead, pass
+  --anchors 2240 2006 1955 2011 2010 2009 2008 2007 2006 2005 2004 2003 2002 2001 2000
+  --lower-anchors 1955 1790 1800 1810 1820
+  --run-name lower_anchors_1955 --label "lower split 1955 + five lower anchors"
 
 Two things worth knowing before sweeping:
 
@@ -235,8 +262,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     recipe = parser.add_argument_group(
         "the recipe",
-        "Defaults are the selected form of spec.md 14.22; omitting all of "
-        "these reproduces it exactly.",
+        "Defaults are the default recipe (spec.md 16.5); the 14.22 selected form "
+        "differs only in its two anchor sets -- see the epilog.",
     )
     recipe.add_argument(
         "--label",
@@ -259,12 +286,12 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         type=float,
         metavar="CM1",
-        default=list(DENSE_UPPER_ANCHOR_POINTS_CM1),
+        default=list(DEFAULT_ANCHORS_CM1),
         help="Wavenumbers the full-ROI baseline is pulled through, as an "
         "affine correction after create_baseline (14.7). ORDER AND DUPLICATES "
-        "ARE KEPT: the default set contains 2006 twice on purpose, giving that "
-        "wavenumber double weight in the least-squares line (14.21, 15.1). "
-        "Default: the 15-point dense upper set.",
+        "ARE KEPT: repeating a wavenumber gives it that many times the weight "
+        "in the least-squares line (14.21, 15.1). Default: "
+        "2240 2006 1955 1955 1955 -- 1955 at triple weight.",
     )
     recipe.add_argument(
         "--no-anchors",
@@ -290,9 +317,9 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         type=float,
         metavar="CM1",
-        default=list(LOWER_ANCHOR_POINTS_CM1),
+        default=list(DEFAULT_LOWER_ANCHORS_CM1),
         help="The lower segment's own affine correction, on its own array "
-        "(14.10, 14.19). Requires a cut. Default: the five-point set.",
+        "(14.10, 14.19). Requires a cut. Default: 1955 1800 1820.",
     )
     recipe.add_argument(
         "--no-lower-anchors",
@@ -379,8 +406,8 @@ def build_variants(args: argparse.Namespace) -> list[BaselineVariant]:
     the established colours of 14.21 depend on that order.
     """
     window = (float(args.window[0]), float(args.window[1]))
-    # list(), never set(): the dense upper set carries 2006 twice on purpose
-    # and deduplicating it would change the least-squares correction (14.21).
+    # tuple(), never set(): repeated anchors are weights (the default carries 1955
+    # three times) and deduplicating would change the least-squares correction.
     anchors = () if args.no_anchors else tuple(args.anchors)
     lower_split = None if args.no_lower_split else float(args.lower_split)
     lower_anchors = (

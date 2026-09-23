@@ -20,8 +20,8 @@ dormant.**
 | **Two extra low-wavenumber peaks** (§4) | Dormant — `ir_fitting.extra_peaks_base` is `[]`, so nothing fits them. The machinery works; the peaks are simply not configured. |
 
 **Current experiment status:** §14.21/§14.22 record the selected
-configuration, and it is now the **default of the CLI** (§16) rather than a
-variants list in `api.py`. It retains the full `(2250, 1750)` ROI and the
+configuration. It was the first **default of the CLI** (§16), which has since
+moved to the anchor sets of §16.5; the paragraph below describes §14.22. It retains the full `(2250, 1750)` ROI and the
 lower-only cut at 1955; the selected trace uses the three established anchors
 plus the dense upper set `2011–2000`, and the five lower anchors
 `(1955, 1790, 1800, 1810, 1820)`. The lower experiment's range is 1955–1750
@@ -3865,9 +3865,12 @@ wrapping `api.compare_baselines`. Built when the next workstream (curve fitting
 on top of this package) made the baseline recipe something to sweep rather than
 something to settle, which is the condition §12 named.
 
-**With no arguments it is §14.22**: the selected form alone, on the eight judged
-files, under `run_name = lower_anchors_1955`. That was the acceptance gate —
-see §16.3.
+**With no arguments it is the default recipe** (§16.5): §14.22's window and cut, but
+upper anchors `2240 2006 1955 1955 1955` and lower anchors `1955 1800 1820`, on
+the eight judged files, under `run_name = default`. When the CLI was built, the
+no-argument run was §14.22 itself under `run_name = lower_anchors_1955`, and
+that was the acceptance gate — see §16.3. §16.5 gives the flags that still
+reproduce it.
 
 ### 16.1 The inventory — everything that feeds the selected baseline
 
@@ -3875,9 +3878,9 @@ see §16.3.
 |---|---|---|---|---|---|
 | 1 | `settings` (`std_distribution` params) | `voigt_fit.baseline`, unmodified | yes | swept twice, **nothing changed** | **no** |
 | 2 | `window` | `(2250, 1750)` | yes | truncations tried, all rejected | **yes** |
-| 3 | `anchors` | `DENSE_UPPER_ANCHOR_POINTS_CM1` | yes | **yes** | **yes** |
+| 3 | `anchors` | `DENSE_UPPER_ANCHOR_POINTS_CM1` (CLI default changed, §16.5) | yes | **yes** | **yes** |
 | 4 | `lower_split_cm1` | `1955` | yes | **yes** | **yes** |
-| 5 | `lower_anchors` | `(1955, 1790, 1800, 1810, 1820)` | yes | **yes** | **yes** |
+| 5 | `lower_anchors` | `(1955, 1790, 1800, 1810, 1820)` (CLI default changed, §16.5) | yes | **yes** | **yes** |
 | 6 | `ANCHOR_GUARD_CM1` | `25.0` cm⁻¹ | **no** — function default | introduced, never swept | **yes** |
 | 7 | `ANCHOR_PROMINENCE_FRAC` | `0.5` of ROI range | **no** — function default | introduced, calibrated once | **yes** |
 | 8 | `anchor_data_value(half_width)` | `10.0` cm⁻¹ | **no** | never touched | no |
@@ -3996,3 +3999,39 @@ runs each produce a `baseline_comparison.csv` byte-identical to the pre-trim
 run. Printed length went 121 → 25, 126 → 37 and 202 → 65 lines. The verdicts
 are unchanged: NOT CHECKED with no arguments, PASS with `--with-twin` and
 `--compare`. Both `...-022` files are listed as gated.
+
+### 16.5 Default anchor sets changed
+
+At the user's instruction, the CLI's anchor defaults are now the recipe the user
+first ran as `--run-name v3 --label v3`:
+
+| Flag | Default now | Was (§14.22) |
+|---|---|---|
+| `--anchors` | `2240 2006 1955 1955 1955` | `DENSE_UPPER_ANCHOR_POINTS_CM1` (15 points) |
+| `--lower-anchors` | `1955 1800 1820` | `LOWER_ANCHOR_POINTS_CM1` = `1955 1790 1800 1810 1820` |
+| `--run-name` | `default` | `lower_anchors_1955` |
+| `--label` | `default` | `lower split 1955 + five lower anchors` |
+
+1955 appears three times to give it **triple weight** in the least-squares
+upper correction. It is still a pull, not a pin: with three distinct
+wavenumbers, no anchor is hit exactly. The weighting also does nothing in a file
+where the guard gates 2240 or 2006, because two distinct points leave an exact
+line. The window (`2250, 1750`), the cut (`1955`) and the guard thresholds are
+unchanged.
+
+The defaults live in `baseline_cli.py` (`DEFAULT_ANCHORS_CM1`,
+`DEFAULT_LOWER_ANCHORS_CM1`). `baseline.py`'s `DENSE_UPPER_ANCHOR_POINTS_CM1`
+and `LOWER_ANCHOR_POINTS_CM1` were **not** changed, because they record what
+§14 measured. `--compare` still uses `ANCHOR_POINTS_CM1` for `anchored`. The
+run name moved too: a no-argument run under `lower_anchors_1955` would
+overwrite §14.22's figures with a different recipe.
+
+The default recipe has not been measured against §14.22 in this spec, and no production
+default changed. To reproduce §14.22:
+
+```
+python scripts\run_baseline_experiment.py ^
+  --anchors 2240 2006 1955 2011 2010 2009 2008 2007 2006 2005 2004 2003 2002 2001 2000 ^
+  --lower-anchors 1955 1790 1800 1810 1820 ^
+  --run-name lower_anchors_1955 --label "lower split 1955 + five lower anchors"
+```
