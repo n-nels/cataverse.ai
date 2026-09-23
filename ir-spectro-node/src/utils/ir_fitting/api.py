@@ -565,6 +565,9 @@ def compare_baselines(
     comparison = BaselineComparison(folder_name=folder_name, run_name=run_name)
     voigt_settings = ir_config.get_voigt_settings()
     rows: list[dict] = []
+    # Labels already warned about a missing twin: the gap is a property of
+    # the variant list, not of any one file, so say it once per run.
+    warned_no_twin: set[str] = set()
 
     for file_stem, verdict in selected:
         subifg_path = source_dir / file_stem
@@ -628,7 +631,8 @@ def compare_baselines(
             else:
                 twin = unsplit_twins.get(recipe)
                 cut = variant.lower_split_cm1
-                if twin is None:
+                if twin is None and variant.label not in warned_no_twin:
+                    warned_no_twin.add(variant.label)
                     # A nan here is an unperformed check, and a programmatic
                     # caller never sees the __main__ block's summary -- so say
                     # so, for the reason BaselineOutcome gives about a silently

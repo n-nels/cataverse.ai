@@ -103,7 +103,9 @@ uv run python scripts\run_baseline_experiment.py --anchor-prominence-frac 0.9
 # the baseline branch moved to the CLI, so what remains is the fit path).
 uv run python src\utils\ir_fitting\api.py
 
-# The run prints mid/und/int per file per variant beside the seam.
+# The baseline CLI prints one compact row per file per variant (gated, seam,
+# mid/pre/und/int/n, band heights), the upper-check verdict, and the CSV path;
+# everything else is in baseline_comparison.csv (§16.4).
 
 # View saved baselines for one measurement (computes nothing new).
 uv run python src\visualizations\plot_baseline.py
@@ -3960,3 +3962,37 @@ Repo convention — run against real data and diff (`CLAUDE.md`). The pre-CLI
 No `config/analysis.yaml` default, production ROI, live baseline or output
 schema changed. `src/analysis`, `src/instrument`, `runner.py`, `writer.py`, the
 fit path and §4's dormant extra-peaks workstream were not touched.
+
+### 16.4 Printed output trimmed
+
+A no-argument run printed 121 lines. About 60 were fixed prose explaining each
+column, the table had ~25 columns and wrapped, and three follow-up blocks
+repeated numbers already in it (`mid`/`und`/`int`, the seam and `lower_moved`
+each printed twice; the missing-twin warning printed once **per file**). All of
+it was already in `baseline_comparison.csv` or in this spec. The user asked for
+it cut and for the prose deleted outright rather than hidden behind a flag.
+
+What `print_summary` prints now, after the unchanged pre-run block
+(`Files ->`, `Variants ->`, `Writing to ->`):
+
+1. One table, one row per file × variant: `file, variant, gated, seam, mid,
+   pre, und, int, n, h2040, h1980`. `gated` merges `anchors_gated` and
+   `split_gated`. `n` is kept beside `int` (§14.16 finding 48); `rng` was
+   dropped. `h2040_x_ref`, `h1980_x_ref` and `moved` are added only with two
+   or more variants. With one variant they are 1 / 1 / 0 by construction, and
+   leaving them out replaces the old ONE VARIANT warning.
+2. `upper check: PASS / FAIL (worst …e…) / NOT CHECKED -- add --with-twin`.
+   This is still an exact-zero test printed in `.3e`.
+3. `gated: <files>`, printed only when something was gated.
+4. `CSV -> <path>`, or `not saved`. The duplicate `Output ->` line is gone.
+
+`compare_baselines` now logs the missing-twin warning once per variant label
+per run, with the text unchanged.
+
+§16.3's "three-target report block character-identical" check no longer
+applies, because that block is gone. Across runs, compare the CSV instead.
+Verified: with `--no-plot`, the no-argument, `--with-twin` and `--compare`
+runs each produce a `baseline_comparison.csv` byte-identical to the pre-trim
+run. Printed length went 121 → 25, 126 → 37 and 202 → 65 lines. The verdicts
+are unchanged: NOT CHECKED with no arguments, PASS with `--with-twin` and
+`--compare`. Both `...-022` files are listed as gated.

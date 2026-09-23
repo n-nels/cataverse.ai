@@ -45,6 +45,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 path = Path(__file__).resolve().parents[3]
 if str(path) not in sys.path:
@@ -67,8 +68,6 @@ from src.utils.ir_fitting.baseline import (
     LOWER_ANCHOR_POINTS_CM1,
     LOWER_SPLIT_POINT_CM1,
     BaselineVariant,
-    lower_target_metrics,
-    signal_range,
 )
 from src.utils.ir_fitting.result_types import BaselineComparison
 
@@ -100,161 +99,88 @@ Two things worth knowing before sweeping:
 """
 
 
-def _print_targets_help() -> None:
-    """The three stated lower-region targets, and why they are never summed."""
-    print(
-        "\nthe three stated lower-region targets, all as % of signal range:\n"
-        "  mid  baseline(1850) - midpoint of the 1866-1838 trough/peak\n"
-        "       target 0 on POST-crossing files; on PRE-crossing ones the\n"
-        "       target is the 'pre' column beside it (the baseline sitting\n"
-        "       on the flanking trough = 'under the base of those peaks')\n"
-        "  und  max(baseline - data) over 1885-1840; target 0 FROM BELOW,\n"
-        "       positive means the baseline cuts into the 1850/1870-1880 bands\n"
-        "  int  mean(data - baseline) over 1838-1750; target 0\n"
-        "Read all three. Each one alone ranks a wrong baseline first.\n"
-        "\n"
-        "'n' is how many samples `int` averaged and 'rng' is that trace's\n"
-        "OWN signal range -- both per trace, because a variant with its own\n"
-        "window has its own array and `int` would then be a DIFFERENT\n"
-        "STATISTIC under the same name. Compare `int` only where n matches\n"
-        "(spec.md 14.16 finding 48).\n"
-    )
-
-
 def print_summary(comparison: BaselineComparison, n_variants: int) -> None:
-    """Print what a comparison run produced.
+    """Print a compact per-file summary; the full table is the CSV.
 
-    Lifted unchanged from ``api.py``'s ``__main__`` block when the CLI replaced
-    it, so the three-target block, the ``upper_max_abs_diff``
-    PASS / FAIL / **NOT CHECKED** verdict and the one-variant warning are the
-    same text section 14.22 was read from.
+    One row per file x variant, then the ``upper_max_abs_diff`` verdict and the
+    gated files. The ``_x_ref`` ratios and ``moved`` are shown only with two or
+    more variants -- with one, the variant is its own reference and they are
+    1 and 0 by construction. ``n`` is kept beside ``int`` because a variant
+    with its own window averages a different sample set (spec.md 14.16
+    finding 48).
     """
-    print(
-        "\n'moved_pct_of_range' = how far that baseline sits from the first\n"
-        "variant, as a percentage of the file's signal range, over the\n"
-        "wavenumbers the two share. For scale, the 2040 cm-1 peak is about\n"
-        "20% of signal range. It says the baseline MOVED, not that moving it\n"
-        "was an improvement -- judge the figures.\n"
-    )
-    if n_variants == 1:
-        # With one variant it IS the reference, so every column measured
-        # against the reference compares it to itself: moved_pct_of_range is 0
-        # and the _x_ref ratios are 1 by construction. Neither is a result, and
-        # 1.0000 in a column whose whole point is "near 2 means the band
-        # stopped being halved" reads like a failure otherwise.
-        print(
-            "\nONE VARIANT: it is its own reference, so moved_pct_of_range "
-            "is 0.0000\nand every '_x_ref' ratio is 1.0000 by construction. "
-            "Read the raw\nheight_* columns, the lower-region targets and "
-            "the figure; add a second\nvariant to get the comparison "
-            "columns back (--with-twin, --compare).\n"
-        )
-    print(
-        "'height_2040' / 'height_1980' are those bands' heights "
-        "above the baseline; '_x_ref' is the ratio to the first variant. "
-        "The current baseline cuts these two in half, so a variant that "
-        "fixes that shows a ratio near 2. This measures two named bands "
-        "-- it is NOT a baseline quality score (spec.md 14.3 finding 4)."
-    )
-    # Keep the raw height_* columns beside the ratios: where a band sits below
-    # the current baseline the ratio is NaN, and the raw height is then the
-    # only thing carrying the result.
-    print(
-        comparison.table.drop(
-            columns=["settings", "upper_max_abs_diff", "lower_moved_pct"]
-        ).to_string(index=False, float_format=lambda v: f"{v:9.4f}")
-    )
+    table = comparison.table
+    if table.empty:
+        print("\nNo rows.")
+        return
 
-    # Every row that ASKED for a cut, whether or not the guard allowed it -- a
-    # gated file still belongs in these blocks, reported with an empty `split`
-    # and its wavenumber in `split_gated`.
-    checked = comparison.table[
-        (comparison.table["split"] != "") | (comparison.table["split_gated"] != "")
+    # Rows are appended file-major, variant-minor, in the same order as the
+    # traces, so the two line up one-to-one.
+    int_n = [
+        int(
+            np.count_nonzero(
+                (trace.wavenumbers <= INT_WINDOW_CM1[0])
+                & (trace.wavenumbers >= INT_WINDOW_CM1[1])
+            )
+        )
+        for item in comparison.files
+        for trace in item.traces
     ]
+    gated = [
+        "/".join(
+            f"{kind} {value}"
+            for kind, value in (
+                ("anchor", row["anchors_gated"]),
+                ("cut", row["split_gated"]),
+            )
+            if value
+        )
+        or "-"
+        for _, row in table.iterrows()
+    ]
+    compact = pd.DataFrame(
+        {
+            "file": table["file"],
+            "variant": table["variant"],
+            "gated": gated,
+            "seam": table["seam_pct_of_range"],
+            "mid": table["mid"],
+            "pre": table["mid_pre_target"],
+            "und": table["und"],
+            "int": table["int"],
+            "n": int_n,
+            "h2040": table["height_2040"],
+            "h1980": table["height_1980"],
+        }
+    )
+    if n_variants > 1:
+        compact["h2040_x_ref"] = table["height_2040_x_ref"]
+        compact["h1980_x_ref"] = table["height_1980_x_ref"]
+        compact["moved"] = table["moved_pct_of_range"]
+    print()
+    print(compact.to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+
+    # Every row that ASKED for a cut, whether or not the guard allowed it.
+    # Exact zero is the test, so the worst value is printed in .3e -- the
+    # table's rounding would render 1e-9 as 0.0000 (spec.md 14.9). nan is an
+    # unperformed check, not a failed one.
+    checked = table[(table["split"] != "") | (table["split_gated"] != "")]
     if not checked.empty:
-        # Printed apart from the table because the table's float format rounds
-        # to 4 decimals, which would render 1e-9 as 0.0000 -- and "is it
-        # exactly zero" is the whole question here (spec.md 14.9).
-        print(
-            "\nupper_max_abs_diff -- max |lower-split - anchored| ABOVE the cut.\n"
-            "Must be exactly 0.0: above the cut the lower-only split IS the\n"
-            "anchored baseline by construction. Anything else, or nan (no\n"
-            "unsplit twin in this run), means the check did not pass.\n"
-        )
-        for _, row in checked.iterrows():
-            print(f"  {row['upper_max_abs_diff']:.3e}  {row['file']}")
-        print(
-            "\nlower_moved_pct -- max |lower-split - anchored| BELOW the cut, "
-            "as %\nof signal range. This is what the cut actually did; the "
-            "band-height\ncolumns cannot show it, because 2040 and 1980 are "
-            "both above the cut.\n"
-        )
-        for _, row in checked.iterrows():
-            print(f"  {row['lower_moved_pct']:8.3f}  {row['file']}")
-        # nan is an UNPERFORMED check, not a failed one: it means no variant
-        # with this one's settings, window, anchors and guards ran without a
-        # cut, so there was nothing to compare against. Showing the selected
-        # form alone is exactly that case, and calling it FAIL would be a lie.
         worst = checked["upper_max_abs_diff"].max()
         if np.isnan(worst):
-            print(
-                "\n  NOT CHECKED -- no unsplit twin in this run. Add the "
-                "matching\n  no-cut variant (same settings, window, anchors "
-                "and guards): --with-twin\n  builds exactly that one."
-            )
+            print("\nupper check: NOT CHECKED -- add --with-twin")
         else:
-            print(f"\n  worst: {worst:.3e} -- " + ("PASS" if worst == 0.0 else "FAIL"))
+            verdict = "PASS" if worst == 0.0 else "FAIL"
+            print(f"\nupper check: {verdict} (worst {worst:.3e})")
 
-        # 1955 is in BOTH anchor sets, so both sides are pulled toward the same
-        # data value there and the seam should be small. Pulled, not pinned:
-        # with five lower anchors the correction is least-squares and no anchor
-        # is hit exactly, so the two-anchor identity that predicted the seam
-        # from the upper residual no longer holds (spec.md 14.19). The
-        # band-height columns cannot score this -- 2040 and 1980 sit above the
-        # cut and are guaranteed equal to `anchored`.
-        print(
-            "\nseam_pct_of_range -- the jump across the cut, as % of signal\n"
-            "range. nan where the guard refused the cut: there is then no\n"
-            "seam, because there is no second segment.\n"
-        )
-        for label in checked["variant"].unique():
-            print(f"  {label}")
-            for _, row in checked[checked["variant"] == label].iterrows():
-                print(
-                    f"    seam {row['seam_pct_of_range']:8.3f}  "
-                    f"lower_moved {row['lower_moved_pct']:7.3f}  "
-                    f"lo@{row['lower_anchors'] or '-':<26} "
-                    f"gated {row['lower_anchors_gated'] or '-':<12} "
-                    f"{row['file']}"
-                )
+    gated_files = compact.loc[compact["gated"] != "-", "file"].unique()
+    if len(gated_files):
+        print("gated: " + ", ".join(gated_files))
 
-    # The three targets the user stated for the lower region (spec.md 14.12),
-    # rebuilt as real columns in 14.14 because 14.12 and 14.13 each re-derived
-    # them in a scratchpad probe that was not kept.
-    #
-    # They are printed together and never summed: `irsqr` was the best of 44
-    # methods on `int` alone while sitting 9% of range below where it belongs
-    # (14.12 finding 33). Which `mid` target applies is a REGIME judgement -- 0
-    # on post-crossing files, `pre` on pre-crossing ones -- so both are shown
-    # and neither is subtracted.
-    _print_targets_help()
-    for item in comparison.files:
-        print(f"  {item.subifg_path.name}  [{item.verdict}]")
-        for trace in item.traces:
-            metrics = lower_target_metrics(trace.wavenumbers, trace.raw, trace.baseline)
-            int_n = int(
-                np.count_nonzero(
-                    (trace.wavenumbers <= INT_WINDOW_CM1[0])
-                    & (trace.wavenumbers >= INT_WINDOW_CM1[1])
-                )
-            )
-            print(
-                f"      mid {metrics['mid']:+7.2f} (pre "
-                f"{metrics['mid_pre_target']:+6.2f})  "
-                f"und {metrics['und']:+7.2f}  "
-                f"int {metrics['int']:+7.2f} (n {int_n:>3})  "
-                f"rng {signal_range(trace.raw):.5f}   {trace.label}"
-            )
+    if comparison.table_path is not None:
+        print(f"CSV -> {comparison.table_path}")
+    else:
+        print("CSV -> not saved")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -616,7 +542,6 @@ def main(argv: list[str] | None = None) -> None:
         dpi=args.dpi,
     )
 
-    print(f"\nOutput -> {baseline_experiment_dir(args.folder, args.run_name)}")
     print_summary(comparison, len(variants))
 
 
