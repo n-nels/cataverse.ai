@@ -47,7 +47,7 @@ lower anchors `1955 1800 1820`, cut at 1955) on the eight default files, under
 `--run-name default`. The flags are `--window`, `--anchors`, `--lower-split`,
 `--lower-anchors` and the two anchor-guard thresholds. The baseline EDA's
 comparison and diagnostic machinery (twin checks, seam/band metrics,
-`baseline_comparison.csv`) was removed — spec.md §17. Batch **fitting** in
+`baseline_comparison.csv`) was removed — see `context/2026-09-20-baseline-cleanup-and-cli.md`. Batch **fitting** in
 `ir_fitting` is not covered and still follows edit-constants, via that
 package's `api.py` `__main__`.
 

@@ -3,7 +3,7 @@
 :class:`BaselineVariant` is one baseline recipe: ``create_baseline`` over a
 wavenumber window, an affine correction fitted at anchor points, and an
 optional second baseline below a cut with its own anchors. The design record
-is ``spec.md`` section 14.
+is ``spec.md`` section 9; its history is in ``context/``.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ DEFAULT_FILES: tuple[str, ...] = (
     "20260813_195617_pd_ceo2_000-022_delta10.0022",
     "20260813_195617_pd_ceo2_000-022_delta10.0042",
 )
-"""subIFG files run when none are named -- the eight judged in spec.md 14.2."""
+"""subIFG files run when none are named -- the eight in spec.md section 9."""
 
 ANCHOR_POINTS_CM1: tuple[float, ...] = (2240.0, 2006.0, 1955.0, 1955.0, 1955.0)
 """Default full-ROI anchors. Order and duplicates are kept.

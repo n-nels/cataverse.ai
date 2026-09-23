@@ -2,7 +2,7 @@
 
 Wraps ``src/analysis/spectral_fitting.py`` rather than re-implementing it, so
 there is one Voigt model and one set of param rules in the repo. See
-``spec.md`` section 3 for why this differs from ``src/utils/kinetics``.
+``spec.md`` section 2 for why this differs from ``src/utils/kinetics``.
 """
 
 from __future__ import annotations

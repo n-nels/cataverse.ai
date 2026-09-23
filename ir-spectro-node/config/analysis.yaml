@@ -494,8 +494,8 @@ ir_fitting:
   # unknown key raises rather than being silently ignored.
   #
   # For one-off experiments prefer the per-call kwarg, which needs no edit here:
-  #     compare_baselines([("current", {}), ("try", {"num_std": 1.4})])
-  # See src/utils/ir_fitting/spec.md section 14 before changing these.
+  #     BaselineVariant(label="try", settings={"num_std": 1.4})
+  # See src/utils/ir_fitting/spec.md section 9 and context/2026-09-17-baseline-investigation.md before changing these.
   #
   # baseline:
   #   half_window: 10
