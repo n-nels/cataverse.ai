@@ -4035,3 +4035,51 @@ python scripts\run_baseline_experiment.py ^
   --lower-anchors 1955 1790 1800 1810 1820 ^
   --run-name lower_anchors_1955 --label "lower split 1955 + five lower anchors"
 ```
+
+## 17. Cleanup to execution only
+
+After the baseline EDA ended, the package was cut back to the code that
+**computes** a baseline. **§14–§16 describe code that no longer exists.** They
+stay as the record of what was measured and why the recipe looks the way it does.
+
+**Removed**
+- `api.compare_baselines`, which ran several variants per file, measured each
+  against the first and checked the unsplit twin. It is replaced by
+  `api.run_baseline(variant, ...)`, which runs **one** recipe.
+- Every metric: `lower_target_metrics` (`mid`/`und`/`int`), `band_height` and
+  `REPORTED_BANDS_CM1`, `overlap_shift`/`moved_pct_of_range`, `seam_jump`,
+  `upper_max_abs_diff`/`lower_moved_pct`, `_recipe_key` and `_twin_max_abs_diff`.
+- `baseline_comparison.csv`. A run now writes one figure per file and nothing
+  else.
+- The per-anchor gated reports (`anchors_gated`, `split_gated`,
+  `lower_anchors_gated`, `segment_edges`, `degenerate_segments`). The guard
+  still runs and still drops anchors and the cut. It just no longer reports
+  which ones.
+- CLI flags `--compare` and `--with-twin`, and the post-run summary table
+  (gated, seam, mid, und, int, band heights, the upper check).
+- `BaselineTrace`, `FileBaselineComparison` and `BaselineComparison`. They are
+  replaced by `FileBaseline` and `BaselineRun` in `result_types.py`.
+- The historical anchor constants: the three-point `ANCHOR_POINTS_CM1`,
+  `DENSE_UPPER_ANCHOR_POINTS_CM1` and the five-point `LOWER_ANCHOR_POINTS_CM1`.
+  `ANCHOR_POINTS_CM1` and `LOWER_ANCHOR_POINTS_CM1` now **are** the defaults of
+  §16.5. §14.22 can still be reproduced with the explicit flags given there.
+- `JUDGED_FILES`/`JUDGED_FOLDER` and their bad/guard verdicts. The same eight
+  stems are now `DEFAULT_FILES` in `DEFAULT_FOLDER`.
+- `BaselineVariant.coerce`, the tuple form of a variant.
+
+**Kept unchanged**
+- The guard (`gating_extremum`, measured against the whole ROI range) and the
+  one-grid-step edge tolerance.
+- The full-ROI guard arrays used for lower anchors.
+- The unmodified `voigt_fit.baseline` settings below the cut.
+- The split by wavenumber value.
+- The degenerate-baseline warning.
+
+**Printed output:** the files selected, the recipe, the destination, and a
+one-line summary (`N files, N figures, N degenerate baselines`).
+
+**Verified:** for five recipes (default; no split; cut without anchors; plain;
+three-point with guard 0.9) on the eight default files, the baseline arrays and
+applied-anchor lists from `run_baseline` are `np.array_equal` to the
+pre-cleanup `BaselineVariant.compute`. That is 80 of 80 arrays, including the
+`...-022` files, where 1955 and the cut are gated.

@@ -26,9 +26,8 @@ if str(path) not in sys.path:
     sys.path.append(str(path))
 
 from src.core import config
-from src.utils.ir_fitting.baseline import union_window
 from src.utils.ir_fitting.result_types import (
-    FileBaselineComparison,
+    FileBaseline,
     FileFitResult,
     MeasurementFitResult,
 )
@@ -190,137 +189,28 @@ def plot_file_baseline(
     return output_path
 
 
-def _group_gated(
-    gated: Sequence[tuple[float, float, float]],
-) -> list[tuple[list[float], float, float]]:
-    """Group gated anchors by the extremum that gated them.
-
-    One band gates every anchor within ``ANCHOR_GUARD_CM1`` of it, so a dense
-    anchor set produces a dozen rejections that are all the *same* rejection.
-    Rendering them one-per-anchor drew ten dotted lines 1 cm-1 apart -- which
-    reads as a hatched block, not as anchors -- and wrote ten near-identical
-    legend entries, one of which is the duplicated 2006 of spec.md 14.21.
-
-    Grouping keeps every anchor (the duplicate included, because it carries
-    double weight and hiding it would misreport the correction) while saying
-    the thing once.
-
-    Returns:
-        ``[(anchors, where, fraction), ...]`` in first-appearance order.
-        ``where`` is ``inf`` for the "outside window" rejections, which group
-        together for the same reason.
-    """
-    groups: dict[tuple[float, float], list[float]] = {}
-    order: list[tuple[float, float]] = []
-    for anchor, where, fraction in gated:
-        key = (round(float(where), 1), round(float(fraction), 3))
-        if key not in groups:
-            groups[key] = []
-            order.append(key)
-        groups[key].append(float(anchor))
-    return [(groups[key], key[0], key[1]) for key in order]
-
-
-def _gated_label(anchors: Sequence[float], where: float, fraction: float) -> str:
-    """One legend entry for one group of gated anchors."""
-    if len(anchors) == 1:
-        span = f"{anchors[0]:.0f}"
-    else:
-        # High-low, matching the descending x axis, plus the count -- which is
-        # the only place the duplicated 2006 is still visible once grouped.
-        span = f"{max(anchors):.0f}-{min(anchors):.0f} ({len(anchors)} anchors)"
-    if not np.isfinite(where):
-        return f"GATED {span} (outside window)"
-    return f"GATED {span}<-{where:.0f} p={fraction:.2f}"
-
-
-def _anchor_label(trace) -> str:
-    """Legend fragment describing what the split and anchor guards did."""
-    parts = []
-    if trace.split_applied is not None:
-        parts.append(f"split {trace.split_applied:.0f} (seam {trace.seam_jump:+.1e})")
-    if trace.split_gated is not None:
-        split, where, fraction = trace.split_gated
-        parts.append(f"SPLIT GATED {split:.0f}<-{where:.0f} p={fraction:.2f}")
-    if trace.anchors_applied:
-        parts.append("@" + "/".join(f"{a:.0f}" for a in trace.anchors_applied))
-    for anchors, where, fraction in _group_gated(trace.anchors_gated):
-        parts.append(_gated_label(anchors, where, fraction))
-    # The lower segment's own anchors, marked "lo@" because they are a second
-    # correction on a second array, not more points on the same line (spec.md
-    # 14.10). A legend that merged the two could not say which one lost a
-    # gated point -- 1955 is in both sets.
-    if trace.lower_anchors_applied:
-        parts.append("lo@" + "/".join(f"{a:.0f}" for a in trace.lower_anchors_applied))
-    for anchors, where, fraction in _group_gated(trace.lower_anchors_gated):
-        label = _gated_label(anchors, where, fraction)
-        parts.append("LOW " + label.replace("(outside window)", "(outside segment)"))
-    return ", ".join(parts)
-
-
-def _draw_gated(
-    axes,
-    anchors: Sequence[float],
-    where: float,
-    color: str,
-    drawn: set,
-    tag: str,
-) -> None:
-    """Mark one group of gated anchors and the extremum responsible.
-
-    A single anchor keeps the dotted line it always had. A run gets one shaded
-    band instead of one line per anchor -- at 1 cm-1 spacing the lines merged
-    into a block that looked like plot furniture rather than a guard verdict.
-
-    ``drawn`` keys on the group so variants sharing a rejection do not stack
-    markers, and the red ``where`` line keys on its own wavenumber so one band
-    gating both anchor sets draws it once.
-    """
-    low, high = min(anchors), max(anchors)
-    if (low, high, tag) not in drawn:
-        drawn.add((low, high, tag))
-        if low == high:
-            axes.axvline(low, color=color, linestyle=":", linewidth=1.0)
-        else:
-            axes.axvspan(low, high, color=color, alpha=0.15, linewidth=0)
-    if np.isfinite(where) and (where, "where") not in drawn:
-        drawn.add((where, "where"))
-        axes.axvline(where, color="tab:red", linestyle=":", linewidth=1.0)
-
-
-def plot_baseline_comparison(
-    comparison: FileBaselineComparison,
+def plot_baseline_run_file(
+    result: FileBaseline,
     *,
+    label: str,
     folder_name: str,
     run_name: str,
     xlim: tuple[float, float] | None = None,
     save: bool = True,
     dpi: int = 300,
 ) -> Path | None:
-    """Draw every baseline variant for one subIFG file on one figure.
+    """Draw one file's baseline from ``api.run_baseline``.
 
-    A pure renderer: it computes nothing. ``src/utils/ir_fitting/api.py``
-    ::``compare_baselines`` builds the :class:`FileBaselineComparison` and calls
-    this.
-
-    Unlike :func:`plot_file_baseline`, which compares a recomputed baseline
-    against the *stored* CSV column, this draws variant against variant -- the
-    comparison an experiment needs.
-
-    There is deliberately **no quality score**. The low-wavenumber bands are
-    negative-going (``spec.md`` section 1), so these spectra carry features of
-    both signs and the baseline is a centre-line estimator, not a lower
-    envelope. An envelope-violation metric ranks the one file judged *good*
-    worst of all eight judged files, so such a score is actively misleading.
-    Judgement stays with the eye; this makes the comparison cheap to make.
+    Top panel: raw subIFG, the baseline, its applied anchors (circles for the
+    full-ROI set, squares for the lower segment's) and the cut. Bottom panel:
+    the baseline-subtracted signal.
 
     Args:
-        comparison: One file's variants.
+        result: One file's baseline.
+        label: Recipe name for the legend.
         folder_name: Dataset folder, used to resolve the output path.
-        run_name: Experiment subfolder name.
-        xlim: Display window, high to low. Defaults to the union of every
-            variant's window, so a narrower variant's trace visibly *stops*
-            rather than being cropped out of view.
+        run_name: Output subfolder name.
+        xlim: Display window, high to low. Defaults to the data's extent.
         save: Write the figure to disk.
         dpi: Figure resolution.
 
@@ -329,163 +219,58 @@ def plot_baseline_comparison(
     """
     from src.utils.ir_fitting.api import baseline_experiment_dir
 
-    traces = comparison.traces
-    if not traces:
-        return None
-
+    x = result.wavenumbers
     if xlim is None:
-        xlim = union_window(traces)
+        xlim = (float(x.max()), float(x.min()))
 
     fig, (ax_raw, ax_sub) = plt.subplots(
         2, 1, figsize=(9, 7), sharex=True, gridspec_kw={"height_ratios": [1, 1]}
     )
 
-    reference = traces[0]
-    ax_raw.plot(
-        reference.wavenumbers,
-        reference.raw,
-        color="black",
-        linewidth=1.2,
-        label="raw subIFG",
-        zorder=5,
-    )
+    baseline_label = label + ("  DEGENERATE" if result.degenerate else "")
+    ax_raw.plot(x, result.raw, color="black", linewidth=1.2, label="raw subIFG", zorder=5)
+    ax_raw.plot(x, result.baseline, color="tab:blue", linewidth=1.1, label=baseline_label)
+    ax_sub.plot(x, result.corrected, color="tab:blue", linewidth=1.1, label=baseline_label)
 
-    colors = plt.get_cmap("tab10").colors
-    for index, trace in enumerate(traces):
-        color = colors[index % len(colors)]
-        style = "-" if index == 0 else "--"
-
-        label = trace.label
-        if not trace.is_reference:
-            label += f"  ({trace.moved_pct_of_range:.1f}%)"
-        if trace.window != reference.window:
-            label += f"  [{trace.window[0]:.0f}-{trace.window[1]:.0f}]"
-        if trace.degenerate:
-            label += "  DEGENERATE"
-        if (
-            trace.anchors_applied
-            or trace.anchors_gated
-            or trace.split_applied is not None
-            or trace.split_gated is not None
-            or trace.lower_anchors_applied
-            or trace.lower_anchors_gated
-        ):
-            label += f"  [{_anchor_label(trace)}]"
-
-        ax_raw.plot(
-            trace.wavenumbers,
-            trace.baseline,
-            color=color,
-            linewidth=1.1,
-            linestyle=style,
-            label=label,
-        )
-        ax_sub.plot(
-            trace.wavenumbers,
-            trace.corrected,
-            color=color,
-            linewidth=1.1,
-            linestyle=style,
-            label=label,
-        )
-
-    # Anchor markers: filled where the baseline was pinned, hollow with an x
-    # where the guard rejected the anchor. Drawn once per distinct wavenumber,
-    # since variants sharing an anchor would otherwise stack markers.
-    drawn: set[tuple[float, object]] = set()
-    for trace in traces:
-        for anchor in trace.anchors_applied:
-            if (anchor, True) in drawn:
-                continue
-            drawn.add((anchor, True))
-            value = float(
-                np.interp(
-                    anchor,
-                    trace.wavenumbers[::-1],
-                    trace.baseline[::-1],
-                )
-            )
-            ax_raw.plot(
-                anchor, value, "o", color="black", markersize=5,
-                markerfacecolor="black", zorder=10,
-            )
-        # One marker per REJECTION, not per anchor: a run of gated anchors is
-        # shaded as a band and the extremum that gated them gets a single red
-        # line, however many anchors it took out.
-        for anchors, where, _ in _group_gated(trace.anchors_gated):
-            _draw_gated(ax_raw, anchors, where, "0.5", drawn, "upper")
-        # Lower-segment anchors: squares, not circles. They sit on a different
-        # curve fitted by a different line, and at 1955 the two sets share a
-        # wavenumber -- two markers at one x is the point, so they key on a
-        # separate tag rather than colliding in `drawn`.
-        for anchor in trace.lower_anchors_applied:
-            if (anchor, "lower") in drawn:
-                continue
-            drawn.add((anchor, "lower"))
-            value = float(
-                np.interp(anchor, trace.wavenumbers[::-1], trace.baseline[::-1])
-            )
-            ax_raw.plot(
-                anchor, value, "s", color="tab:green", markersize=5,
-                markerfacecolor="tab:green", zorder=10,
-            )
-        for anchors, where, _ in _group_gated(trace.lower_anchors_gated):
-            _draw_gated(ax_raw, anchors, where, "tab:green", drawn, "lower")
-
-    # The seam of a split baseline, on both panels: the interface is where a
-    # two-segment baseline is most likely to be wrong (spec.md section 14.4),
-    # and it is judged by eye like everything else here.
-    for split in sorted(
-        {trace.split_applied for trace in traces if trace.split_applied is not None}
+    for anchors, marker, color in (
+        (result.anchors_applied, "o", "black"),
+        (result.lower_anchors_applied, "s", "tab:green"),
     ):
-        for axis in (ax_raw, ax_sub):
-            axis.axvline(
-                split, color="tab:purple", linestyle="-.", linewidth=1.0, alpha=0.7
+        for anchor in sorted(set(anchors)):
+            value = float(np.interp(anchor, x[::-1], result.baseline[::-1]))
+            ax_raw.plot(anchor, value, marker, color=color, markersize=5, zorder=10)
+
+    if result.split_applied is not None:
+        for axes in (ax_raw, ax_sub):
+            axes.axvline(
+                result.split_applied,
+                color="tab:purple",
+                linestyle="-.",
+                linewidth=1.0,
+                alpha=0.7,
             )
 
     ax_raw.set_ylabel("Log Reflectance")
-    title = comparison.subifg_path.name
-    if comparison.verdict:
-        title += f"   [{comparison.verdict}]"
-    ax_raw.set_title(title, fontsize=9)
+    ax_raw.set_title(result.subifg_path.name, fontsize=9)
+    ax_raw.legend(fontsize=7, loc="upper right")
 
     ax_sub.axhline(0, color="0.7", linewidth=0.5)
     ax_sub.set_ylabel("baseline-subtracted")
     ax_sub.set_xlabel("Wavenumber (cm-1)")
     ax_sub.set_xlim(xlim)
 
-    # Percentages in the legend are relative to the first variant, over the
-    # region the two share -- see BaselineTrace.compared_over.
     for axes in (ax_raw, ax_sub):
-        rescale_y_to_window(axes, reference.wavenumbers, xlim)
+        rescale_y_to_window(axes, x, xlim)
         apply_reference_grid(axes, xlim)
 
-    # One legend, under the figure, rather than one box per panel inside it.
-    # The anchor/split/seam annotations make these labels long enough that an
-    # in-axes box covered the top of both panels -- which is where the flat
-    # 2235-2250 check lives, and the whole point of the grid is reading values
-    # off the plot. Handles come from ax_raw because it carries the raw trace
-    # as well as every variant; ax_sub's labels are the same set.
-    handles, labels = ax_raw.get_legend_handles_labels()
-    # One text line per entry, as a fraction of figure height, plus a margin.
-    # Reserved first so tight_layout does not lay the axes over the legend.
-    reserved = min(0.3, 0.021 * len(labels) + 0.01)
-    fig.legend(
-        handles,
-        labels,
-        fontsize=7,
-        loc="lower left",
-        bbox_to_anchor=(0.01, 0.005),
-        frameon=False,
-    )
-    fig.tight_layout(rect=(0, reserved, 1, 1))
+    fig.tight_layout()
 
     if not save:
         plt.close(fig)
         return None
 
     output_dir = baseline_experiment_dir(folder_name, run_name)
-    output_path = output_dir / f"{comparison.subifg_path.name}.png"
+    output_path = output_dir / f"{result.subifg_path.name}.png"
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     return output_path
@@ -606,9 +391,8 @@ def plot_baselines(
 if __name__ == "__main__":
     # Edit these constants to run a batch.
     #
-    # This module *views* baselines. To experiment with baseline settings or
-    # window size, use src/utils/ir_fitting/api.py::compare_baselines -- the
-    # experiment is orchestrated there and only rendered here.
+    # This module *views* saved baselines. To run a baseline recipe, use
+    # scripts\run_baseline_experiment.py (src/utils/ir_fitting/api.py::run_baseline).
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     import matplotlib
 

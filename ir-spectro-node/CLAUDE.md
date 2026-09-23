@@ -38,19 +38,18 @@ comparison. Batch *fitting* (`fit_file`/`fit_folder`/`fit_folder_by_sum_models`)
 is **not** covered by this CLI and still follows the edit-constants convention,
 via `src/utils/kinetics/api.py`'s own `__main__` block.
 
-The second is **baseline experiments**: `scripts/run_baseline_experiment.py`
-(wrapping `src/utils/ir_fitting/baseline_cli.py`), for the same reason — the
-baseline recipe is under active iteration and needs A/B flags. With no arguments
-it runs the default recipe on the eight judged files. That is §14.22's form with upper
-anchors `2240 2006 1955 1955 1955` and lower anchors `1955 1800 1820`, under
-`--run-name default`. `src/utils/ir_fitting/spec.md` §16.5 gives the flags that
-reproduce §14.22 itself. The flags are the inputs §14 actually introduced — `--window`,
-`--anchors`, `--lower-split`, `--lower-anchors` and the two anchor-guard
-thresholds — plus `--with-twin`, which adds the uncut twin that makes
-`upper_max_abs_diff` a real check rather than `NOT CHECKED`. The full inventory,
-including why the `std_distribution` settings are deliberately *not* a flag, is
-spec.md §16. Batch **fitting** in `ir_fitting` is not covered and still follows
-edit-constants, via that package's `api.py` `__main__`.
+The second is **baseline runs**: `scripts/run_baseline_experiment.py`
+(wrapping `src/utils/ir_fitting/baseline_cli.py` → `api.run_baseline`), for the
+same reason — the baseline recipe needs flags to vary it without editing source.
+It runs one recipe and writes one figure per file; nothing else. With no
+arguments it runs the default recipe (upper anchors `2240 2006 1955 1955 1955`,
+lower anchors `1955 1800 1820`, cut at 1955) on the eight default files, under
+`--run-name default`. The flags are `--window`, `--anchors`, `--lower-split`,
+`--lower-anchors` and the two anchor-guard thresholds. The baseline EDA's
+comparison and diagnostic machinery (twin checks, seam/band metrics,
+`baseline_comparison.csv`) was removed — spec.md §17. Batch **fitting** in
+`ir_fitting` is not covered and still follows edit-constants, via that
+package's `api.py` `__main__`.
 
 `src/utils/kinetics/` is the tidier programmatic wrapper over the batch writer:
 `from src.utils.kinetics import fit_file, fit_folder, classify_file`. It defaults

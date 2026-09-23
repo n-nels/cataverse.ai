@@ -1,15 +1,11 @@
-"""User-facing API for offline IR peak fitting.
+"""User-facing API for offline IR peak fitting and baseline runs.
 
-Entry points are importable. Batch **fitting** follows the repo convention of
-editing the constants in the ``__main__`` block below; batch **baseline
-experiments** have an argparse CLI, because the recipe is what gets swept::
+Batch **fitting** follows the repo convention of editing the constants in the
+``__main__`` block below. Batch **baseline** runs have an argparse CLI::
 
     uv run python scripts\run_baseline_experiment.py --help
 
-That split mirrors ``src/utils/kinetics``, where the classification algorithm
-under active iteration got a CLI and batch fitting did not (see CLAUDE.md).
-``compare_baselines`` below is what that CLI calls; nothing about it is
-CLI-only.
+``run_baseline`` below is what that CLI calls.
 
     from src.utils.ir_fitting import fit_file, fit_folder
 
@@ -27,7 +23,6 @@ from collections.abc import Sequence
 from fnmatch import fnmatchcase
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 path = Path(__file__).resolve().parents[3]
@@ -38,35 +33,20 @@ from src.core import config
 from src.utils.ir_fitting import config as ir_config
 from src.utils.ir_fitting import runner, writer
 from src.utils.ir_fitting.baseline import (
-    JUDGED_FILES,
-    JUDGED_FOLDER,
+    DEFAULT_FILES,
+    DEFAULT_FOLDER,
     BaselineVariant,
-    band_height,
-    lower_target_metrics,
-    overlap_shift,
-    signal_range,
 )
 from src.utils.ir_fitting.result_types import (
-    BaselineComparison,
-    BaselineTrace,
+    BaselineRun,
     BatchFitResult,
-    FileBaselineComparison,
+    FileBaseline,
     MeasurementFitResult,
     matches_file_key,
 )
 from src.utils.ir_fitting.runner import ExistingPeakRowsError, fit_subifg_file
 
 LOGGER = logging.getLogger(__name__)
-
-REPORTED_BANDS_CM1: tuple[float, ...] = (2040.0, 1980.0)
-"""Bands whose height is reported per variant by :func:`compare_baselines`.
-
-These are the two the current baseline cuts in half, so "did this band stop
-being halved" is the question a variant is judged on. It is a measurement of
-two named bands, not a baseline quality score -- see ``baseline.band_height``
-and spec.md section 14.3 finding 4.
-"""
-
 
 def subifg_dir(folder_name: str) -> Path:
     """Return the subIFG source folder for a dataset."""
@@ -109,13 +89,10 @@ def measurement_names(folder: str | Path) -> list[str]:
 
 
 DEFAULT_FIGURE_BUDGET = 60
-"""How many subIFG files :func:`subifg_files` will return before refusing.
+"""How many subIFG files :func:`subifg_files` returns before refusing.
 
-A dataset folder holds ~12k subIFG files, and one delta group spans every
-measurement in it -- ``["delta10"]`` on ``nn1120-4_pd_ceo2_000`` is 385 files,
-which at four variants and 300 dpi is a 385-figure run nobody asked for. So the
-helper stops and says what it found; raise ``limit`` deliberately, or narrow
-``measurements``.
+A dataset folder holds ~12k subIFG files and one delta group spans every
+measurement in it, so an unnarrowed selection is hundreds of figures.
 """
 
 
@@ -128,42 +105,18 @@ def subifg_files(
 ) -> list[str]:
     """Pick subIFG filenames out of a dataset folder by measurement and delta group.
 
-    The bridge between how a dataset is named on disk and what
-    :func:`compare_baselines` wants. ``compare_baselines`` takes fully qualified
-    stems (``20260715_094622_pd_ceo2_000-007_delta10.0042``) and otherwise falls
-    back to :data:`~src.utils.ir_fitting.baseline.JUDGED_FILES`, which are
-    hardcoded to ``nn1120-4_pd_ceo2_000`` -- so *any other folder* needed the
-    stems typed out by hand. This builds them::
-
-        compare_baselines(
-            variants,
-            folder_name="nn1120-3_pd_ceo2_004",
-            files=subifg_files(
-                "nn1120-3_pd_ceo2_004",
-                measurements=["20260304_145524_pd_ceo2_004-000"],
-                file_keys=["delta10"],
-            ),
-            run_name="my_run",
-        )
-
     Args:
         folder: Dataset name or absolute subIFG directory, as
             :func:`resolve_folder` takes.
-        measurements: Measurement base names, e.g.
-            ``["20260715_094622_pd_ceo2_000-007"]``. Each entry is an exact
-            name or a glob (``["*-007", "*-01?"]``). ``None`` = every
-            measurement in the folder, which is what ``limit`` exists for.
-        file_keys: Which files within each measurement, in the same vocabulary
-            :meth:`MeasurementFitResult.select` uses -- an exact key
-            (``"delta10.0042"``), a whole delta group (``"delta10"``), or a glob
-            (``"delta10.00*"``). ``None`` = every file, i.e. all ten delta
-            groups.
+        measurements: Measurement base names, exact or glob (``["*-007"]``).
+            ``None`` = every measurement in the folder.
+        file_keys: An exact key (``"delta10.0042"``), a whole delta group
+            (``"delta10"``), or a glob (``"delta10.00*"``). ``None`` = every file.
         limit: Refuse to return more than this many files. ``None`` disables
-            the check; see :data:`DEFAULT_FIGURE_BUDGET` for why it is on.
+            the check.
 
     Returns:
-        Sorted subIFG filenames (stems, no directory), ready to hand to
-        ``compare_baselines(files=...)``.
+        Sorted subIFG filenames, ready for ``run_baseline(files=...)``.
 
     Raises:
         ValueError: When nothing matched, or when more than ``limit`` files did.
@@ -435,364 +388,98 @@ def load_measurement(
     return result
 
 
-def _recipe_key(variant: BaselineVariant) -> tuple:
-    """Everything about a variant except which cut, if any, it makes.
-
-    Two variants share a key when they hand ``create_baseline`` the same array
-    with the same settings and ask for the same anchors, **under the same guard
-    thresholds**. That is what makes one of them the other's "same recipe, no
-    cut" twin.
-
-    The guard values are part of the key and not an afterthought: two variants
-    with identical ``anchors`` but different thresholds can gate *different*
-    anchors, so the affine corrections differ and they are not each other's
-    twin. Matching them anyway would measure ``upper_max_abs_diff`` against the
-    wrong curve and report a PASS -- precisely the silent failure that check
-    exists to catch (see :func:`_twin_max_abs_diff`).
-    """
-    return (
-        tuple(sorted(variant.settings.items(), key=lambda kv: kv[0])),
-        tuple(variant.window),
-        tuple(variant.anchors),
-        float(variant.anchor_guard_cm1),
-        float(variant.anchor_prominence_frac),
-    )
-
-
-def _twin_max_abs_diff(
-    trace: BaselineTrace,
-    twin: BaselineTrace | None,
-    cut: float,
-    side: str,
-) -> float:
-    """Largest ``|trace - twin|`` on one side of ``cut``.
-
-    Two questions, one measurement, and they are asymmetric on purpose:
-
-    - ``"upper"`` is a **check**. The lower-only split of spec.md section 14.9
-      keeps the full-ROI anchored baseline at and above the cut, so this is
-      **0.0 exactly** or the implementation is wrong -- not "small", not
-      "within tolerance". A float tolerance would hide precisely the bug the
-      check exists to catch, which is a truncated array reaching
-      ``create_baseline`` and moving the upper baseline a little.
-    - ``"lower"`` is the **result**. Below the cut is the only region the
-      variant touches, so this is how much it did.
-
-    Returns ``nan`` when no twin was run: an unperformed check, which must not
-    read as a passed one.
-    """
-    if twin is None:
-        return float("nan")
-    if twin.wavenumbers.shape != trace.wavenumbers.shape or not np.array_equal(
-        twin.wavenumbers, trace.wavenumbers
-    ):
-        return float("nan")
-    mask = trace.wavenumbers >= cut if side == "upper" else trace.wavenumbers < cut
-    if not mask.any():
-        return float("nan")
-    return float(np.abs(trace.baseline[mask] - twin.baseline[mask]).max())
-
-
-def compare_baselines(
-    variants: Sequence[BaselineVariant | tuple],
+def run_baseline(
+    variant: BaselineVariant,
     *,
-    folder_name: str = "nn1120-4_pd_ceo2_000",
+    folder_name: str = DEFAULT_FOLDER,
     files: Sequence[str] | None = None,
-    run_name: str = "sweep",
+    run_name: str = "default",
     plot: bool = True,
     save: bool = True,
     dpi: int = 300,
-) -> BaselineComparison:
-    """Compute several baseline variants on the same files and compare them.
+) -> BaselineRun:
+    """Compute one baseline recipe on each file and plot it.
 
-    The entry point for baseline experimentation. Fits nothing, touches no
-    params CSV, and writes only into the figures tree -- so it is safe to run
-    repeatedly while deciding what a good baseline looks like.
-
-    Every variant is measured against the **first** one, so put the baseline
-    you are comparing to at the front (normally ``("current", {})``).
+    Fits nothing and touches no params CSV; figures are written under the
+    dataset's baseline-experiment directory.
 
     Args:
-        variants: :class:`BaselineVariant` objects, or
-            ``(label, settings[, window])`` tuples. ``settings`` overrides any
-            of ``num_std``, ``half_window``, ``interp_half_window``,
-            ``fill_half_window``, ``smooth_half_window``; anything omitted
-            keeps its ``config/analysis.yaml`` value. ``window`` is
-            ``(high, low)`` cm-1 and defaults to the 2250-1750 ROI.
+        variant: The recipe to run.
         folder_name: Dataset the files belong to.
-        files: subIFG filenames, e.g.
-            ``["20260715_094622_pd_ceo2_000-007_delta10.0042"]``. ``None`` uses
-            :data:`~src.utils.ir_fitting.baseline.JUDGED_FILES` -- the eight
-            eye-judged files of ``spec.md`` sections 14.2/14.3, which all belong
-            to ``nn1120-4_pd_ceo2_000``. **Pass this whenever `folder_name` is
-            not that dataset**, or every file will be reported missing; build
-            the list with :func:`subifg_files` rather than by hand.
-        run_name: Subfolder under the dataset's baseline-experiment directory.
-            Use a different name per experiment so runs do not overwrite.
+        files: subIFG filenames. ``None`` uses
+            :data:`~src.utils.ir_fitting.baseline.DEFAULT_FILES`, which belong
+            to ``nn1120-4_pd_ceo2_000`` -- pass this for any other dataset,
+            built with :func:`subifg_files`.
+        run_name: Output subfolder. Reused -- a second run overwrites it.
         plot: Render one figure per file.
-        save: Write figures and the comparison CSV.
+        save: Write figures.
         dpi: Figure resolution.
-
-    Returns:
-        :class:`BaselineComparison` -- per-file traces, a tidy table, and the
-        paths written. The table reports how far each baseline *moved*; it does
-        not score quality, because no reliable score exists here (spec.md
-        section 14.3 finding 4). Judge the figures.
     """
-    resolved = [BaselineVariant.coerce(item) for item in variants]
-    if not resolved:
-        raise ValueError("variants must contain at least one entry")
-
-    labels = [variant.label for variant in resolved]
-    if len(set(labels)) != len(labels):
-        raise ValueError(f"variant labels must be unique; got {labels}")
-
-    # An explicitly named file keeps its verdict when it happens to be one of
-    # the judged eight, so naming them by hand -- or reaching them through
-    # `subifg_files` -- produces the same figure titles as `files=None`.
-    # Keyed on the bare stem, so only consult it for the dataset the judged
-    # files belong to -- another folder's file must not inherit a `bad` tag.
-    verdicts = dict(JUDGED_FILES) if folder_name == JUDGED_FOLDER else {}
-    selected: list[tuple[str, str]] = (
-        list(JUDGED_FILES)
-        if files is None
-        else [(str(name), verdicts.get(str(name), "")) for name in files]
-    )
+    selected = list(DEFAULT_FILES) if files is None else [str(name) for name in files]
     if not selected:
         raise ValueError("files must contain at least one subIFG filename")
 
     source_dir = subifg_dir(folder_name)
-    comparison = BaselineComparison(folder_name=folder_name, run_name=run_name)
+    run = BaselineRun(folder_name=folder_name, run_name=run_name, label=variant.label)
     voigt_settings = ir_config.get_voigt_settings()
-    rows: list[dict] = []
-    # Labels already warned about a missing twin: the gap is a property of
-    # the variant list, not of any one file, so say it once per run.
-    warned_no_twin: set[str] = set()
 
-    for file_stem, verdict in selected:
+    for file_stem in selected:
         subifg_path = source_dir / file_stem
         if not subifg_path.exists():
-            message = f"missing {subifg_path}"
-            LOGGER.error(message)
-            comparison.warnings.append(message)
+            run.warnings.append(f"missing {subifg_path}")
             continue
+        try:
+            arr = runner.load_subifg_roi(subifg_path, window=variant.window)
+        except Exception as exc:  # one bad file must not abort the run
+            run.warnings.append(f"{file_stem}: {exc}")
+            continue
+        wavenumbers, intensity = arr[:, 0], arr[:, 1]
+        outcome = variant.compute(intensity, voigt_settings, wavenumbers)
 
         file_key = runner.file_key_for(subifg_path)
         delta_group, _ = runner.split_file_key(file_key)
-        item = FileBaselineComparison(
-            file_key=file_key,
-            delta_group=delta_group,
-            subifg_path=subifg_path,
-            verdict=verdict,
-        )
-
-        reference: BaselineTrace | None = None
-        reference_range = float("nan")
-        # Traces for variants that make no cut, keyed by recipe. A lower-only
-        # split (spec.md 14.9) claims to leave everything above the cut
-        # untouched; its twin here is what that claim is measured against.
-        unsplit_twins: dict[tuple, BaselineTrace] = {}
-        for variant in resolved:
-            try:
-                arr = runner.load_subifg_roi(subifg_path, window=variant.window)
-            except Exception as exc:  # a bad window must not abort the run
-                message = f"{file_stem} / {variant.label}: {exc}"
-                LOGGER.error(message)
-                comparison.warnings.append(message)
-                continue
-            wavenumbers, intensity = arr[:, 0], arr[:, 1]
-            outcome = variant.compute(intensity, voigt_settings, wavenumbers)
-            values, degenerate = outcome.values, outcome.degenerate
-
-            trace = BaselineTrace(
-                label=variant.label,
-                settings=dict(variant.settings),
-                window=tuple(variant.window),
+        run.files.append(
+            FileBaseline(
+                file_key=file_key,
+                delta_group=delta_group,
+                subifg_path=subifg_path,
                 wavenumbers=wavenumbers,
                 raw=intensity,
-                baseline=values,
-                degenerate=degenerate,
+                baseline=outcome.values,
+                degenerate=outcome.degenerate,
                 anchors_applied=outcome.anchors_applied,
-                anchors_gated=outcome.anchors_gated,
                 lower_anchors_applied=outcome.lower_anchors_applied,
-                lower_anchors_gated=outcome.lower_anchors_gated,
                 split_applied=outcome.split_applied,
-                split_gated=outcome.split_gated,
-                segment_edges=outcome.segment_edges,
-                seam_jump=outcome.seam_jump,
-                band_heights={
-                    center: band_height(wavenumbers, intensity, values, center)
-                    for center in REPORTED_BANDS_CM1
-                },
             )
-            recipe = _recipe_key(variant)
-            if variant.lower_split_cm1 is None:
-                unsplit_twins.setdefault(recipe, trace)
-            else:
-                twin = unsplit_twins.get(recipe)
-                cut = variant.lower_split_cm1
-                if twin is None and variant.label not in warned_no_twin:
-                    warned_no_twin.add(variant.label)
-                    # A nan here is an unperformed check, and a programmatic
-                    # caller never sees the __main__ block's summary -- so say
-                    # so, for the reason BaselineOutcome gives about a silently
-                    # un-anchored baseline looking like an anchored no-op.
-                    LOGGER.warning(
-                        "variant %r cuts at %.0f but no variant with the same "
-                        "settings, window and anchors and no cut was run; "
-                        "upper_max_abs_diff and lower_moved_pct are nan. Add the "
-                        "unsplit twin (e.g. the 'anchored' variant) to check that "
-                        "the region above the cut did not move (spec.md 14.9).",
-                        variant.label,
-                        cut,
-                    )
-                trace.upper_max_abs_diff = _twin_max_abs_diff(trace, twin, cut, "upper")
-                lower_shift = _twin_max_abs_diff(trace, twin, cut, "lower")
-                trace.lower_moved_pct = 100 * lower_shift / signal_range(intensity)
+        )
 
-            variant_range = signal_range(intensity)
-            if reference is None:
-                reference = trace
-                reference_range = variant_range
-            else:
-                shift, region = overlap_shift(
-                    reference.wavenumbers,
-                    reference.baseline,
-                    wavenumbers,
-                    values,
-                )
-                trace.moved_pct_of_range = 100 * shift / reference_range
-                trace.compared_over = region
-
-            item.traces.append(trace)
-            band_columns: dict[str, float] = {}
-            for center in REPORTED_BANDS_CM1:
-                height = trace.band_heights.get(center, float("nan"))
-                band_columns[f"height_{center:.0f}"] = height
-                reference_height = (
-                    reference.band_heights.get(center, float("nan"))
-                    if reference is not None
-                    else float("nan")
-                )
-                # A ratio is only meaningful when the reference height is
-                # positive. Where the band sits *below* the current baseline the
-                # reference is negative and "x N" would read as an improvement
-                # while meaning nothing; the raw height column carries it instead.
-                band_columns[f"height_{center:.0f}_x_ref"] = (
-                    height / reference_height
-                    if reference_height and reference_height > 0
-                    else float("nan")
-                )
-            rows.append(
-                {
-                    "file": file_stem,
-                    "verdict": verdict,
-                    "variant": variant.label,
-                    "window": f"{variant.window[0]:.0f}-{variant.window[1]:.0f}",
-                    "anchors": "/".join(f"{a:.0f}" for a in outcome.anchors_applied),
-                    "anchors_gated": "/".join(
-                        f"{a:.0f}" for a, _, _ in outcome.anchors_gated
-                    ),
-                    # The lower segment's own correction, reported separately
-                    # from the full-ROI one: two lines on two arrays (spec.md
-                    # 14.10). Blank on every variant that makes no lower cut.
-                    "lower_anchors": "/".join(
-                        f"{a:.0f}" for a in outcome.lower_anchors_applied
-                    ),
-                    "lower_anchors_gated": "/".join(
-                        f"{a:.0f}" for a, _, _ in outcome.lower_anchors_gated
-                    ),
-                    # What the guard ran with, beside what it did. Without
-                    # these, an empty `anchors_gated` cannot be told apart from
-                    # a threshold raised until nothing gates (spec.md 14.7
-                    # finding 8 calibrated these two once and never swept them).
-                    "anchor_guard_cm1": variant.anchor_guard_cm1,
-                    "anchor_prominence_frac": variant.anchor_prominence_frac,
-                    "split": (
-                        ""
-                        if outcome.split_applied is None
-                        else f"{outcome.split_applied:.0f}"
-                    ),
-                    "split_gated": (
-                        ""
-                        if outcome.split_gated is None
-                        else f"{outcome.split_gated[0]:.0f}"
-                    ),
-                    # Must be exactly 0.0 for a lower-only split: above the cut
-                    # it is the unsplit anchored baseline by construction
-                    # (spec.md 14.9). Blank where there is nothing to check.
-                    "upper_max_abs_diff": trace.upper_max_abs_diff,
-                    # How far the cut moved the baseline below itself, against
-                    # the same anchored twin -- the variant's entire effect,
-                    # since height_2040/height_1980 sit above the cut and cannot
-                    # move (spec.md 14.9).
-                    "lower_moved_pct": trace.lower_moved_pct,
-                    # The seam discontinuity as a percentage of this file's
-                    # signal range, so it reads on the same scale as
-                    # moved_pct_of_range and the band heights.
-                    "seam_pct_of_range": (
-                        float("nan")
-                        if outcome.split_applied is None
-                        else 100 * outcome.seam_jump / variant_range
-                    ),
-                    # The user's three stated targets for the region below the
-                    # cut (spec.md 14.12). Reported together and never summed:
-                    # each one alone ranks a wrong baseline first (finding 33).
-                    # `mid` targets 0 on post-crossing files; on pre-crossing
-                    # ones the target is `mid_pre_target` in the same column's
-                    # units. `und` targets 0 from below, `int` targets 0.
-                    **lower_target_metrics(wavenumbers, intensity, values),
-                    **band_columns,
-                    "moved_pct_of_range": trace.moved_pct_of_range,
-                    "compared_over": (
-                        ""
-                        if trace.compared_over is None
-                        else f"{trace.compared_over[0]:.0f}-{trace.compared_over[1]:.0f}"
-                    ),
-                    "degenerate": degenerate,
-                    "settings": str(dict(variant.settings)),
-                }
-            )
-
-        if item.traces:
-            comparison.files.append(item)
-
-    comparison.table = pd.DataFrame(rows)
-
-    if plot and comparison.files:
+    if plot and run.files:
         # Imported here: src.visualizations depends on this package, so a
         # module-level import would be circular.
-        from src.visualizations.plot_baseline import plot_baseline_comparison
+        from src.visualizations.plot_baseline import plot_baseline_run_file
 
-        for item in comparison.files:
-            figure_path = plot_baseline_comparison(
+        for item in run.files:
+            figure_path = plot_baseline_run_file(
                 item,
+                label=variant.label,
                 folder_name=folder_name,
                 run_name=run_name,
                 save=save,
                 dpi=dpi,
             )
             if figure_path is not None:
-                comparison.figure_paths.append(figure_path)
+                run.figure_paths.append(figure_path)
 
-    if save and not comparison.table.empty:
-        output_dir = baseline_experiment_dir(folder_name, run_name)
-        comparison.table_path = output_dir / "baseline_comparison.csv"
-        comparison.table.to_csv(comparison.table_path, index=False)
-
-    for message in comparison.warnings:
+    for message in run.warnings:
         LOGGER.warning("%s", message)
-    LOGGER.info("%s", comparison.summary())
-    return comparison
+    LOGGER.info("%s", run.summary())
+    return run
 
 
 def baseline_experiment_dir(folder_name: str, run_name: str) -> Path:
-    """Return (and create) the output directory for a baseline experiment.
+    """Return (and create) the output directory for a baseline run.
 
-    Under the figures tree, not ``data.peak_fit``: this is an experiment log to
-    look at, not pipeline data, and nothing downstream reads it. That also
-    keeps it clear of ``writer.resolve_output_dir``, whose job is protecting the
-    params CSV from being overwritten in place -- a hazard figures do not have.
+    Under the figures tree, not ``data.peak_fit``: nothing downstream reads it.
     """
     if not isinstance(run_name, str) or not run_name.strip():
         raise ValueError(f"run_name must be a non-empty name; got {run_name!r}")
@@ -870,14 +557,8 @@ if __name__ == "__main__":
     #     uv run python src\utils\ir_fitting\api.py
     # See CLAUDE.md on the edit-constants convention used across this repo.
     #
-    # BASELINE EXPERIMENTS ARE NO LONGER HERE. They moved to an argparse CLI,
-    # because the recipe is what gets swept and re-typing a variant list is how
-    # a sweep goes wrong:
+    # Baseline runs have their own CLI:
     #     uv run python scripts\run_baseline_experiment.py --help
-    # With no arguments that reproduces the selected form of spec.md 14.22 on
-    # the eight judged files -- what this block used to do. Batch FITTING stays
-    # here on the edit-constants convention, mirroring src/utils/kinetics,
-    # where classification got a CLI and batch fitting did not.
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     import matplotlib
 

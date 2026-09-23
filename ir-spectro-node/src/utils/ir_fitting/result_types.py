@@ -23,7 +23,7 @@ def matches_file_key(file_key: str, delta_group: str, pattern: str) -> bool:
 
     The single file-selection vocabulary for the package: both
     :meth:`MeasurementFitResult.select` (the plotting path) and
-    ``api.subifg_files`` (the baseline-experiment path) go through here, so
+    ``api.subifg_files`` (the baseline path) go through here, so
     ``["delta10"]`` means the same thing in both.
 
     A pattern is one of:
@@ -168,168 +168,48 @@ class MeasurementFitResult:
 
 
 @dataclass
-class BaselineTrace:
-    """One baseline variant evaluated on one subIFG file."""
+class FileBaseline:
+    """One baseline recipe evaluated on one subIFG file."""
 
-    label: str
-    settings: dict
-    window: tuple[float, float]
+    file_key: str
+    delta_group: str
+    subifg_path: Path
     wavenumbers: np.ndarray
     raw: np.ndarray
     baseline: np.ndarray
-
     degenerate: bool = False
     """``std_distribution`` found no baseline points -- the curve is not real."""
 
-    moved_pct_of_range: float = 0.0
-    """How far this baseline sits from the reference variant's.
-
-    Percentage of the reference's signal range over the region the two share.
-    It says the baseline *moved*, not that moving it was an improvement -- no
-    quality score is available here (see ``spec.md`` section 14.3 finding 4).
-    """
-
-    compared_over: tuple[float, float] | None = None
-    """``(high, low)`` region :attr:`moved_pct_of_range` was measured over.
-
-    Not always the full window: variants with different windows are compared on
-    their overlap, and the number is uninterpretable without knowing which.
-    """
-
     anchors_applied: tuple[float, ...] = ()
-    """Anchor wavenumbers this baseline was forced through."""
-
-    anchors_gated: tuple[tuple[float, float, float], ...] = ()
-    """``(anchor, extremum wavenumber, prominence)`` per anchor the guard rejected.
-
-    Kept on the trace so the legend can say the guard fired. An anchored
-    baseline that was silently left unanchored is indistinguishable from one
-    where anchoring did nothing.
-    """
-
     lower_anchors_applied: tuple[float, ...] = ()
-    """Anchors the **lower segment's** baseline was corrected at (spec.md 14.10).
-
-    Separate from :attr:`anchors_applied`: two corrections on two arrays, and a
-    legend that merged them could not say which one dropped a gated point --
-    1955 belongs to both sets.
-    """
-
-    lower_anchors_gated: tuple[tuple[float, float, float], ...] = ()
-    """``(anchor, extremum wavenumber, prominence)`` per rejected lower anchor.
-
-    Worth reading on any lower-anchored run: the correction is a least-squares
-    line through whichever points survive, so losing one re-weights it rather
-    than failing loudly (spec.md section 14.19). A half-corrected lower baseline
-    looks much like one where correcting did little.
-    """
-
     split_applied: float | None = None
-    """Wavenumber this baseline was cut at, or ``None`` for a single segment."""
-
-    split_gated: tuple[float, float, float] | None = None
-    """``(split, extremum wavenumber, prominence)`` when the guard refused the cut.
-
-    Kept for the same reason as :attr:`anchors_gated`: a baseline that fell back
-    to one segment is otherwise indistinguishable from one that was never asked
-    to split.
-    """
-
-    segment_edges: tuple[float, float] | None = None
-    """``(lowest wavenumber above the cut, highest below it)`` -- the seam."""
-
-    seam_jump: float = float("nan")
-    """Discontinuity across the seam, in raw units.
-
-    The segment interface is the known weak point of a split baseline (spec.md
-    section 14.4); it is measured and drawn, not blended away.
-    """
-
-    upper_max_abs_diff: float = float("nan")
-    """Largest ``|this - unsplit twin|`` above the cut, or ``nan``.
-
-    The claim the lower-only form of spec.md section 14.9 rests on is that it
-    changes *nothing* above the cut. That is checkable rather than arguable, so
-    it is checked: the twin is the variant in the same comparison with
-    identical settings, window and anchors but no cut, and this must come out
-    **exactly 0.0**. Anything else means a truncated array reached
-    ``create_baseline``, or the anchors were fitted to a subset.
-
-    ``nan`` when the comparison holds no such twin -- the check could not be
-    run, which is not the same as it passing.
-    """
-
-    lower_moved_pct: float = float("nan")
-    """``max |this - unsplit twin|`` **below** the cut, as % of signal range.
-
-    The companion to :attr:`upper_max_abs_diff`, and the one that carries the
-    result. Above the cut a lower-only split is defined to change nothing; below
-    it is the only thing it does. Without this the comparison table measures the
-    variant's effect nowhere, because both reported bands (2040, 1980) sit above
-    the cut -- ``height_2040`` and ``height_1980`` are *guaranteed* to equal the
-    anchored variant's and say nothing about whether the cut helped.
-    """
-
-    band_heights: dict[float, float] = field(default_factory=dict)
-    """``{center: max(raw - baseline) near center}`` for the reported bands.
-
-    2040 and 1980 are the bands being cut in half. Not a baseline quality
-    score -- see ``baseline.band_height``.
-    """
 
     @property
     def corrected(self) -> np.ndarray:
         """Baseline-subtracted signal."""
         return self.raw - self.baseline
 
-    @property
-    def is_reference(self) -> bool:
-        """True for the variant everything else is measured against."""
-        return self.compared_over is None
-
 
 @dataclass
-class FileBaselineComparison:
-    """Every baseline variant evaluated on one subIFG file."""
-
-    file_key: str
-    delta_group: str
-    subifg_path: Path
-    verdict: str = ""
-    """``"bad"`` / ``"good"`` / ``""`` -- an eye judgement, not a measurement."""
-
-    traces: list[BaselineTrace] = field(default_factory=list)
-
-    @property
-    def reference(self) -> BaselineTrace | None:
-        """The first variant, which the others are compared against."""
-        return self.traces[0] if self.traces else None
-
-
-@dataclass
-class BaselineComparison:
-    """A baseline experiment across one or more subIFG files."""
+class BaselineRun:
+    """One baseline recipe run across one or more subIFG files."""
 
     folder_name: str
     run_name: str
-    files: list[FileBaselineComparison] = field(default_factory=list)
-    table: pd.DataFrame = field(default_factory=pd.DataFrame)
+    label: str
+    files: list[FileBaseline] = field(default_factory=list)
     figure_paths: list[Path] = field(default_factory=list)
-    table_path: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
     @property
     def n_degenerate(self) -> int:
-        """Number of (file, variant) pairs that produced no real baseline."""
-        return sum(
-            1 for item in self.files for trace in item.traces if trace.degenerate
-        )
+        """Number of files that produced no real baseline."""
+        return sum(1 for item in self.files if item.degenerate)
 
     def summary(self) -> str:
         """One-line run summary."""
-        n_variants = len(self.files[0].traces) if self.files else 0
         return (
-            f"{self.run_name}: {len(self.files)} files x {n_variants} variants, "
+            f"{self.run_name}: {len(self.files)} files, "
             f"{len(self.figure_paths)} figures, "
             f"{self.n_degenerate} degenerate baselines"
         )

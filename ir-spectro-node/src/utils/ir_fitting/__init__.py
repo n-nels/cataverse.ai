@@ -7,32 +7,32 @@ to a ``_test`` subfolder. See ``spec.md`` for the design.
 
 from src.utils.ir_fitting.api import (
     baseline_experiment_dir,
-    compare_baselines,
     fit_file,
     fit_folder,
     load_measurement,
     measurement_names,
     resolve_folder,
+    run_baseline,
     subifg_dir,
     subifg_files,
 )
 from src.utils.ir_fitting.baseline import (
+    DEFAULT_FILES,
     DEFAULT_WINDOW,
-    JUDGED_FILES,
     BaselineVariant,
 )
 
 __all__ = [
+    "DEFAULT_FILES",
     "DEFAULT_WINDOW",
-    "JUDGED_FILES",
     "BaselineVariant",
     "baseline_experiment_dir",
-    "compare_baselines",
     "fit_file",
     "fit_folder",
     "load_measurement",
     "measurement_names",
     "resolve_folder",
+    "run_baseline",
     "subifg_dir",
     "subifg_files",
 ]
