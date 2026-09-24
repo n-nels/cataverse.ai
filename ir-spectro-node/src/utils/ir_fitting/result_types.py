@@ -55,7 +55,8 @@ class PeakCurve:
     peak_area: float
     curve: np.ndarray
     is_new: bool
-    """True for peaks added by ``ir_fitting``; False for reconstructed live peaks."""
+    """True when the saved fit had no row for this peak in this file (a peak the
+    refit added); False for refitted existing peaks and reconstructed saved ones."""
 
 
 @dataclass
@@ -72,20 +73,35 @@ class FileFitResult:
     baseline: np.ndarray
     corrected: np.ndarray
     composite: np.ndarray
-    """Full-ROI model: reconstructed live peaks plus newly fitted peaks."""
+    """Full-ROI model: the sum of every curve in ``curves``."""
 
     residual: np.ndarray
     """``composite - corrected``, matching ``spectral_fitting.objective``."""
 
     curves: list[PeakCurve] = field(default_factory=list)
-    new_rows: list[dict] = field(default_factory=list)
-    skipped_peaks: list[str] = field(default_factory=list)
+    rows: list[dict] = field(default_factory=list)
+    """Params-CSV rows this refit produced, one per peak. Empty when loaded."""
+
     warnings: list[str] = field(default_factory=list)
     baseline_source: str = "saved"
+    n_seeded: int = 0
+    """Peaks that started from their saved fit rather than their rule."""
+
+    n_clipped: int = 0
+    """Seed values clipped into their rule bounds."""
+
+    n_nudged: int = 0
+    """Seed values moved off a bound so the optimizer can move them."""
+
+    nfev: int = 0
+    """Objective evaluations the optimizer used; 0 when nothing was fitted."""
+
+    fit_success: bool = True
+    """lmfit's ``success``; False when ``leastsq`` hit its evaluation cap."""
 
     @property
     def new_curves(self) -> list[PeakCurve]:
-        """Only the curves for peaks this run fitted."""
+        """Only the curves for peaks the saved fit did not have."""
         return [curve for curve in self.curves if curve.is_new]
 
 
@@ -96,7 +112,9 @@ class MeasurementFitResult:
     folder_name: str
     file_name: str
     files: list[FileFitResult] = field(default_factory=list)
-    merged_params: pd.DataFrame = field(default_factory=pd.DataFrame)
+    params: pd.DataFrame = field(default_factory=pd.DataFrame)
+    """This run's output rows (live schema); only refitted files appear."""
+
     output_paths: dict[str, Path] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
@@ -150,19 +168,19 @@ class MeasurementFitResult:
 
     @property
     def n_fitted(self) -> int:
-        """Number of peak rows this run added."""
-        return sum(len(result.new_rows) for result in self.files)
+        """Number of peak rows this run produced."""
+        return sum(len(result.rows) for result in self.files)
 
     @property
-    def n_skipped(self) -> int:
-        """Number of peak/file pairs skipped because rows already existed."""
-        return sum(len(result.skipped_peaks) for result in self.files)
+    def n_clipped(self) -> int:
+        """Seed values clipped into their bounds, across every file."""
+        return sum(result.n_clipped for result in self.files)
 
     def summary(self) -> str:
         """One-line run summary."""
         return (
             f"{self.file_name}: {len(self.files)} files, "
-            f"{self.n_fitted} rows fitted, {self.n_skipped} skipped, "
+            f"{self.n_fitted} rows fitted, {self.n_clipped} seeds clipped, "
             f"{len(self.warnings)} warnings"
         )
 
@@ -225,8 +243,7 @@ class BatchFitResult:
     def summary(self) -> str:
         """One-line batch summary."""
         fitted = sum(item.n_fitted for item in self.measurements)
-        skipped = sum(item.n_skipped for item in self.measurements)
         return (
             f"{self.folder_name}: {len(self.measurements)} measurements, "
-            f"{fitted} rows fitted, {skipped} skipped"
+            f"{fitted} rows fitted"
         )

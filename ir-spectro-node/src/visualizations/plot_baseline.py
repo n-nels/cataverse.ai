@@ -2,12 +2,9 @@
 
 One figure per subIFG file, matching ``plot_individual_fit.py``'s unit.
 
-When a run used ``baseline="recompute"`` the recomputed baseline is drawn
-alongside the saved one. With no ``ir_fitting.baseline`` settings override the
-two coincide exactly -- ``pybaselines.classification.std_distribution`` takes no
-peak list, so declaring extra peaks cannot change it (spec.md section 6). That
-coincidence is the check that nothing drifted; a visible gap means a settings
-change actually moved the baseline.
+When a run used ``baseline="recompute"`` the recomputed baseline (the anchored
+default recipe unless another variant was passed) is drawn alongside the saved
+one, so the gap between the old and new baseline is visible per file.
 """
 
 from __future__ import annotations
@@ -328,7 +325,7 @@ def plot_baselines(
         plot_baselines("nn1120-4_pd_ceo2_000")   # every measurement in the folder
 
     Loads the measurement via :func:`~src.utils.ir_fitting.load_measurement`, so
-    it does **not** depend on ``ir_fitting.extra_peaks_base`` and writes nothing
+    it fits nothing and writes nothing
     to the peak-fit folder -- only figures. By default emits two figures per
     file: the low-wavenumber window where the candidate bands live, and the full
     ROI. Pass ``xlim=ZOOM_LIMITS`` or ``xlim=X_LIMITS`` for just one.
@@ -401,7 +398,7 @@ if __name__ == "__main__":
     folder_name = "nn1120-4_pd_ceo2_000"
     name = "20260715_094622_pd_ceo2_000-007"
 
-    # No fitting, no dependency on ir_fitting.extra_peaks_base.
+    # No fitting.
     # Drop file_keys to plot every file; name=None loops every measurement.
     # xlim=DEFAULT_WINDOWS emits a zoomed and a full-range figure per file.
     for item in plot_baselines(folder_name, name, xlim=X_LIMITS, file_keys=["delta10"]):

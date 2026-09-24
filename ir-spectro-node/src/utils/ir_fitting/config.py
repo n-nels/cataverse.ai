@@ -1,9 +1,9 @@
-"""Configuration access for the offline ``ir_fitting`` EDA package.
+"""Configuration access for the offline ``ir_fitting`` package.
 
-Reads the ``ir_fitting`` block of ``config/analysis.yaml`` and applies the same
-isotope shift ``src/analysis/spectral_fitting.py`` applies to
-``voigt_fit.peak_list_base``, so both lists move together when the isotope
-changes.
+Reads ``ir_fitting.fit`` in ``config/analysis.yaml``: a copy of ``voigt_fit``'s
+keys (peak lists, groups, isotope shift, baseline settings, param rules) that
+this package owns. The live ``voigt_fit`` block is never read here, so offline
+refits and live output cannot leak into each other.
 """
 
 from __future__ import annotations
@@ -20,34 +20,27 @@ from src.core import config
 
 LOGGER = logging.getLogger(__name__)
 
-IR_FITTING_KEY = "ir_fitting"
-VOIGT_KEY = "voigt_fit"
+FIT_KEY = "ir_fitting.fit"
 
 GROUP_KEYS = {
-    "cluster": "extra_cluster_peaks_base",
-    "monomer": "extra_monomer_peaks_base",
-    "unknown": "extra_unknown_peaks_base",
+    "cluster": "cluster_peaks_base",
+    "monomer": "monomer_peaks_base",
+    "unknown": "unknown_peaks_base",
 }
 
 
-def get_voigt_settings() -> dict:
-    """Return the ``voigt_fit`` settings block."""
-    return config.get_analysis_setting(VOIGT_KEY)
+def get_fit_settings() -> dict:
+    """Return the ``ir_fitting.fit`` settings block."""
+    settings = config.get_analysis_setting(FIT_KEY)
+    if not settings:
+        raise KeyError(f"{FIT_KEY} is missing or empty in config/analysis.yaml")
+    return settings
 
 
-def get_ir_fitting_settings() -> dict:
-    """Return the ``ir_fitting`` settings block, or an empty dict if absent."""
-    try:
-        settings = config.get_analysis_setting(IR_FITTING_KEY)
-    except KeyError:
-        return {}
-    return settings or {}
-
-
-def _isotope_shift(voigt_settings: dict) -> int:
+def _isotope_shift(fit_settings: dict) -> int:
     """Return the shift applied to 12CO base wavenumbers, as an int."""
-    isotope = voigt_settings.get("isotope_default", "13CO")
-    shifts = voigt_settings.get("isotope_shift_cm1", {})
+    isotope = fit_settings.get("isotope_default", "13CO")
+    shifts = fit_settings.get("isotope_shift_cm1", {})
     shift = shifts.get(isotope, 0)
     if shift != int(shift):
         raise ValueError(
@@ -58,9 +51,9 @@ def _isotope_shift(voigt_settings: dict) -> int:
     return int(shift)
 
 
-def _shift_peaks(base_peaks: list, voigt_settings: dict, source: str) -> list[int]:
+def _shift_peaks(base_peaks: list, fit_settings: dict, source: str) -> list[int]:
     """Apply the isotope shift to a list of 12CO base wavenumbers."""
-    shift = _isotope_shift(voigt_settings)
+    shift = _isotope_shift(fit_settings)
     shifted: list[int] = []
     for peak in base_peaks:
         if peak != int(peak):
@@ -73,56 +66,36 @@ def _shift_peaks(base_peaks: list, voigt_settings: dict, source: str) -> list[in
     return shifted
 
 
-def get_extra_peaks(voigt_settings: dict | None = None) -> list[int]:
-    """Return the isotope-shifted ``ir_fitting`` peak list.
+def get_peaks(fit_settings: dict | None = None) -> list[int]:
+    """Return the isotope-shifted peak list, highest wavenumber first."""
+    fit_settings = fit_settings if fit_settings is not None else get_fit_settings()
+    base_peaks = fit_settings.get("peak_list_base") or []
+    if not base_peaks:
+        raise ValueError(f"{FIT_KEY}.peak_list_base is empty")
+    peaks = _shift_peaks(list(base_peaks), fit_settings, f"{FIT_KEY}.peak_list_base")
+    if len(set(peaks)) != len(peaks):
+        raise ValueError(f"{FIT_KEY}.peak_list_base has duplicate peaks")
+    return sorted(peaks, reverse=True)
 
-    An absent or empty ``extra_peaks_base`` is a valid no-op, not an error.
-    """
-    voigt_settings = (
-        voigt_settings if voigt_settings is not None else get_voigt_settings()
-    )
-    base_peaks = get_ir_fitting_settings().get("extra_peaks_base") or []
-    return _shift_peaks(list(base_peaks), voigt_settings, "ir_fitting.extra_peaks_base")
 
+def get_group_peaks(group: str, fit_settings: dict | None = None) -> list[int]:
+    """Return the isotope-shifted peaks of one group.
 
-def get_extra_group_peaks(
-    group: str,
-    voigt_settings: dict | None = None,
-) -> list[int]:
-    """Return the isotope-shifted extra peaks for one group.
-
-    ``group`` is one of ``"cluster"``, ``"monomer"``, ``"unknown"`` -- mirroring
-    ``voigt_fit``'s ``*_peaks_base`` keys. Grouping is recorded here for later
-    promotion into the live config; it does not affect fitting.
+    ``group`` is one of ``"cluster"``, ``"monomer"``, ``"unknown"``. Groups do
+    not affect fitting; they are recorded for kinetics and for promotion.
     """
     if group not in GROUP_KEYS:
         raise ValueError(f"group must be one of {sorted(GROUP_KEYS)}; got {group!r}")
-    voigt_settings = (
-        voigt_settings if voigt_settings is not None else get_voigt_settings()
-    )
-    base_peaks = get_ir_fitting_settings().get(GROUP_KEYS[group]) or []
+    fit_settings = fit_settings if fit_settings is not None else get_fit_settings()
+    base_peaks = fit_settings.get(GROUP_KEYS[group]) or []
     return _shift_peaks(
-        list(base_peaks), voigt_settings, f"ir_fitting.{GROUP_KEYS[group]}"
+        list(base_peaks), fit_settings, f"{FIT_KEY}.{GROUP_KEYS[group]}"
     )
 
 
 def peak_name(peak: int) -> str:
     """Format a shifted wavenumber as a ``Peak_Name`` string."""
     return f"Peak_{int(peak)}"
-
-
-def get_extra_peak_names(voigt_settings: dict | None = None) -> list[str]:
-    """Return ``Peak_Name`` strings for the ``ir_fitting`` peaks."""
-    return [peak_name(peak) for peak in get_extra_peaks(voigt_settings)]
-
-
-def get_live_peaks(voigt_settings: dict | None = None) -> list[int]:
-    """Return the isotope-shifted ``voigt_fit.peak_list_base`` peak list."""
-    voigt_settings = (
-        voigt_settings if voigt_settings is not None else get_voigt_settings()
-    )
-    base_peaks = voigt_settings.get("peak_list_base") or []
-    return _shift_peaks(list(base_peaks), voigt_settings, "voigt_fit.peak_list_base")
 
 
 BASELINE_KEYS = frozenset(
@@ -145,33 +118,23 @@ nothing" -- the most misleading possible outcome for a sweep.
 
 
 def get_baseline_settings(
-    voigt_settings: dict | None = None,
+    fit_settings: dict | None = None,
     override: dict | None = None,
 ) -> dict:
-    """Return baseline settings for a recompute.
+    """Return ``std_distribution`` settings for one baseline segment.
 
-    Layered lowest-precedence first: ``voigt_fit.baseline``, then the
-    ``ir_fitting.baseline`` yaml block, then ``override``.
-
-    ``override`` is the per-call sweep hook -- it lets one script try many
-    candidate settings in a loop without editing yaml between runs, which is
-    what section 14.6 step 1 asks for. The yaml block stays the way to pin a
-    chosen candidate as the new offline default.
+    ``ir_fitting.fit.baseline``, then ``override`` (a
+    :class:`~src.utils.ir_fitting.baseline.BaselineVariant`'s ``settings``).
     """
-    voigt_settings = (
-        voigt_settings if voigt_settings is not None else get_voigt_settings()
-    )
-    settings = dict(voigt_settings.get("baseline", {}))
-    yaml_override = get_ir_fitting_settings().get("baseline")
-    for layer in (yaml_override, override):
-        if not layer:
-            continue
-        unknown = set(layer) - BASELINE_KEYS
+    fit_settings = fit_settings if fit_settings is not None else get_fit_settings()
+    settings = dict(fit_settings.get("baseline", {}))
+    if override:
+        unknown = set(override) - BASELINE_KEYS
         if unknown:
             raise ValueError(
                 f"unknown baseline setting(s) {sorted(unknown)}; "
                 f"expected any of {sorted(BASELINE_KEYS)}. "
                 "create_baseline would ignore these silently."
             )
-        settings.update(layer)
+        settings.update(override)
     return settings

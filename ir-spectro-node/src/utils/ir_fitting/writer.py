@@ -94,73 +94,19 @@ def load_saved_baseline(folder_name: str, file_name: str) -> pd.DataFrame | None
     return pd.read_csv(csv_path)
 
 
-def merge_params(
-    df_existing: pd.DataFrame,
-    results: list[FileFitResult],
-    *,
-    on_existing: str = "skip",
-    append_only: bool = True,
-) -> pd.DataFrame:
-    """Merge newly fitted rows into the existing params table.
+def params_frame(results: list[FileFitResult]) -> pd.DataFrame:
+    """Build the output params table from this run's rows only.
 
-    Column order and names match the live schema exactly, so the output is
-    readable by the existing plotting and kinetics code unchanged. Columns the
-    live path adds when calibration is available (``PdCO_mol``,
-    ``PdCO_mol_stderr``) are preserved on existing rows and left empty on new
-    ones -- the calibration slope is derived in the carbonyl region and is not
-    justified at 1775-1795.
-
-    A row is replaced rather than added when this run refitted it: either
-    ``on_existing="overwrite"``, or ``append_only=False``. The second case
-    matters -- a full refit produces a row for *every* peak, so keeping the
-    saved rows as well would duplicate every ``(File, Peak_Name)`` pair and feed
-    doubled history to ``compute_cumulative_peak_area_df``. ``on_existing`` asks
-    what to do when *appending* and has no meaning in a full refit.
+    Nothing is carried over from the saved CSV. A file that failed or was
+    skipped has no rows, so every row in the output came from this refit's
+    model. Column order matches the live schema; ``PdCO_mol`` is not written.
     """
-    new_rows = [row for result in results for row in result.new_rows]
-    df_new = (
-        pd.DataFrame(new_rows, columns=PARAM_COLUMNS) if new_rows else pd.DataFrame()
-    )
-
-    df_kept = df_existing
-    if not df_existing.empty and not df_new.empty:
-        if append_only:
-            # Appending replaces only the exact rows this run refitted.
-            replaced = set(zip(df_new["File"], df_new["Peak_Name"]))
-            mask = [
-                (file_key, peak) not in replaced
-                for file_key, peak in zip(df_existing["File"], df_existing["Peak_Name"])
-            ]
-        else:
-            # A full refit replaces every row for every file it touched, not
-            # just the (File, Peak_Name) pairs it happens to reproduce. The peak
-            # list has churned between datasets -- nn1120-2_pd_ceo2_000 holds
-            # peaks the current list dropped -- and keeping such a row would mix
-            # one model's output with another's in the same file, so the peak
-            # curves no longer sum to the composite. Files the run did not touch
-            # (e.g. skipped by manually_skip_files) keep their rows untouched.
-            refitted_files = set(df_new["File"])
-            mask = [file_key not in refitted_files for file_key in df_existing["File"]]
-        df_kept = df_existing.loc[mask]
-
-    if df_new.empty:
-        merged = df_kept.copy()
-    elif df_kept.empty:
-        merged = df_new
-    else:
-        merged = pd.concat([df_kept, df_new], axis=0, ignore_index=True)
-
-    if merged.empty:
-        return merged
-
-    # Preserve any extra live columns (e.g. PdCO_mol) after the standard ones.
-    ordered = [col for col in PARAM_COLUMNS if col in merged.columns]
-    extras = [col for col in merged.columns if col not in PARAM_COLUMNS]
-    merged = merged[ordered + extras]
-
-    if "Peak_Name" in merged.columns and "File" in merged.columns:
-        merged = merged.sort_values(by=["Peak_Name", "File"], kind="stable")
-    return merged.reset_index(drop=True)
+    rows = [row for result in results for row in result.rows]
+    if not rows:
+        return pd.DataFrame(columns=PARAM_COLUMNS)
+    frame = pd.DataFrame(rows, columns=PARAM_COLUMNS)
+    frame = frame.sort_values(by=["Peak_Name", "File"], kind="stable")
+    return frame.reset_index(drop=True)
 
 
 def _wide_frame(
@@ -188,7 +134,7 @@ def write_measurement(
     paths: dict[str, Path] = {}
 
     params_path = output_dir / f"{measurement.file_name}{params_suffix()}"
-    measurement.merged_params.to_csv(params_path, index=False)
+    measurement.params.to_csv(params_path, index=False)
     paths["params"] = params_path
 
     baseline_path = output_dir / f"{measurement.file_name}{baseline_suffix()}"

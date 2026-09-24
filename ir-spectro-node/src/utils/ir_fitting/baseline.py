@@ -22,8 +22,8 @@ path = Path(__file__).resolve().parents[3]
 if str(path) not in sys.path:
     sys.path.append(str(path))
 
-from src.analysis.spectral_fitting import create_baseline
 from src.utils.ir_fitting import config as ir_config
+from src.utils.ir_fitting.voigt import create_baseline
 
 LOGGER = logging.getLogger(__name__)
 
@@ -71,6 +71,8 @@ ANCHOR_PROMINENCE_FRAC = 0.5
 """Prominence, as a fraction of the file's **whole ROI** signal range, that
 makes an extremum dominant enough to gate an anchor or the cut."""
 
+DEFAULT_LABEL = "default"
+
 
 @dataclass
 class BaselineOutcome:
@@ -86,13 +88,19 @@ class BaselineOutcome:
 
 @dataclass(frozen=True)
 class BaselineVariant:
-    """One baseline recipe.
+    """One baseline recipe. ``BaselineVariant()`` is the default recipe.
+
+    The defaults are the anchored, two-segment baseline: the refit's
+    ``baseline="recompute"`` and the baseline CLI both use them, so there is one
+    definition. Override fields to vary it; turning the cut off needs
+    ``lower_split_cm1=None, lower_anchors=()`` together, since lower anchors
+    without a cut are rejected.
 
     Args:
         label: Name shown in figure legends.
         settings: Overrides for ``std_distribution``, any of
             ``config.BASELINE_KEYS``; omitted keys keep their
-            ``config/analysis.yaml`` value. Applies to the full-ROI curve only.
+            ``ir_fitting.fit.baseline`` value. Applies to the full-ROI curve only.
         window: ``(high, low)`` cm-1 extent handed to ``create_baseline``.
         anchors: Wavenumbers the full-ROI baseline is pulled toward by an
             affine correction. ``()`` leaves it unanchored.
@@ -103,12 +111,12 @@ class BaselineVariant:
         anchor_prominence_frac: See :data:`ANCHOR_PROMINENCE_FRAC`.
     """
 
-    label: str
+    label: str = DEFAULT_LABEL
     settings: dict = field(default_factory=dict)
     window: Window = DEFAULT_WINDOW
-    anchors: tuple[float, ...] = ()
-    lower_split_cm1: float | None = None
-    lower_anchors: tuple[float, ...] = ()
+    anchors: tuple[float, ...] = ANCHOR_POINTS_CM1
+    lower_split_cm1: float | None = LOWER_SPLIT_POINT_CM1
+    lower_anchors: tuple[float, ...] = LOWER_ANCHOR_POINTS_CM1
     anchor_guard_cm1: float = ANCHOR_GUARD_CM1
     anchor_prominence_frac: float = ANCHOR_PROMINENCE_FRAC
 
@@ -171,7 +179,7 @@ class BaselineVariant:
     def compute(
         self,
         intensity: np.ndarray,
-        voigt_settings: dict | None = None,
+        fit_settings: dict | None = None,
         wavenumbers: np.ndarray | None = None,
     ) -> BaselineOutcome:
         """Return the baseline for one intensity array.
@@ -186,7 +194,7 @@ class BaselineVariant:
             )
 
         settings = ir_config.get_baseline_settings(
-            voigt_settings, override=dict(self.settings) or None
+            fit_settings, override=dict(self.settings) or None
         )
         values, degenerate = self._segment_baseline(intensity, settings, "")
         outcome = BaselineOutcome(values=values, degenerate=degenerate)
@@ -203,7 +211,7 @@ class BaselineVariant:
         if self.lower_split_cm1 is None:
             return outcome
         return self._compute_lower_split(
-            np.asarray(wavenumbers, dtype=float), intensity, outcome, voigt_settings
+            np.asarray(wavenumbers, dtype=float), intensity, outcome, fit_settings
         )
 
     def _compute_lower_split(
@@ -211,7 +219,7 @@ class BaselineVariant:
         wavenumbers: np.ndarray,
         intensity: np.ndarray,
         outcome: BaselineOutcome,
-        voigt_settings: dict | None,
+        fit_settings: dict | None,
     ) -> BaselineOutcome:
         """Replace the baseline below the cut with a second, anchored one.
 
@@ -241,10 +249,10 @@ class BaselineVariant:
                 "needs at least two"
             )
 
-        # The lower segment runs on the unmodified voigt_fit.baseline settings;
+        # The lower segment runs on the unmodified ir_fitting.fit.baseline settings;
         # this variant's `settings` belong to the full-ROI curve.
         lower_values, lower_degenerate = self._segment_baseline(
-            intensity[lower], ir_config.get_baseline_settings(voigt_settings), "lower"
+            intensity[lower], ir_config.get_baseline_settings(fit_settings), "lower"
         )
 
         # The guard and data estimate read the FULL ROI: the prominence

@@ -223,10 +223,10 @@ def plot_fits(
         plot_fits("nn1120-3_pd_ceo2_004")   # every measurement in the folder
 
     Loads the measurement via :func:`~src.utils.ir_fitting.load_measurement`, so
-    it does **not** depend on ``ir_fitting.extra_peaks_base`` and writes nothing
-    to the peak-fit folder -- only figures. With no peaks seeded this shows the
+    it fits nothing and writes nothing
+    to the peak-fit folder -- only figures. It shows the
     existing fit reconstructed from ``*_CarbonylPeakFitParams.csv``, which is
-    useful on its own. To see newly fitted peaks, run
+    useful on its own. To see a refit, run
     :func:`~src.utils.ir_fitting.fit_file` and pass its result to
     :func:`plot_measurement_fits`.
 
@@ -295,7 +295,7 @@ if __name__ == "__main__":
     folder_name = "nn1120-3_pd_ceo2_004"
     name = "20260304_145524_pd_ceo2_004-000"
 
-    # No fitting, no dependency on ir_fitting.extra_peaks_base.
+    # No fitting.
     # Emits a zoomed and a full-range figure per file; pass
     # xlim=ZOOM_LIMITS or xlim=X_LIMITS for just one.
     # Pass name=None to loop every measurement in the folder.

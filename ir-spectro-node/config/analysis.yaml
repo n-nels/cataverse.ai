@@ -467,39 +467,596 @@ kinetics_classification:
   rise_delta: 1.1e-1
 
 # -------------------
-# ir_fitting (offline EDA / reprocessing)
+# ir_fitting (offline refit)
 # -------------------
-# Read by src/utils/ir_fitting only. The live server path never sees this block:
-# voigt_fit.peak_list_base and voigt_fit.cluster_peaks_base stay untouched, so
-# existing *_CarbonylPeakFitParams.csv / *_CarbonylPeakArea.csv row sets do not
-# change. Keys mirror voigt_fit's so promoting a peak to live is a copy of
-# values between two lists.
+# Read by src/utils/ir_fitting only; the live server never sees this block.
+# `fit` uses the same keys as voigt_fit so the vendored fit
+# (src/utils/ir_fitting/voigt.py) reads it unchanged and promoting to live is a
+# copy of values. It is a COPY, not a reference: editing voigt_fit does not
+# change offline fits, and editing this does not change live output.
+# See src/utils/ir_fitting/spec-working.md.
+#
+# Units: peak lists are 12CO base (shifted -50 at read for 13CO) and must be
+# integers -- Peak_Name is Peak_<value> (12CO 2175 == 13CO Peak_2125).
+# param_rules are 13CO (param_rules_base_isotope).
 ir_fitting:
-  # 12CO base wavenumbers, shifted by voigt_fit.isotope_shift_cm1 at read time.
-  # Integers only -- Peak_Name is formatted Peak_<value> and must match the
-  # historic strings exactly (Peak_1795, not Peak_1795.0).
-  # 1845 / 1825 here reproduce the historic Peak_1795 / Peak_1775 at 13CO,
-  # which the staged param_rules [1790,1800] and [1770,1780] already serve.
-  extra_peaks_base: []
-
-  # Group membership, mirroring voigt_fit's *_peaks_base keys. Recorded for
-  # later promotion into the live config; does not affect fitting.
-  extra_cluster_peaks_base: []
-  extra_monomer_peaks_base: []
-  extra_unknown_peaks_base: []
-
-  # Optional baseline override for OFFLINE runs only. Absent = inherit
-  # voigt_fit.baseline exactly, which is the default and reproduces the saved
-  # baseline bit-for-bit. Uncomment to pin a different offline default; an
-  # unknown key raises rather than being silently ignored.
-  #
-  # For one-off experiments prefer the per-call kwarg, which needs no edit here:
-  #     BaselineVariant(label="try", settings={"num_std": 1.4})
-  # See src/utils/ir_fitting/spec.md section 9 and context/2026-09-17-baseline-investigation.md before changing these.
-  #
-  # baseline:
-  #   half_window: 10
-  #   interp_half_window: 5
-  #   fill_half_window: 6
-  #   num_std: 1.1
-  #   smooth_half_window: null
+  fit:
+    isotope_default: "13CO"
+    param_rules_base_isotope: "13CO"
+    monomer_peaks_base_isotope: "12CO"
+    isotope_shift_cm1:
+      "12CO": 0
+      "13CO": -50
+    peak_list_base: # 12CO; the live 18 plus six new cluster peaks
+      - 2246
+      - 2226
+      - 2206
+      - 2196
+      - 2186
+      - 2175
+      - 2163
+      - 2153
+      - 2143
+      - 2123
+      - 2112
+      - 2100
+      - 2090
+      - 2080
+      - 2065
+      - 2050
+      - 2038
+      - 2025
+      - 1988 # 13CO 1938 (new)
+      - 1978 # 13CO 1928 (new)
+      - 1963 # 13CO 1913 (new)
+      - 1927 # 13CO 1877 (new)
+      - 1899 # 13CO 1849 (new)
+      - 1888 # 13CO 1838 (new)
+    monomer_peaks_base: # 12CO; 2175 moved to unknown
+      - 2163
+      - 2153
+      - 2143
+    cluster_peaks_base: # 12CO
+      - 2123
+      - 2112
+      - 2100
+      - 2090
+      - 2080
+      - 2065
+      - 2050
+      - 2038
+      - 2025
+      - 1988
+      - 1978
+      - 1963
+      - 1927
+      - 1899
+      - 1888
+    unknown_peaks_base: # 12CO
+      - 2246
+      - 2226
+      - 2206
+      - 2196
+      - 2186
+      - 2175
+    # std_distribution settings for each baseline segment. The anchors and the
+    # cut are constants in src/utils/ir_fitting/baseline.py (default_variant).
+    baseline:
+      half_window: 10
+      interp_half_window: 5
+      fill_half_window: 6
+      num_std: 1.1
+    param_rules:
+      - range_cm1: [2191, 2201]
+        upper_inclusive: true
+        center:
+          min_offset: -2
+          max_offset: 2
+        amplitude:
+          value: 0.01
+          min: 0
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2171, 2181]
+        center:
+          min_offset: -2
+          max_offset: 2
+        amplitude:
+          value: 0.01
+          min: 0
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2151, 2161]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+          min: 0
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2141, 2151]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2130, 2141]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2120, 2130]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2108, 2120]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2098, 2108]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2088, 2098]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: -0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2078, 2088]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2068, 2078]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2057, 2067]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2045, 2055]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2035, 2045]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2025, 2035]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [2010, 2020]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1995, 2005]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1983, 1993]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1970, 1980]
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1790, 1800]
+        center:
+          min_offset: -5
+          max_offset: 5
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 26
+        gamma:
+          value: 2
+          min: 0
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1770, 1780]
+        center:
+          min_offset: -5
+          max_offset: 5
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 26
+        gamma:
+          value: 2
+          min: 0
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1933, 1943] # Peak_1938 (new)
+        center:
+          min_offset: -2
+          max_offset: 2
+        amplitude:
+          value: 0.01
+          min: 0
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1923, 1933] # Peak_1928 (new)
+        center:
+          min_offset: -2
+          max_offset: 2
+        amplitude:
+          value: 0.01
+          min: 0
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1908, 1918] # Peak_1913 (new)
+        center:
+          min_offset: -2
+          max_offset: 2
+        amplitude:
+          value: 0.01
+          min: 0
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1872, 1882] # Peak_1877 (new)
+        center:
+          min_offset: -2
+          max_offset: 2
+        amplitude:
+          value: 0.01
+          min: 0
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1844, 1854] # Peak_1849 (new)
+        center:
+          min_offset: -2
+          max_offset: 2
+        amplitude:
+          value: 0.01
+          min: 0
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [1833, 1844] # Peak_1838 (new)
+        center:
+          min_offset: -2
+          max_offset: 2
+        amplitude:
+          value: 0.01
+          min: 0
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false
+      - range_cm1: [0, 0]
+        default: true
+        center:
+          min_offset: -1
+          max_offset: 1
+        amplitude:
+          value: 0.01
+        sigma:
+          value: 5
+          min: 2.55
+          max: 6.37
+        gamma:
+          value: 2
+          min: 0
+          max: 2.8
+        y0:
+          value: 0
+          min: 0
+          vary: false

@@ -29,24 +29,20 @@ from src.utils.ir_fitting.api import (
     subifg_files,
 )
 from src.utils.ir_fitting.baseline import (
-    ANCHOR_GUARD_CM1,
-    ANCHOR_POINTS_CM1,
-    ANCHOR_PROMINENCE_FRAC,
     DEFAULT_FILES,
     DEFAULT_FOLDER,
-    DEFAULT_WINDOW,
-    LOWER_ANCHOR_POINTS_CM1,
-    LOWER_SPLIT_POINT_CM1,
+    DEFAULT_LABEL,
     BaselineVariant,
 )
 
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_RUN_NAME = "default"
-DEFAULT_LABEL = "default"
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # Defaults come from the one shared recipe, which the refit also uses.
+    default = BaselineVariant()
     parser = argparse.ArgumentParser(
         prog="run_baseline_experiment",
         description=(
@@ -104,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs=2,
         type=float,
         metavar=("HIGH", "LOW"),
-        default=list(DEFAULT_WINDOW),
+        default=list(default.window),
         help="Wavenumber extent handed to the algorithm, high then low "
         "(default: %(default)s).",
     )
@@ -113,7 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         type=float,
         metavar="CM1",
-        default=list(ANCHOR_POINTS_CM1),
+        default=list(default.anchors),
         help="Wavenumbers the full-ROI baseline is pulled toward. Order and "
         "duplicates are kept: repeating a wavenumber multiplies its weight in "
         "the least-squares correction (default: %(default)s).",
@@ -127,7 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--lower-split",
         type=float,
         metavar="CM1",
-        default=LOWER_SPLIT_POINT_CM1,
+        default=default.lower_split_cm1,
         help="Cut below which a second baseline replaces the first "
         "(default: %(default)s).",
     )
@@ -141,7 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         type=float,
         metavar="CM1",
-        default=list(LOWER_ANCHOR_POINTS_CM1),
+        default=list(default.lower_anchors),
         help="The lower segment's own anchors. Requires a cut "
         "(default: %(default)s).",
     )
@@ -158,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     guard.add_argument(
         "--anchor-guard-cm1",
         type=float,
-        default=ANCHOR_GUARD_CM1,
+        default=default.anchor_guard_cm1,
         metavar="CM1",
         help="Half-width of the window an anchor is rejected for containing a "
         "dominant extremum (default: %(default)s).",
@@ -166,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     guard.add_argument(
         "--anchor-prominence-frac",
         type=float,
-        default=ANCHOR_PROMINENCE_FRAC,
+        default=default.anchor_prominence_frac,
         metavar="FRAC",
         help="Prominence, as a fraction of the file's whole ROI signal range, "
         "that makes an extremum dominant. Raising it gates less "

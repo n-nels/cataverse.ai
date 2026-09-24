@@ -1,4 +1,4 @@
-"""User-facing API for offline IR peak fitting and baseline runs.
+"""User-facing API for offline IR peak refits and baseline runs.
 
 Batch **fitting** follows the repo convention of editing the constants in the
 ``__main__`` block below. Batch **baseline** runs have an argparse CLI::
@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import logging
 import sys
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from datetime import datetime
 from fnmatch import fnmatchcase
 from pathlib import Path
-
-import pandas as pd
 
 path = Path(__file__).resolve().parents[3]
 if str(path) not in sys.path:
@@ -44,9 +45,14 @@ from src.utils.ir_fitting.result_types import (
     MeasurementFitResult,
     matches_file_key,
 )
-from src.utils.ir_fitting.runner import ExistingPeakRowsError, fit_subifg_file
+from src.utils.ir_fitting.runner import fit_subifg_file, load_subifg_file
+from src.utils.ir_fitting.voigt import FIT_METHOD, SEED_NUDGE_FRAC
 
-LOGGER = logging.getLogger(__name__)
+PACKAGE_LOGGER = "src.utils.ir_fitting"
+# Named explicitly, not __name__: run as a script this module is "__main__",
+# and its lines would miss the package-level file handler.
+LOGGER = logging.getLogger(f"{PACKAGE_LOGGER}.api")
+LOG_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 
 def subifg_dir(folder_name: str) -> Path:
     """Return the subIFG source folder for a dataset."""
@@ -195,173 +201,149 @@ def _resolve_measurement(measurement: str | Path) -> tuple[str, str, Path]:
 def fit_file(
     measurement: str | Path,
     *,
-    append_only: bool = True,
-    baseline: str = "saved",
-    on_existing: str = "skip",
+    baseline: str = "recompute",
+    variant: BaselineVariant | None = None,
     output_folder: str = "_test",
     save: bool = True,
-    baseline_settings: dict | None = None,
+    log_file: bool = True,
 ) -> MeasurementFitResult:
-    """Fit the ``ir_fitting`` peaks for one measurement.
+    """Refit every configured peak for one measurement.
+
+    Every peak in ``ir_fitting.fit.peak_list_base`` is solved jointly per
+    subIFG file, each starting from its saved fit where one exists. The output
+    params CSV holds only this run's rows: a file that fails, or that
+    ``manually_skip_files`` excludes, has none.
 
     Args:
         measurement: Path to a measurement base name inside a subIFG dataset
             folder, e.g.
             ``C:\\Data\\OpusConvert_subIFG_lgRfl\\nn1120-3_pd_ceo2_004\\20260304_145524_pd_ceo2_004-000``.
             Every ``<base name>_delta*.*`` file under it is processed.
-        append_only: ``True`` reuses the saved fit parameters for the existing
-            peaks and fits only the ``ir_fitting`` peaks against what those do
-            not explain. ``False`` discards them and refits every peak jointly
-            from the subIFG -- the only correct way to backfill a peak that
-            overlaps the existing cluster.
-        baseline: ``"saved"`` reads the stored baseline column; ``"recompute"``
-            re-runs ``create_baseline``. With no ``ir_fitting.baseline``
-            override the two are identical (see spec.md section 6).
-        on_existing: What to do when a peak already has a row for a file --
-            ``"skip"`` (default, logged), ``"overwrite"``, or ``"error"``.
-        output_folder: Output subfolder name. Never writes into the source folder.
+        baseline: ``"recompute"`` (default) runs ``variant``; ``"saved"`` reads
+            the stored ``*_CarbonylFitBaseline.csv`` column, for the parity gate.
+        variant: Baseline recipe for ``"recompute"``. ``None`` is
+            ``BaselineVariant()``, the same
+            recipe the baseline CLI runs by default.
+        output_folder: Output subfolder name, e.g. ``"_test"`` (reused, so a
+            rerun overwrites it) or ``"_test-1"`` to keep a run. Never writes
+            into the source folder.
         save: If False, compute only and return the in-memory result.
-
-    An empty ``ir_fitting.extra_peaks_base`` is not an error -- the run loads and
-    reconstructs the saved fit and adds no rows. With ``save=True`` that rewrites
-    an unchanged params CSV into the output folder, which is harmless; the
-    baseline and residual CSVs are still produced. To inspect without writing
-    anything, use :func:`load_measurement`.
+        log_file: With ``save``, also write ``refit_<timestamp>.log`` into the
+            output folder. :func:`fit_folder` turns this off and writes one log
+            for the whole batch instead.
 
     Returns:
-        MeasurementFitResult with per-file curves, merged rows and output paths.
+        MeasurementFitResult with per-file curves, rows and output paths.
     """
-    if on_existing not in {"skip", "overwrite", "error"}:
-        raise ValueError(
-            f"on_existing must be 'skip', 'overwrite' or 'error'; got {on_existing!r}"
-        )
     if baseline not in {"saved", "recompute"}:
         raise ValueError(f"baseline must be 'saved' or 'recompute'; got {baseline!r}")
-    if not append_only and on_existing != "skip":
-        LOGGER.warning(
-            "on_existing=%r is ignored when append_only=False: a full refit "
-            "produces a row for every peak, so every refitted row replaces its "
-            "saved counterpart.",
-            on_existing,
-        )
 
     folder_name, file_name, source_dir = _resolve_measurement(measurement)
-    voigt_settings = ir_config.get_voigt_settings()
-    extra_peaks = ir_config.get_extra_peaks(voigt_settings)
-
-    if not extra_peaks and append_only:
-        # Not an error: loading and reconstructing the saved fit is useful on its
-        # own, and is how the baseline and fit plots work before any peak has
-        # been seeded.
-        LOGGER.warning(
-            "ir_fitting.extra_peaks_base is empty -- no peaks will be fitted. "
-            "Seed it in config/analysis.yaml (12CO base wavenumbers, integers) "
-            "to add peaks; loading and plotting work without it."
+    with _run_log(folder_name, output_folder, enabled=save and log_file) as log_path:
+        if log_path is not None:
+            _log_run_header(folder_name, [file_name], baseline, variant, output_folder)
+        result = _run_measurement(
+            fit_subifg_file,
+            folder_name,
+            file_name,
+            source_dir,
+            baseline=baseline,
+            variant=variant,
         )
 
-    result, df_existing = _run_measurement(
-        folder_name,
-        file_name,
-        source_dir,
-        voigt_settings=voigt_settings,
-        extra_peaks=extra_peaks,
-        append_only=append_only,
-        baseline=baseline,
-        on_existing=on_existing,
-        baseline_settings=baseline_settings,
-    )
-
-    result.merged_params = writer.merge_params(
-        df_existing, result.files, on_existing=on_existing, append_only=append_only
-    )
-    if save:
-        result.output_paths = writer.write_measurement(
-            result, output_folder=output_folder
-        )
-    _log_warning_summary(result)
-    LOGGER.info("%s", result.summary())
+        result.params = writer.params_frame(result.files)
+        if save:
+            result.output_paths = writer.write_measurement(
+                result, output_folder=output_folder
+            )
+            if log_path is not None:
+                result.output_paths["log"] = log_path
+        _log_warning_summary(result)
+        LOGGER.info("%s", result.summary())
     return result
 
 
 def _run_measurement(
+    per_file,
     folder_name: str,
     file_name: str,
     source_dir: Path,
     *,
-    voigt_settings: dict,
-    extra_peaks: list[int],
-    append_only: bool,
     baseline: str,
-    on_existing: str,
-    baseline_settings: dict | None = None,
-) -> tuple[MeasurementFitResult, pd.DataFrame]:
-    """Process every subIFG file of a measurement.
+    variant: BaselineVariant | None,
+) -> MeasurementFitResult:
+    """Apply ``per_file`` (fit or load) to every subIFG file of a measurement.
 
-    Shared by ``fit_file`` and ``load_measurement`` -- the two differ only in
-    whether ``extra_peaks`` is non-empty and whether the caller writes output.
-    Returns the result and the existing params table the caller needs to merge.
+    The saved params table is read for seeds and for the carried
+    ``Data_Integral`` / ``Time_Delta (s)`` columns only; none of its rows reach
+    the output.
     """
     result = MeasurementFitResult(folder_name=folder_name, file_name=file_name)
-    df_existing = writer.load_measurement_params(folder_name, file_name)
+    df_saved_params = writer.load_measurement_params(folder_name, file_name)
     df_saved_baseline = writer.load_saved_baseline(folder_name, file_name)
+    fit_settings = ir_config.get_fit_settings()
 
-    subifg_files = sorted(source_dir.glob(f"{file_name}_delta*.*"))
-    if not subifg_files:
+    subifg_paths = sorted(source_dir.glob(f"{file_name}_delta*.*"))
+    if not subifg_paths:
         raise FileNotFoundError(
             f"No subIFG files matching {file_name}_delta*.* in {source_dir}"
         )
 
-    for subifg_path in subifg_files:
+    LOGGER.info("%s: %d subIFG files", file_name, len(subifg_paths))
+    for subifg_path in subifg_paths:
+        started = time.perf_counter()
         try:
-            file_result = fit_subifg_file(
+            file_result = per_file(
                 subifg_path,
-                df_existing,
+                df_saved_params,
                 df_saved_baseline,
-                voigt_settings=voigt_settings,
-                extra_peaks=extra_peaks,
-                append_only=append_only,
+                fit_settings=fit_settings,
                 baseline=baseline,
-                on_existing=on_existing,
-                baseline_settings=baseline_settings,
+                variant=variant,
             )
-        except ExistingPeakRowsError:
-            raise  # on_existing="error" is meant to stop the run
         except Exception as exc:  # one bad file must not abort the measurement
             message = f"{subifg_path.name}: {exc}"
-            LOGGER.error(message)
+            # Traceback goes to the log file; the file gets no output rows.
+            LOGGER.exception("%s -- no rows written for this file", message)
             result.warnings.append(message)
             continue
         if file_result is None:
             continue
         result.files.append(file_result)
         result.warnings.extend(file_result.warnings)
+        if file_result.rows:
+            LOGGER.info(
+                "%s %s: %s nfev=%d seeded=%d nudged=%d clipped=%d %.1fs",
+                file_name,
+                file_result.file_key,
+                "ok" if file_result.fit_success else "NOT CONVERGED",
+                file_result.nfev,
+                file_result.n_seeded,
+                file_result.n_nudged,
+                file_result.n_clipped,
+                time.perf_counter() - started,
+            )
 
-    return result, df_existing
+    return result
 
 
 def load_measurement(
     measurement: str | Path,
     *,
     baseline: str = "saved",
-    baseline_settings: dict | None = None,
+    variant: BaselineVariant | None = None,
 ) -> MeasurementFitResult:
-    """Load one measurement without fitting anything.
+    """Load one measurement and rebuild its saved fit, without fitting.
 
     Reads every subIFG file of the measurement, resolves its baseline, and
     reconstructs the saved peaks' Voigt curves from
-    ``*_CarbonylPeakFitParams.csv`` -- producing the same ``FileFitResult``
-    bundle ``fit_file`` returns, minus any newly fitted peak.
-
-    This is the entry point for inspection: it fits nothing, writes nothing, and
-    does **not** depend on ``ir_fitting.extra_peaks_base``, so the baseline and
-    fit plots work before any peak has been seeded. That ordering matters -- the
-    baselines are what should inform which peaks to seed.
+    ``*_CarbonylPeakFitParams.csv``. Fits nothing and writes nothing.
 
     Args:
-        measurement: Path to a measurement base name inside a subIFG dataset
-            folder, as for :func:`fit_file`.
-        baseline: ``"saved"`` reads the stored baseline column; ``"recompute"``
-            re-runs ``create_baseline``.
+        measurement: As for :func:`fit_file`.
+        baseline: ``"saved"`` (default) reads the stored baseline column;
+            ``"recompute"`` runs ``variant``.
+        variant: As for :func:`fit_file`.
 
     Returns:
         MeasurementFitResult with per-file raw/baseline/corrected/composite/
@@ -371,16 +353,13 @@ def load_measurement(
         raise ValueError(f"baseline must be 'saved' or 'recompute'; got {baseline!r}")
 
     folder_name, file_name, source_dir = _resolve_measurement(measurement)
-    result, _ = _run_measurement(
+    result = _run_measurement(
+        load_subifg_file,
         folder_name,
         file_name,
         source_dir,
-        voigt_settings=ir_config.get_voigt_settings(),
-        extra_peaks=[],
-        append_only=True,
         baseline=baseline,
-        on_existing="skip",
-        baseline_settings=baseline_settings,
+        variant=variant,
     )
     LOGGER.info(
         "%s: loaded %d files, fitted nothing", result.file_name, len(result.files)
@@ -421,7 +400,7 @@ def run_baseline(
 
     source_dir = subifg_dir(folder_name)
     run = BaselineRun(folder_name=folder_name, run_name=run_name, label=variant.label)
-    voigt_settings = ir_config.get_voigt_settings()
+    fit_settings = ir_config.get_fit_settings()
 
     for file_stem in selected:
         subifg_path = source_dir / file_stem
@@ -434,7 +413,7 @@ def run_baseline(
             run.warnings.append(f"{file_stem}: {exc}")
             continue
         wavenumbers, intensity = arr[:, 0], arr[:, 1]
-        outcome = variant.compute(intensity, voigt_settings, wavenumbers)
+        outcome = variant.compute(intensity, fit_settings, wavenumbers)
 
         file_key = runner.file_key_for(subifg_path)
         delta_group, _ = runner.split_file_key(file_key)
@@ -501,6 +480,69 @@ def baseline_experiment_dir(folder_name: str, run_name: str) -> Path:
     return output_dir
 
 
+@contextmanager
+def _run_log(
+    folder_name: str,
+    output_folder: str,
+    *,
+    enabled: bool = True,
+) -> Iterator[Path | None]:
+    """Copy this package's log lines to ``refit_<timestamp>.log`` for the run.
+
+    The file sits in the run's output folder beside the CSVs, and is
+    timestamped so a rerun into the same folder keeps earlier logs. The package
+    logger is raised to INFO for the duration so the file is complete; those
+    INFO lines also reach any console handler. The level is restored afterwards.
+    """
+    if not enabled:
+        yield None
+        return
+    output_dir = writer.resolve_output_dir(
+        writer.peak_fit_dir(folder_name), output_folder
+    )
+    log_path = output_dir / f"refit_{datetime.now().astimezone():%Y%m%d_%H%M%S}.log"
+    package_logger = logging.getLogger(PACKAGE_LOGGER)
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    previous_level = package_logger.level
+    if package_logger.getEffectiveLevel() > logging.INFO:
+        package_logger.setLevel(logging.INFO)
+    package_logger.addHandler(handler)
+    try:
+        yield log_path
+    except Exception:
+        LOGGER.exception("run aborted")
+        raise
+    finally:
+        package_logger.removeHandler(handler)
+        package_logger.setLevel(previous_level)
+        handler.close()
+
+
+def _log_run_header(
+    folder_name: str,
+    measurements: list[str],
+    baseline: str,
+    variant: BaselineVariant | None,
+    output_folder: str,
+) -> None:
+    """Record what this run was, so a log read the next morning stands alone."""
+    fit_settings = ir_config.get_fit_settings()
+    peaks = ir_config.get_peaks(fit_settings)
+    recipe = variant if variant is not None else BaselineVariant()
+    LOGGER.info(
+        "refit start: dataset %s, %d measurement(s)", folder_name, len(measurements)
+    )
+    LOGGER.info("output folder: %s", output_folder)
+    if baseline == "recompute":
+        LOGGER.info("baseline: recompute %s", recipe)
+    else:
+        LOGGER.info("baseline: saved *_CarbonylFitBaseline.csv")
+    LOGGER.info("optimizer: %s, seed nudge %.2g of range", FIT_METHOD, SEED_NUDGE_FRAC)
+    LOGGER.info("peaks (%d): %s", len(peaks), " ".join(str(peak) for peak in peaks))
+
+
 def _log_warning_summary(result: MeasurementFitResult) -> None:
     """Log one aggregated WARNING per distinct issue instead of one per file.
 
@@ -519,36 +561,40 @@ def _log_warning_summary(result: MeasurementFitResult) -> None:
 def fit_folder(
     folder: str | Path,
     *,
-    append_only: bool = True,
-    baseline: str = "saved",
-    on_existing: str = "skip",
+    baseline: str = "recompute",
+    variant: BaselineVariant | None = None,
     output_folder: str = "_test",
     save: bool = True,
-    baseline_settings: dict | None = None,
 ) -> BatchFitResult:
-    """Fit every measurement in a subIFG dataset folder.
+    """Refit every measurement in a subIFG dataset folder.
 
     ``folder`` may be a dataset name (resolved under
-    ``utility.subtract_ifg.sub_ifg_output``) or an absolute path.
+    ``utility.subtract_ifg.sub_ifg_output``) or an absolute path. With
+    ``save``, one ``refit_<timestamp>.log`` covering the whole batch is written
+    into the output folder -- the record to read after an overnight run.
     """
     folder_path = resolve_folder(folder)
     batch = BatchFitResult(folder_name=folder_path.name)
-    for base_name in measurement_names(folder_path):
-        try:
-            batch.measurements.append(
-                fit_file(
-                    folder_path / base_name,
-                    append_only=append_only,
-                    baseline=baseline,
-                    on_existing=on_existing,
-                    output_folder=output_folder,
-                    save=save,
-                    baseline_settings=baseline_settings,
+    names = measurement_names(folder_path)
+    with _run_log(folder_path.name, output_folder, enabled=save):
+        if save:
+            _log_run_header(folder_path.name, names, baseline, variant, output_folder)
+        for index, base_name in enumerate(names, start=1):
+            LOGGER.info("measurement %d/%d: %s", index, len(names), base_name)
+            try:
+                batch.measurements.append(
+                    fit_file(
+                        folder_path / base_name,
+                        baseline=baseline,
+                        variant=variant,
+                        output_folder=output_folder,
+                        save=save,
+                        log_file=False,
+                    )
                 )
-            )
-        except Exception as exc:
-            LOGGER.error("%s: %s", base_name, exc)
-    LOGGER.info("%s", batch.summary())
+            except Exception:  # one bad measurement must not stop the batch
+                LOGGER.exception("%s: measurement failed", base_name)
+        LOGGER.info("%s", batch.summary())
     return batch
 
 
@@ -565,9 +611,14 @@ if __name__ == "__main__":
     matplotlib.use("Agg")  # no interactive windows from a batch run
 
     folder_name = "nn1120-3_pd_ceo2_004"
-    name = "20260304_145524_pd_ceo2_004-000"
+    name = "20260304_145524_pd_ceo2_004-000"  # None = every measurement
+    output_folder = "_test"  # reused each run; e.g. "_test-1" to keep one
 
-    run = fit_file(subifg_dir(folder_name) / name)
-    print(run.summary())
-    for output_kind, output_path in run.output_paths.items():
-        print(f"  {output_kind}: {output_path}")
+    if name is None:
+        batch = fit_folder(folder_name, output_folder=output_folder)
+        print(batch.summary())
+    else:
+        run = fit_file(subifg_dir(folder_name) / name, output_folder=output_folder)
+        print(run.summary())
+        for output_kind, output_path in run.output_paths.items():
+            print(f"  {output_kind}: {output_path}")
