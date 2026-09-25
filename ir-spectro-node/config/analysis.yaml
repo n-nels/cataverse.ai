@@ -987,7 +987,7 @@ ir_fitting:
           vary: false
       - range_cm1: [1872, 1882] # Peak_1877 (new)
         center:
-          min_offset: -2
+          min_offset: -3
           max_offset: 2
         amplitude:
           value: 0.01
@@ -1006,7 +1006,7 @@ ir_fitting:
       - range_cm1: [1844, 1854] # Peak_1849 (new)
         center:
           min_offset: -2
-          max_offset: 2
+          max_offset: 6
         amplitude:
           value: 0.01
         sigma:
@@ -1024,9 +1024,10 @@ ir_fitting:
       - range_cm1: [1833, 1844] # Peak_1838 (new)
         center:
           min_offset: -2
-          max_offset: 2
+          max_offset: 6
         amplitude:
           value: 0.01
+          min: 0
         sigma:
           value: 5
           min: 2.55
