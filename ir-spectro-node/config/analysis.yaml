@@ -893,40 +893,6 @@ ir_fitting:
           value: 0
           min: 0
           vary: false
-      - range_cm1: [1790, 1800]
-        center:
-          min_offset: -5
-          max_offset: 5
-        amplitude:
-          value: 0.01
-        sigma:
-          value: 5
-          min: 2.55
-          max: 26
-        gamma:
-          value: 2
-          min: 0
-        y0:
-          value: 0
-          min: 0
-          vary: false
-      - range_cm1: [1770, 1780]
-        center:
-          min_offset: -5
-          max_offset: 5
-        amplitude:
-          value: 0.01
-        sigma:
-          value: 5
-          min: 2.55
-          max: 26
-        gamma:
-          value: 2
-          min: 0
-        y0:
-          value: 0
-          min: 0
-          vary: false
       # Low-band rules (Peak_1938..Peak_1838): set 2026-09-25 from a
       # shared-shape fit on -000 delta10.0042-0072. Sign is free throughout;
       # only 1928 and 1913 are widened -- the data does not pin the widths of

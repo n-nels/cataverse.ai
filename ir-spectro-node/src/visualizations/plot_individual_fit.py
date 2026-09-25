@@ -34,11 +34,10 @@ X_LIMITS = (2250, 1750)
 ZOOM_LIMITS = (1900, 1750)
 """Low-wavenumber window where the two candidate bands live."""
 
-DEFAULT_WINDOWS = (ZOOM_LIMITS, X_LIMITS)
-"""Emit a zoomed and a full-range figure per file unless told otherwise."""
+DEFAULT_WINDOWS = (X_LIMITS,)
+"""Emit one full-range figure per file unless told otherwise."""
 
-LIVE_PEAK_COLOR = "0.55"
-NEW_PEAK_COLOR = "tab:orange"
+PEAK_COLOR = "tab:orange"
 
 
 def figure_dir(folder_name: str) -> Path:
@@ -101,16 +100,14 @@ def plot_file_fit(
     ax.plot(x, result.corrected, color="black", linewidth=1.2, label="data", zorder=3)
     ax.plot(x, result.composite, color="red", linewidth=1.1, label="fit", zorder=4)
 
-    for curve in result.curves:
-        is_new = curve.is_new
+    for index, curve in enumerate(result.curves):
         ax.plot(
             x,
             curve.curve,
             linestyle="--",
-            linewidth=1.1 if is_new else 0.7,
-            color=NEW_PEAK_COLOR if is_new else LIVE_PEAK_COLOR,
-            alpha=1.0 if is_new else 0.65,
-            label=f"{curve.peak_name} (new)" if is_new else curve.peak_name,
+            linewidth=0.9,
+            color=PEAK_COLOR,
+            label="peak" if index == 0 else None,
             zorder=2,
         )
 
@@ -129,7 +126,6 @@ def plot_file_fit(
         residual + offset,
         color="tab:blue",
         linewidth=0.9,
-        label="residual (model - data)",
         zorder=1,
     )
     if not stacked and residual_offset:
@@ -151,11 +147,7 @@ def plot_file_fit(
     for axes in [ax] if ax_residual is ax else [ax, ax_residual]:
         rescale_y_to_window(axes, x, xlim)
 
-    handles, labels = ax.get_legend_handles_labels()
-    if not stacked:
-        extra = ax_residual.get_legend_handles_labels()
-        handles, labels = handles + extra[0][-1:], labels + extra[1][-1:]
-    ax.legend(handles, labels, fontsize=6, ncol=2, loc="upper right")
+    ax.legend(fontsize=7, loc="upper right")
     fig.tight_layout()
 
     if not save:
@@ -248,9 +240,9 @@ def plot_fits(
             (``["delta5.00*"]``); entries may be mixed and may overlap.
             ``None`` plots every file in the measurement.
         xlim: One ``(high, low)`` window, or several. Defaults to
-            ``DEFAULT_WINDOWS`` -- a zoomed figure and a full-range figure per
-            file. y is rescaled to each window; the zoomed file gets a
-            ``_1750-1900`` filename suffix so the two never collide.
+            ``DEFAULT_WINDOWS`` -- one full-range figure per file. y is
+            rescaled to each window; a non-full window gets a ``_<low>-<high>``
+            filename suffix so figures never collide.
         stacked: Residual in its own panel rather than offset below the data.
         baseline: ``"saved"`` or ``"recompute"``.
         save: Write figures to disk.
@@ -302,8 +294,8 @@ if __name__ == "__main__":
     name = "20260304_145524_pd_ceo2_004-000"
 
     # No fitting.
-    # Emits a zoomed and a full-range figure per file; pass
-    # xlim=ZOOM_LIMITS or xlim=X_LIMITS for just one.
+    # Emits one full-range figure per file; pass
+    # xlim=[X_LIMITS, ZOOM_LIMITS] to add a zoomed one.
     # Pass name=None to loop every measurement in the folder.
     paths = plot_fits(folder_name, name, file_keys=["delta10.*"])
     for item in paths:

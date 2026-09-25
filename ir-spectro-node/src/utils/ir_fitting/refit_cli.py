@@ -44,8 +44,8 @@ from src.utils.ir_fitting.writer import peak_fit_dir
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_FOLDER = "_test"
-DEFAULT_PLOT_WINDOWS = ((2250.0, 1750.0), (2000.0, 1800.0))
-"""Full ROI, and the region holding the six new peaks."""
+DEFAULT_PLOT_WINDOWS = ((2250.0, 1750.0),)
+"""Full ROI only; pass --plot-window for a zoom."""
 
 
 def build_parser() -> argparse.ArgumentParser:

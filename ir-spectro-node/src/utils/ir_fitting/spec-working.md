@@ -136,23 +136,30 @@ matching `select_param_rule`, and none overlaps an existing rule (the lowest is
 `[1970,1980]`).
 
 **Revised 2026-09-25** (see §8 steps 7–8). The first version gave all six the
-standard body with `amplitude.min: 0`. Now the sign is free on all six, and only
-1928 and 1913 are wider. The data does not determine the widths of
-1877/1849/1838, so they keep the standard width limits. That stops them turning
-into broad plateaus that trade area with the 1913 tail. y0 is `{value: 0, min: 0, vary: false}`
-throughout.
+standard body with `amplitude.min: 0`. Now the sign is free on five of the six
+(1838 keeps `min: 0`), and only 1928 and 1913 are wider. The data does not
+determine the widths of 1877/1849/1838, so they keep the standard width limits.
+That stops them turning into broad plateaus that trade area with the 1913 tail.
+y0 is `{value: 0, min: 0, vary: false}` throughout.
 
-| Peak | `range_cm1` | center offset | amplitude value | sigma value [min, max] | gamma value [min, max] | FWHM max |
+| Peak | `range_cm1` | center offset | amplitude value [min] | sigma value [min, max] | gamma value [min, max] | FWHM max |
 |---|---|---|---|---|---|---|
-| Peak_1938 | [1933, 1943] | ±2 | 0.01 | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
-| Peak_1928 | [1923, 1933] | ±2 | 0.05 | 7 [2.55, 9.0] | 3 [0, 4.0] | ≈26 |
-| Peak_1913 | [1908, 1918] | −3 / +1 | 0.03 | 12 [8, 14] | 1 [0, 3] | ≈36 (min ≈19) |
-| Peak_1877 | [1872, 1882] | ±2 | 0.01 | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
-| Peak_1849 | [1844, 1854] | ±2 | 0.01 | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
-| Peak_1838 | [1833, 1844] | ±2 | 0.01 | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
+| Peak_1938 | [1933, 1943] | ±2 | 0.01 [none] | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
+| Peak_1928 | [1923, 1933] | ±2 | 0.05 [none] | 7 [2.55, 9.0] | 3 [0, 4.0] | ≈26 |
+| Peak_1913 | [1908, 1918] | −3 / +1 | 0.03 [none] | 12 [8, 14] | 1 [0, 3] | ≈36 (min ≈19) |
+| Peak_1877 | [1872, 1882] | −3 / +2 | 0.01 [none] | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
+| Peak_1849 | [1844, 1854] | −2 / +6 | 0.01 [none] | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
+| Peak_1838 | [1833, 1844] | −2 / +6 | 0.01 [0] | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
 
-No amplitude has a `min`. The new peaks have no saved row to seed from, so
-these `value`s are their actual starting points.
+The new peaks have no saved row to seed from, so these `value`s are their
+actual starting points.
+
+**Not yet validated.** The 1877/1849/1838 center offsets and the 1838
+`amplitude.min: 0` were edited by hand after §8 steps 7–8. Those runs
+(`_test-lowband-A`, `_test-lowband-A8`) used ±2 centers and a free sign on all
+three, so their numbers describe that earlier version. With the new offsets the
+center windows are 1874–1879 (1877), 1847–1855 (1849) and 1836–1844 (1838). They
+do not overlap, but 1849 can now reach the ~1852–1856 dip.
 
 Removed:
 - `extra_peaks_base` and the `extra_*_peaks_base` group lists: the fitter always
@@ -166,9 +173,9 @@ Removed:
 - The integer / Peak_Name validation is kept.
 - `BASELINE_KEYS` and `get_baseline_settings` go if nothing else uses them.
 
-The staged `[1790,1800]` and `[1770,1780]` rules in `voigt_fit.param_rules` are
-no longer needed by ir_fitting. Whether to remove them from the live block is a
-separate cleanup.
+The staged `[1790,1800]` and `[1770,1780]` rules were removed from
+`ir_fitting.fit.param_rules` (2026-09-25); no peak sits there. They remain in
+live `voigt_fit.param_rules`. Whether to remove them there is a separate cleanup.
 
 ## 6. Seeding existing peaks from the CSV
 
@@ -204,8 +211,12 @@ new baseline moves them.
    - `Peak_Value` = nominal
    - `Peak_Area` = −trapz
    - `Data_Integral` / `Time_Delta (s)` copied from the saved rows
-6. All curves are `is_new=True`. The field is kept, or repurposed to mark the
-   six new peaks for plot colour.
+6. `is_new` marks the six new peaks (see §9a). The plots no longer use it
+   (2026-09-25):
+   - `plot_individual_fit` draws every peak in one style.
+   - The legend is just data / fit / peak.
+   - `run_refit --plot` writes one full-range (2250–1750) figure per file.
+   - Zooms are opt-in via `--plot-window`.
 
 Removed:
 - `append_only` and the live-curve reconstruct-and-subtract path in the fitter.
@@ -402,11 +413,16 @@ baseline) and `*_CarbonylFitResidual.csv`.
 - 2026-09-25, low-band rules (§5, §8 step 7):
   - The rules are tuned on `-000` delta10.0042–0072 with a shared-shape fit.
   - Peak_1856 is **not** in the set; the six peaks stay.
-  - Amplitude sign is free on all six.
+  - Amplitude sign is free on all six. Later the same day, 1838 was set back to `min: 0` (below).
   - No merging of close pairs (1938/1928, 1849/1838).
   - Nominal wavenumbers are kept, with the 1913 center offset widened to −3/+1 rather than renaming it.
   - 1877/1849/1838 stay narrow.
   - 1938 stays narrow.
+- 2026-09-25, later, hand edits after §8 steps 7–8, not yet validated by a run:
+  - Center offsets: 1877 −3/+2, 1849 −2/+6, 1838 −2/+6.
+  - 1838 back to `amplitude.min: 0`.
+  - The staged 1790/1770 rules were removed from `ir_fitting.fit`.
+  - Refit figures: full range only, with the legend reduced to data / fit / peak.
 - Baseline recipe (anchors, cut, lower anchors, guard): stays as constants in
   `baseline.py`, as the `BaselineVariant()` defaults. The per-segment std_distribution
   settings live in `ir_fitting.fit.baseline`. Moving the anchors into yaml
@@ -422,12 +438,14 @@ baseline) and `*_CarbonylFitResidual.csv`.
 - A fixed parameter (`y0`, `vary: false`) always takes the rule value, never
   a seed. Otherwise a rule edit would silently do nothing on refit.
 - `is_new` marks peaks the saved fit had no row for, i.e. the six new peaks.
-  It needs no config lookup.
+  It needs no config lookup. No plot reads it any more; it stays on
+  `PeakCurve` for callers.
 - `load_measurement` (inspection) uses `runner.load_subifg_file`, which fits
   nothing and rebuilds the saved curves.
-- The `ir_fitting.fit.param_rules` copy still carries the staged `[1790,1800]` /
-  `[1770,1780]` rules. They are harmless with no peak there, and kept so the
-  copy is a verbatim superset of `voigt_fit.param_rules`.
+- The `ir_fitting.fit.param_rules` copy no longer carries the staged
+  `[1790,1800]` / `[1770,1780]` rules (removed 2026-09-25). It is therefore not
+  a verbatim superset of `voigt_fit.param_rules`; the other 18 rules are still
+  verbatim copies.
 
 ## 10. Out of scope
 
