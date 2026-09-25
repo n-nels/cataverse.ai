@@ -12,6 +12,7 @@ python scripts\run_norhoff.py    # Norhof LN2 pump control loop (separate proces
 python scripts\run_analysis.py   # batch/offline analysis — see note below
 python scripts\run_kinetics_classification.py  # batch classification CLI — see note below
 python scripts\run_baseline_experiment.py      # baseline experiment CLI — see note below
+python scripts\run_refit.py                    # offline 24-peak refit CLI — see note below
 
 uvx ruff check .                 # lint (ruff is not a declared dependency; run via uvx)
 uvx ruff format .
@@ -25,7 +26,7 @@ how batch work is run (`scripts/run_analysis.py`, `src/analysis/main.py`).
 To run a single file through the pipeline, edit those constants rather than
 adding argparse.
 
-**Two CLIs are the exceptions.** The first is batch classification:
+**Three CLIs are the exceptions.** The first is batch classification:
 `scripts/run_kinetics_classification.py`
 (wrapping `src/utils/kinetics/classify_cli.py`) is an argparse CLI, added because the
 classification algorithm itself is under active iteration (see
@@ -47,9 +48,20 @@ lower anchors `1955 1800 1820`, cut at 1955) on the eight default files, under
 `--run-name default`. The flags are `--window`, `--anchors`, `--lower-split`,
 `--lower-anchors` and the two anchor-guard thresholds. The baseline EDA's
 comparison and diagnostic machinery (twin checks, seam/band metrics,
-`baseline_comparison.csv`) was removed — see `context/2026-09-20-baseline-cleanup-and-cli.md`. Batch **fitting** in
-`ir_fitting` is not covered and still follows edit-constants, via that
-package's `api.py` `__main__`.
+`baseline_comparison.csv`) was removed — see `context/2026-09-20-baseline-cleanup-and-cli.md`.
+
+The third is **offline refits**: `scripts/run_refit.py` (wrapping
+`src/utils/ir_fitting/refit_cli.py` → `api.fit_files`). It refits every peak in
+`ir_fitting.fit` (`config/analysis.yaml`) on selected subIFG files, using
+`least_squares` and seeding from the saved params CSV. It writes refit-only
+live-schema CSVs plus a timestamped `refit_*.log` into `--output-folder`
+(default `_test`), and figures with `--plot`. It takes the same file selectors and
+baseline-recipe flags as the baseline CLI (shared via
+`baseline_cli.add_recipe_arguments`). Peaks and rules are edited in yaml, not
+flags. It drops to below-normal priority by default, because this is the lab
+machine (OPUS, `run_server.py` and `run_norhoff.py` run here). Design and
+validation: `src/utils/ir_fitting/spec-working.md`. `api.py`'s `__main__`
+(edit-constants) remains for whole-measurement or whole-folder runs.
 
 `src/utils/kinetics/` is the tidier programmatic wrapper over the batch writer:
 `from src.utils.kinetics import fit_file, fit_folder, classify_file`. It defaults

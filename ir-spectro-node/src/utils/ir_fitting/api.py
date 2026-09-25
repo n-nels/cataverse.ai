@@ -206,6 +206,7 @@ def fit_file(
     output_folder: str = "_test",
     save: bool = True,
     log_file: bool = True,
+    file_keys: Sequence[str] | None = None,
 ) -> MeasurementFitResult:
     """Refit every configured peak for one measurement.
 
@@ -231,6 +232,9 @@ def fit_file(
         log_file: With ``save``, also write ``refit_<timestamp>.log`` into the
             output folder. :func:`fit_folder` turns this off and writes one log
             for the whole batch instead.
+        file_keys: Fit only these files: exact keys (``"delta10.0042"``), whole
+            delta groups (``"delta10"``) or globs. ``None`` fits every file.
+            The params CSV then holds only the selected files' rows.
 
     Returns:
         MeasurementFitResult with per-file curves, rows and output paths.
@@ -249,6 +253,7 @@ def fit_file(
             source_dir,
             baseline=baseline,
             variant=variant,
+            file_keys=file_keys,
         )
 
         result.params = writer.params_frame(result.files)
@@ -271,8 +276,11 @@ def _run_measurement(
     *,
     baseline: str,
     variant: BaselineVariant | None,
+    file_keys: Sequence[str] | None = None,
 ) -> MeasurementFitResult:
-    """Apply ``per_file`` (fit or load) to every subIFG file of a measurement.
+    """Apply ``per_file`` (fit or load) to the subIFG files of a measurement.
+
+    ``file_keys`` narrows the files as :func:`fit_file` describes.
 
     The saved params table is read for seeds and for the carried
     ``Data_Integral`` / ``Time_Delta (s)`` columns only; none of its rows reach
@@ -288,6 +296,22 @@ def _run_measurement(
         raise FileNotFoundError(
             f"No subIFG files matching {file_name}_delta*.* in {source_dir}"
         )
+    if file_keys is not None:
+        patterns = list(file_keys)
+        subifg_paths = [
+            item
+            for item in subifg_paths
+            if any(
+                matches_file_key(
+                    runner.file_key_for(item),
+                    runner.split_file_key(runner.file_key_for(item))[0],
+                    pattern,
+                )
+                for pattern in patterns
+            )
+        ]
+        if not subifg_paths:
+            raise ValueError(f"{file_name}: no subIFG files matched file_keys={patterns}")
 
     LOGGER.info("%s: %d subIFG files", file_name, len(subifg_paths))
     for subifg_path in subifg_paths:
@@ -565,18 +589,34 @@ def fit_folder(
     variant: BaselineVariant | None = None,
     output_folder: str = "_test",
     save: bool = True,
+    measurements: Sequence[str] | None = None,
+    file_keys: Sequence[str] | None = None,
 ) -> BatchFitResult:
-    """Refit every measurement in a subIFG dataset folder.
+    """Refit the measurements of a subIFG dataset folder.
 
     ``folder`` may be a dataset name (resolved under
     ``utility.subtract_ifg.sub_ifg_output``) or an absolute path. With
     ``save``, one ``refit_<timestamp>.log`` covering the whole batch is written
     into the output folder -- the record to read after an overnight run.
+
+    ``measurements`` (exact names or globs, e.g. ``["*-021"]``) and
+    ``file_keys`` (as :func:`fit_file`) narrow the run; ``None`` means all.
     """
     folder_path = resolve_folder(folder)
     batch = BatchFitResult(folder_name=folder_path.name)
     names = measurement_names(folder_path)
-    with _run_log(folder_path.name, output_folder, enabled=save):
+    if measurements is not None:
+        if isinstance(measurements, str):
+            raise TypeError("measurements must be a list of patterns, not a string")
+        names = [
+            name
+            for name in names
+            if any(name == pattern or fnmatchcase(name, pattern) for pattern in measurements)
+        ]
+        if not names:
+            raise ValueError(f"no measurements in {folder_path} matched {measurements}")
+    with _run_log(folder_path.name, output_folder, enabled=save) as log_path:
+        batch.log_path = log_path
         if save:
             _log_run_header(folder_path.name, names, baseline, variant, output_folder)
         for index, base_name in enumerate(names, start=1):
@@ -590,6 +630,61 @@ def fit_folder(
                         output_folder=output_folder,
                         save=save,
                         log_file=False,
+                        file_keys=file_keys,
+                    )
+                )
+            except Exception:  # one bad measurement must not stop the batch
+                LOGGER.exception("%s: measurement failed", base_name)
+        LOGGER.info("%s", batch.summary())
+    return batch
+
+
+
+def fit_files(
+    folder: str | Path,
+    files: Sequence[str],
+    *,
+    baseline: str = "recompute",
+    variant: BaselineVariant | None = None,
+    output_folder: str = "_test",
+    save: bool = True,
+) -> BatchFitResult:
+    """Refit an explicit list of subIFG files from one dataset folder.
+
+    ``files`` are subIFG filenames (``<base name>_delta<N>.<index>``), as
+    :func:`subifg_files` returns them. They are grouped by measurement, and each
+    measurement's params CSV holds only its listed files' rows. One
+    ``refit_<timestamp>.log`` covers the whole call. This is the entry point for
+    the refit CLI.
+    """
+    folder_path = resolve_folder(folder)
+    by_measurement: dict[str, list[str]] = {}
+    for filename in files:
+        item = Path(str(filename))
+        base_name = "_".join(item.name.split("_")[:-1])
+        if not base_name or "_delta" not in item.name:
+            raise ValueError(f"not a subIFG filename: {filename!r}")
+        by_measurement.setdefault(base_name, []).append(runner.file_key_for(item))
+
+    batch = BatchFitResult(folder_name=folder_path.name)
+    names = sorted(by_measurement)
+    with _run_log(folder_path.name, output_folder, enabled=save) as log_path:
+        batch.log_path = log_path
+        if save:
+            _log_run_header(folder_path.name, names, baseline, variant, output_folder)
+            LOGGER.info("files (%d): %s", len(files), " ".join(sorted(map(str, files))))
+        for index, base_name in enumerate(names, start=1):
+            LOGGER.info("measurement %d/%d: %s", index, len(names), base_name)
+            try:
+                batch.measurements.append(
+                    fit_file(
+                        folder_path / base_name,
+                        baseline=baseline,
+                        variant=variant,
+                        output_folder=output_folder,
+                        save=save,
+                        log_file=False,
+                        file_keys=by_measurement[base_name],
                     )
                 )
             except Exception:  # one bad measurement must not stop the batch

@@ -239,6 +239,8 @@ class BatchFitResult:
 
     folder_name: str
     measurements: list[MeasurementFitResult] = field(default_factory=list)
+    log_path: Path | None = None
+    """The run's ``refit_<timestamp>.log``, when one was written."""
 
     def summary(self) -> str:
         """One-line batch summary."""

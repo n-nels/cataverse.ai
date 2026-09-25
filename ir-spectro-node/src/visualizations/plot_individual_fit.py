@@ -62,6 +62,7 @@ def plot_file_fit(
     xlim: tuple[float, float] = X_LIMITS,
     save: bool = True,
     dpi: int = 300,
+    output_dir: Path | None = None,
 ) -> Path | None:
     """Plot one subIFG file's fit.
 
@@ -163,7 +164,7 @@ def plot_file_fit(
         plt.close(fig)
         return None
 
-    output_dir = figure_dir(folder_name)
+    output_dir = Path(output_dir) if output_dir is not None else figure_dir(folder_name)
     output_dir.mkdir(parents=True, exist_ok=True)
     # Keep zoomed figures from overwriting full-range ones.
     suffix = "" if tuple(xlim) == X_LIMITS else f"_{int(min(xlim))}-{int(max(xlim))}"
@@ -181,8 +182,12 @@ def plot_measurement_fits(
     xlim: XLim | Sequence[XLim] = DEFAULT_WINDOWS,
     save: bool = True,
     dpi: int = 300,
+    output_dir: Path | None = None,
 ) -> list[Path]:
     """Plot every file in a measurement.
+
+    ``output_dir`` overrides the default figure folder, e.g. to keep one
+    refit run's figures apart from another's.
 
     ``file_keys`` entries may each be an exact file key (``"delta5.0007"``), a
     whole delta group (``"delta5"`` -- every index in it), or a glob
@@ -199,6 +204,7 @@ def plot_measurement_fits(
                 xlim=window,
                 save=save,
                 dpi=dpi,
+                output_dir=output_dir,
             )
             if output_path is not None:
                 written.append(output_path)

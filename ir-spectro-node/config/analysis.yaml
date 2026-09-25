@@ -510,6 +510,7 @@ ir_fitting:
       - 1978 # 13CO 1928 (new)
       - 1963 # 13CO 1913 (new)
       - 1927 # 13CO 1877 (new)
+      - 1906 # 13CO 1856 (new)
       - 1899 # 13CO 1849 (new)
       - 1888 # 13CO 1838 (new)
     monomer_peaks_base: # 12CO; 2175 moved to unknown
@@ -530,6 +531,7 @@ ir_fitting:
       - 1978
       - 1963
       - 1927
+      - 1906
       - 1899
       - 1888
     unknown_peaks_base: # 12CO

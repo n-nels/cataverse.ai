@@ -32,6 +32,7 @@ from src.utils.ir_fitting.baseline import (
     DEFAULT_FILES,
     DEFAULT_FOLDER,
     DEFAULT_LABEL,
+    DEFAULT_WINDOW,
     BaselineVariant,
 )
 
@@ -40,70 +41,34 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_RUN_NAME = "default"
 
 
-def build_parser() -> argparse.ArgumentParser:
-    # Defaults come from the one shared recipe, which the refit also uses.
+def add_recipe_arguments(
+    parser: argparse.ArgumentParser,
+    *,
+    window: bool = True,
+) -> None:
+    """Add the baseline-recipe and anchor-guard flags.
+
+    Shared with the refit CLI so both take the same recipe flags, with
+    defaults from ``BaselineVariant()``. ``window=False`` omits ``--window``:
+    the refit's baseline must span the fixed fit ROI.
+    """
     default = BaselineVariant()
-    parser = argparse.ArgumentParser(
-        prog="run_baseline_experiment",
-        description=(
-            "Run one baseline recipe over chosen subIFG files and write one "
-            "figure per file. Fits nothing and touches no params CSV."
-        ),
-    )
-
-    data = parser.add_argument_group(
-        "which data to look at",
-        f"Both selectors omitted runs the {len(DEFAULT_FILES)} default files, "
-        f"which exist only in {DEFAULT_FOLDER}.",
-    )
-    data.add_argument(
-        "--folder",
-        default=DEFAULT_FOLDER,
-        help="Dataset under utility.subtract_ifg.sub_ifg_output "
-        "(default: %(default)s).",
-    )
-    data.add_argument(
-        "--measurements",
-        nargs="+",
-        default=None,
-        help='Measurement base names or globs, e.g. "*-007". Default: all.',
-    )
-    data.add_argument(
-        "--delta-groups",
-        nargs="+",
-        default=None,
-        help='Delta groups or file keys: "delta10", "delta10.0042", '
-        '"delta10.00*". Default: all.',
-    )
-    data.add_argument(
-        "--limit",
-        type=int,
-        default=DEFAULT_FIGURE_BUDGET,
-        help="Refuse a selection larger than this (default: %(default)s). "
-        "0 disables the check.",
-    )
-    data.add_argument(
-        "--run-name",
-        default=DEFAULT_RUN_NAME,
-        help="Output subfolder under the dataset's baseline_experiments "
-        "directory (default: %(default)s). Reused -- a second run overwrites it.",
-    )
-
     recipe = parser.add_argument_group("the recipe")
     recipe.add_argument(
         "--label",
         default=DEFAULT_LABEL,
         help="Name shown in the figure legend (default: %(default)r).",
     )
-    recipe.add_argument(
-        "--window",
-        nargs=2,
-        type=float,
-        metavar=("HIGH", "LOW"),
-        default=list(default.window),
-        help="Wavenumber extent handed to the algorithm, high then low "
-        "(default: %(default)s).",
-    )
+    if window:
+        recipe.add_argument(
+            "--window",
+            nargs=2,
+            type=float,
+            metavar=("HIGH", "LOW"),
+            default=list(default.window),
+            help="Wavenumber extent handed to the algorithm, high then low "
+            "(default: %(default)s).",
+        )
     recipe.add_argument(
         "--anchors",
         nargs="+",
@@ -169,6 +134,56 @@ def build_parser() -> argparse.ArgumentParser:
         "(default: %(default)s).",
     )
 
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="run_baseline_experiment",
+        description=(
+            "Run one baseline recipe over chosen subIFG files and write one "
+            "figure per file. Fits nothing and touches no params CSV."
+        ),
+    )
+
+    data = parser.add_argument_group(
+        "which data to look at",
+        f"Both selectors omitted runs the {len(DEFAULT_FILES)} default files, "
+        f"which exist only in {DEFAULT_FOLDER}.",
+    )
+    data.add_argument(
+        "--folder",
+        default=DEFAULT_FOLDER,
+        help="Dataset under utility.subtract_ifg.sub_ifg_output "
+        "(default: %(default)s).",
+    )
+    data.add_argument(
+        "--measurements",
+        nargs="+",
+        default=None,
+        help='Measurement base names or globs, e.g. "*-007". Default: all.',
+    )
+    data.add_argument(
+        "--delta-groups",
+        nargs="+",
+        default=None,
+        help='Delta groups or file keys: "delta10", "delta10.0042", '
+        '"delta10.00*". Default: all.',
+    )
+    data.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_FIGURE_BUDGET,
+        help="Refuse a selection larger than this (default: %(default)s). "
+        "0 disables the check.",
+    )
+    data.add_argument(
+        "--run-name",
+        default=DEFAULT_RUN_NAME,
+        help="Output subfolder under the dataset's baseline_experiments "
+        "directory (default: %(default)s). Reused -- a second run overwrites it.",
+    )
+
+    add_recipe_arguments(parser)
+
     output = parser.add_argument_group("output")
     output.add_argument(
         "--no-plot", action="store_true", help="Skip rendering figures."
@@ -195,7 +210,11 @@ def build_variant(args: argparse.Namespace) -> BaselineVariant:
         LOGGER.info("--no-lower-split: the lower anchors are dropped.")
     return BaselineVariant(
         label=args.label,
-        window=(float(args.window[0]), float(args.window[1])),
+        window=(
+            (float(args.window[0]), float(args.window[1]))
+            if getattr(args, "window", None)
+            else DEFAULT_WINDOW
+        ),
         # tuple(), never set(): repeated anchors are weights.
         anchors=() if args.no_anchors else tuple(args.anchors),
         lower_split_cm1=lower_split,
