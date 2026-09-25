@@ -11,7 +11,7 @@ the two disagree.
 | Wire the new baseline into the fit? | Yes — `"recompute"` runs the default recipe from `baseline_cli.py` | §3 |
 | Are new-baseline fits full refits? | Yes — full refit is the only mode. No append-only, no toggles | §7 |
 | Existing peaks' starting values | Always seeded from `*_CarbonylPeakFitParams.csv` (no switch) | §6 |
-| Rules for the six new peaks | Proposal accepted: one rule each, center ±2, standard widths | §5 |
+| Rules for the six new peaks | Proposal accepted: one rule each, center ±2, standard widths. Revised 2026-09-25: free sign; 1928/1913 widened | §5 |
 | Output format | Same schema as live, but no calls into live code | §4, §7 |
 | Window | Unchanged (2250–1750) | — |
 | 1845 / 1825 | Dropped; not part of this work | §2 |
@@ -133,26 +133,26 @@ ir_fitting:
 
 New rules, in 13CO, one per peak. Ranges are lower-inclusive and upper-exclusive,
 matching `select_param_rule`, and none overlaps an existing rule (the lowest is
-`[1970,1980]`). All six share the same body:
+`[1970,1980]`).
 
-| Peak | `range_cm1` |
-|---|---|
-| Peak_1938 | [1933, 1943] |
-| Peak_1928 | [1923, 1933] |
-| Peak_1913 | [1908, 1918] |
-| Peak_1877 | [1872, 1882] |
-| Peak_1849 | [1844, 1854] |
-| Peak_1838 | [1833, 1844] |
+**Revised 2026-09-25** (see §8 steps 7–8). The first version gave all six the
+standard body with `amplitude.min: 0`. Now the sign is free on all six, and only
+1928 and 1913 are wider. The data does not determine the widths of
+1877/1849/1838, so they keep the standard width limits. That stops them turning
+into broad plateaus that trade area with the 1913 tail. y0 is `{value: 0, min: 0, vary: false}`
+throughout.
 
-```yaml
-      center:    {min_offset: -2, max_offset: 2}
-      amplitude: {value: 0.01, min: 0}
-      sigma:     {value: 5, min: 2.55, max: 6.37}
-      gamma:     {value: 2, min: 0, max: 2.8}
-      y0:        {value: 0, min: 0, vary: false}
-```
+| Peak | `range_cm1` | center offset | amplitude value | sigma value [min, max] | gamma value [min, max] | FWHM max |
+|---|---|---|---|---|---|---|
+| Peak_1938 | [1933, 1943] | ±2 | 0.01 | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
+| Peak_1928 | [1923, 1933] | ±2 | 0.05 | 7 [2.55, 9.0] | 3 [0, 4.0] | ≈26 |
+| Peak_1913 | [1908, 1918] | −3 / +1 | 0.03 | 12 [8, 14] | 1 [0, 3] | ≈36 (min ≈19) |
+| Peak_1877 | [1872, 1882] | ±2 | 0.01 | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
+| Peak_1849 | [1844, 1854] | ±2 | 0.01 | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
+| Peak_1838 | [1833, 1844] | ±2 | 0.01 | 5 [2.55, 6.37] | 2 [0, 2.8] | ≈18 |
 
-Loosen per peak after the step 3 pin counts in §8.
+No amplitude has a `min`. The new peaks have no saved row to seed from, so
+these `value`s are their actual starting points.
 
 Removed:
 - `extra_peaks_base` and the `extra_*_peaks_base` group lists: the fitter always
@@ -313,13 +313,83 @@ baseline) and `*_CarbonylFitResidual.csv`.
    Seeded fits come out equal or better, 25–90× faster, and all converge. The
    step 4/5 numbers above used `leastsq` and should be rerun.
 
+7. **Low-band rules: shared-shape fit on `-000` — done 2026-09-25.**
+   - **Data:** `20260630_141811_pd_ceo2_000-000`, delta10.0042/0052/0062/0072, fitted
+     below the 1955 cut (1965–1790).
+   - **Model:**
+     - The six low-band peaks share one center, sigma and gamma across all four files, with one amplitude per peak per file.
+     - The sign is free.
+     - 1975/1988 are free per file, within their rules.
+     - Peaks ≥2000 are fixed at the `_test` refit values.
+     - Optimizer: `least_squares`, run from 5 starting points.
+     - The script is scratch only, not in the repo.
+   - **Result:** all 5 starts converge (with a raised evaluation cap), but to different minima, RSS 6.0e-6 to 7.6e-6.
+     - **Consistent across starts:**
+       - 1928: center 1927–1929, FWHM 18–25.
+       - 1913: center 1910–1912, FWHM 29–30.
+       - 1938: center ~1938, but with near-zero amplitude whose sign flips.
+     - **Not consistent:**
+       - 1877: FWHM 21–42.
+       - 1849: center 1844–1850.
+       - 1838: FWHM 10–33.
+     - With free sign, neighbours partly cancel.
+   - **Band shape:** one broad, lopsided band peaking near 1928, with a tail to about 1890. Below 1880 there are only small, narrow features, at about 1870 (+), 1855 (−), 1845 (+) and 1810 (−).
+   - **Anchors:** the fitted low-band signal at the 1955/1820/1800 anchors is 1–8% of the band height, so the baseline is not absorbing the band.
+   - **Rules:** these results set the §5 rules (2026-09-25).
+   - **Validation**, same seeds and baseline for both. Old rules → `_test-lowband-0`, new rules → `_test-lowband-A`:
+
+   | `-000` | 0042 | 0052 | 0062 | 0072 |
+   |---|---|---|---|---|
+   | RSS 1955–1800, old → new | 1.05e-5 → 3.2e-6 | 5.7e-6 → 1.6e-6 | 2.0e-6 → 3.8e-7 | 8.5e-7 → 6.0e-7 |
+   | converged, old → new | **no (194k cap)** → yes (52k) | yes → yes | yes → yes | yes → yes |
+   | low-band total area, new | +0.179 | +0.114 | +0.074 | +0.030 |
+
+   - **Pins and time:** low-band pins go from 1 to 0, and the four fits take about 1.5 min instead of about 5.
+   - **Shape stability across the four files:**
+     - 1928 sits at 1927.8–1928.3, FWHM ≈20.
+     - 1913 sits at 1912.8–1913.1, FWHM ≈30–31.
+   - **Figures:** the 1898 shoulder is now fitted. The old rules put a false dip near 1900 in 0042.
+   - **Area:** the low-band total is within 6% of the old rules', but more of it now sits in 1913 than in 1938.
+   - **Still weak:** 1849 changes sign between files, following the ~1852 feature.
+
+8. **Low-band rules on the 8 default files — done 2026-09-25**, output in `_test-lowband-A8`.
+   - **Convergence:** all 8 converge, in 3–7 s each (3.1k–6.6k evaluations). There is no old-rules `least_squares` run on these 8 to compare against; step 5 used `leastsq`.
+   - **Shapes, 6 of 8 files** (all but -022):
+     - 1928: center 1926.0–1928.8, FWHM 15–24.
+     - 1913: center 1910.0–1914.0, FWHM 26–36.
+     - In -007 delta10.0042 the 1945–1880 band is fitted closely, and 1849 goes negative to follow the ~1850 dip.
+   - **Pins over 8 files:**
+
+     | Peak | Pins | Notes |
+     |---|---|---|
+     | 1938 | 4 | |
+     | 1928 | 2 | both on center |
+     | 1913 | 8 | center at both edges; gamma at its 3.0 cap 3× |
+     | 1877 | 8 | mostly center |
+     | 1849 | 8 | mostly center |
+     | 1838 | 6 | mostly center |
+
+     The width-cap pins on 1877/1849/1838 occur mainly in -022. The existing 18 peaks pin far more often, for example 2000, 2015 and 2156 on 6–8 files each (the old width cap, untouched here).
+   - **-022 fails, and it is a baseline problem:**
+     - In delta10.0022 and delta10.0042 the band comes out negative.
+     - The corrected spectrum rises to about +0.0025 below 1850.
+     - 1938 fits to −0.141 while 1877/1849/1838 go strongly positive to follow the slope.
+     - The low-band total area is therefore negative: −0.069 and −0.034.
+     - The lower baseline segment is the cause, not the rules.
+
 ### Open after validation
 
 - **Throughput**: fits are serial. Large batches go on a different machine
   (decided 2026-09-24). This one hosts OPUS, the ZMQ server and the LN2 pump loop.
-- **Rules for 1948–1878**: the pin pattern, the 1898 shoulder and the 1852
-  dip suggest revisiting the six narrow rules. The user is reviewing the
-  figures.
+- **Rules for 1948–1838**: revised 2026-09-25 (§5, §8 steps 7–8). Remaining:
+  - 1913's gamma cap (3.0) could go to about 4.
+  - 1849 changes sign between files.
+  - 1877/1849/1838 centers often end on their bounds.
+- **-022 lower baseline**: the 1955/1820/1800 lower anchors do not follow
+  -022 (delta10.0022, delta10.0042), and the low band fits negative there
+  (§8 step 8). This belongs to the baseline work, not the rules.
+- **Existing peaks' width cap** (sigma 6.37 / gamma 2.8): 1975, 2000, 2015,
+  2156 and others pin on most files. Out of scope for the low-band work.
 - Out of scope (decided 2026-09-24): `*_CarbonylPeakArea.csv` / kinetics from
   refit output, and a diagnostics CSV.
 
@@ -329,6 +399,14 @@ baseline) and `*_CarbonylFitResidual.csv`.
   new-peak rules are as proposed (§5).
 - 2026-09-24: `PdCO_mol` is left empty on refitted rows. Config stays a block in
   `analysis.yaml` (`ir_fitting.fit`).
+- 2026-09-25, low-band rules (§5, §8 step 7):
+  - The rules are tuned on `-000` delta10.0042–0072 with a shared-shape fit.
+  - Peak_1856 is **not** in the set; the six peaks stay.
+  - Amplitude sign is free on all six.
+  - No merging of close pairs (1938/1928, 1849/1838).
+  - Nominal wavenumbers are kept, with the 1913 center offset widened to −3/+1 rather than renaming it.
+  - 1877/1849/1838 stay narrow.
+  - 1938 stays narrow.
 - Baseline recipe (anchors, cut, lower anchors, guard): stays as constants in
   `baseline.py`, as the `BaselineVariant()` defaults. The per-segment std_distribution
   settings live in `ir_fitting.fit.baseline`. Moving the anchors into yaml

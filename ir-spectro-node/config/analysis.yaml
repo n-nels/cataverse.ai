@@ -510,7 +510,6 @@ ir_fitting:
       - 1978 # 13CO 1928 (new)
       - 1963 # 13CO 1913 (new)
       - 1927 # 13CO 1877 (new)
-      - 1906 # 13CO 1856 (new)
       - 1899 # 13CO 1849 (new)
       - 1888 # 13CO 1838 (new)
     monomer_peaks_base: # 12CO; 2175 moved to unknown
@@ -531,7 +530,6 @@ ir_fitting:
       - 1978
       - 1963
       - 1927
-      - 1906
       - 1899
       - 1888
     unknown_peaks_base: # 12CO
@@ -929,13 +927,16 @@ ir_fitting:
           value: 0
           min: 0
           vary: false
+      # Low-band rules (Peak_1938..Peak_1838): set 2026-09-25 from a
+      # shared-shape fit on -000 delta10.0042-0072. Sign is free throughout;
+      # only 1928 and 1913 are widened -- the data does not pin the widths of
+      # 1877/1849/1838, so they stay narrow. See spec-working.md section 5.
       - range_cm1: [1933, 1943] # Peak_1938 (new)
         center:
           min_offset: -2
           max_offset: 2
         amplitude:
           value: 0.01
-          min: 0
         sigma:
           value: 5
           min: 2.55
@@ -948,40 +949,38 @@ ir_fitting:
           value: 0
           min: 0
           vary: false
-      - range_cm1: [1923, 1933] # Peak_1928 (new)
+      - range_cm1: [1923, 1933] # Peak_1928 (new): FWHM up to ~26
         center:
           min_offset: -2
           max_offset: 2
         amplitude:
-          value: 0.01
-          min: 0
+          value: 0.05
         sigma:
-          value: 5
+          value: 7
           min: 2.55
-          max: 6.37
+          max: 9.0
         gamma:
-          value: 2
+          value: 3
           min: 0
-          max: 2.8
+          max: 4.0
         y0:
           value: 0
           min: 0
           vary: false
-      - range_cm1: [1908, 1918] # Peak_1913 (new)
+      - range_cm1: [1908, 1918] # Peak_1913 (new): broad, FWHM ~19-36
         center:
-          min_offset: -2
-          max_offset: 2
+          min_offset: -3
+          max_offset: 1
         amplitude:
-          value: 0.01
-          min: 0
+          value: 0.03
         sigma:
-          value: 5
-          min: 2.55
-          max: 6.37
+          value: 12
+          min: 8
+          max: 14
         gamma:
-          value: 2
+          value: 1
           min: 0
-          max: 2.8
+          max: 3
         y0:
           value: 0
           min: 0
@@ -992,7 +991,6 @@ ir_fitting:
           max_offset: 2
         amplitude:
           value: 0.01
-          min: 0
         sigma:
           value: 5
           min: 2.55
@@ -1011,7 +1009,6 @@ ir_fitting:
           max_offset: 2
         amplitude:
           value: 0.01
-          min: 0
         sigma:
           value: 5
           min: 2.55
@@ -1030,7 +1027,6 @@ ir_fitting:
           max_offset: 2
         amplitude:
           value: 0.01
-          min: 0
         sigma:
           value: 5
           min: 2.55
