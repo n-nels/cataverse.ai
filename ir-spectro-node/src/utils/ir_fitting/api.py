@@ -77,12 +77,23 @@ def resolve_folder(folder: str | Path) -> Path:
     return folder_path
 
 
+ISO_X_MARKER = "isoX"
+"""Isotope-exchange subIFGs carry this in their name. The live server routes
+them to the iso_xchg integration, never to the carbonyl fit (see
+``src/instrument/dispatch.py``), so folder discovery here skips them."""
+
+
+def _is_fit_subifg(item: Path) -> bool:
+    """True for a subIFG file the carbonyl refit applies to."""
+    return item.is_file() and "_delta" in item.name and ISO_X_MARKER not in item.name
+
+
 def measurement_names(folder: str | Path) -> list[str]:
     """Return every measurement base name in a subIFG dataset folder.
 
     A subIFG file is named ``<base name>_delta<N>.<index>``, so stripping the
     trailing ``_delta...`` chunk and deduplicating gives one entry per
-    measurement.
+    measurement. ``isoX`` files are skipped.
 
     Shared by :func:`fit_folder` and the plotting entry points, so folder
     discovery is defined once.
@@ -92,7 +103,7 @@ def measurement_names(folder: str | Path) -> list[str]:
         {
             "_".join(item.name.split("_")[:-1])
             for item in folder_path.iterdir()
-            if item.is_file() and "_delta" in item.name
+            if _is_fit_subifg(item)
         }
         - {""}
     )
@@ -127,6 +138,7 @@ def subifg_files(
 
     Returns:
         Sorted subIFG filenames, ready for ``run_baseline(files=...)``.
+        ``isoX`` files are never returned.
 
     Raises:
         ValueError: When nothing matched, or when more than ``limit`` files did.
@@ -144,8 +156,10 @@ def subifg_files(
     selected: list[str] = []
     seen_measurements: set[str] = set()
     seen_keys: set[str] = set()
+    n_iso_x = 0
     for item in sorted(folder_path.iterdir()):
-        if not item.is_file() or "_delta" not in item.name:
+        if not _is_fit_subifg(item):
+            n_iso_x += item.is_file() and ISO_X_MARKER in item.name
             continue
         base_name = "_".join(item.name.split("_")[:-1])
         file_key = runner.file_key_for(item)
@@ -179,10 +193,12 @@ def subifg_files(
             f"`limit` on purpose."
         )
     LOGGER.info(
-        "%s: selected %d subIFG files from %d measurements",
+        "%s: selected %d subIFG files from %d measurements (skipped %d %s files)",
         folder_path.name,
         len(selected),
         len({"_".join(name.split("_")[:-1]) for name in selected}),
+        n_iso_x,
+        ISO_X_MARKER,
     )
     return selected
 
