@@ -859,7 +859,7 @@ ir_fitting:
           vary: false
       - range_cm1: [1983, 1993]
         center:
-          min_offset: -1
+          min_offset: -4
           max_offset: 1
         amplitude:
           value: 0.01
