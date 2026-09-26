@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from fnmatch import fnmatchcase
@@ -42,6 +42,7 @@ from src.utils.ir_fitting.result_types import (
     BaselineRun,
     BatchFitResult,
     FileBaseline,
+    FileFitResult,
     MeasurementFitResult,
     matches_file_key,
 )
@@ -53,6 +54,9 @@ PACKAGE_LOGGER = "src.utils.ir_fitting"
 # and its lines would miss the package-level file handler.
 LOGGER = logging.getLogger(f"{PACKAGE_LOGGER}.api")
 LOG_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
+
+FileCallback = Callable[[MeasurementFitResult, FileFitResult], None]
+"""Called with (measurement so far, file just processed) after each file."""
 
 def subifg_dir(folder_name: str) -> Path:
     """Return the subIFG source folder for a dataset."""
@@ -207,6 +211,7 @@ def fit_file(
     save: bool = True,
     log_file: bool = True,
     file_keys: Sequence[str] | None = None,
+    on_file: FileCallback | None = None,
 ) -> MeasurementFitResult:
     """Refit every configured peak for one measurement.
 
@@ -235,6 +240,9 @@ def fit_file(
         file_keys: Fit only these files: exact keys (``"delta10.0042"``), whole
             delta groups (``"delta10"``) or globs. ``None`` fits every file.
             The params CSV then holds only the selected files' rows.
+        on_file: Called after each file is fitted, before the next one starts,
+            e.g. to write its figure while the run is still going. An exception
+            it raises is logged and does not stop the fit.
 
     Returns:
         MeasurementFitResult with per-file curves, rows and output paths.
@@ -254,6 +262,7 @@ def fit_file(
             baseline=baseline,
             variant=variant,
             file_keys=file_keys,
+            on_file=on_file,
         )
 
         result.params = writer.params_frame(result.files)
@@ -277,10 +286,12 @@ def _run_measurement(
     baseline: str,
     variant: BaselineVariant | None,
     file_keys: Sequence[str] | None = None,
+    on_file: FileCallback | None = None,
 ) -> MeasurementFitResult:
     """Apply ``per_file`` (fit or load) to the subIFG files of a measurement.
 
-    ``file_keys`` narrows the files as :func:`fit_file` describes.
+    ``file_keys`` narrows the files and ``on_file`` is called per file, both as
+    :func:`fit_file` describes.
 
     The saved params table is read for seeds and for the carried
     ``Data_Integral`` / ``Time_Delta (s)`` columns only; none of its rows reach
@@ -347,6 +358,11 @@ def _run_measurement(
                 file_result.n_clipped,
                 time.perf_counter() - started,
             )
+        if on_file is not None:
+            try:
+                on_file(result, file_result)
+            except Exception:  # a failed callback must not abort the fit
+                LOGGER.exception("%s: on_file callback failed", subifg_path.name)
 
     return result
 
@@ -648,14 +664,15 @@ def fit_files(
     variant: BaselineVariant | None = None,
     output_folder: str = "_test",
     save: bool = True,
+    on_file: FileCallback | None = None,
 ) -> BatchFitResult:
     """Refit an explicit list of subIFG files from one dataset folder.
 
     ``files`` are subIFG filenames (``<base name>_delta<N>.<index>``), as
     :func:`subifg_files` returns them. They are grouped by measurement, and each
     measurement's params CSV holds only its listed files' rows. One
-    ``refit_<timestamp>.log`` covers the whole call. This is the entry point for
-    the refit CLI.
+    ``refit_<timestamp>.log`` covers the whole call. ``on_file`` is passed to
+    :func:`fit_file`. This is the entry point for the refit CLI.
     """
     folder_path = resolve_folder(folder)
     by_measurement: dict[str, list[str]] = {}
@@ -685,6 +702,7 @@ def fit_files(
                         save=save,
                         log_file=False,
                         file_keys=by_measurement[base_name],
+                        on_file=on_file,
                     )
                 )
             except Exception:  # one bad measurement must not stop the batch

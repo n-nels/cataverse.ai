@@ -113,8 +113,9 @@ def build_parser() -> argparse.ArgumentParser:
     output.add_argument(
         "--plot",
         action="store_true",
-        help="Write one figure per file and window, into the individual-fit "
-        "figure folder under a subfolder named like --output-folder.",
+        help="Write one figure per file and window, as each file finishes, into "
+        "the individual-fit figure folder under a subfolder named like "
+        "--output-folder.",
     )
     output.add_argument(
         "--plot-window",
@@ -217,17 +218,12 @@ def main(argv: list[str] | None = None) -> None:
     if not args.normal_priority:
         _lower_priority()
 
-    batch = fit_files(
-        args.folder,
-        files,
-        baseline=args.baseline,
-        variant=variant,
-        output_folder=args.output_folder,
-        save=not args.no_save,
-    )
-
+    # Figures are written as each file finishes, not after the batch, so a
+    # long run can be watched and a crash keeps every figure drawn so far.
+    figures: list[Path] = []
+    on_file = None
     if args.plot:
-        from src.visualizations.plot_individual_fit import plot_measurement_fits
+        from src.visualizations.plot_individual_fit import plot_file_fit
 
         windows = (
             [tuple(w) for w in args.plot_window]
@@ -235,14 +231,33 @@ def main(argv: list[str] | None = None) -> None:
             else list(DEFAULT_PLOT_WINDOWS)
         )
         figure_dir = _figure_dir(args.folder, args.output_folder)
-        n_figures = 0
-        for measurement in batch.measurements:
-            n_figures += len(
-                plot_measurement_fits(
-                    measurement, xlim=windows, dpi=args.dpi, output_dir=figure_dir
+
+        def on_file(measurement, file_result) -> None:
+            for window in windows:
+                output_path = plot_file_fit(
+                    file_result,
+                    folder_name=measurement.folder_name,
+                    file_name=measurement.file_name,
+                    xlim=window,
+                    dpi=args.dpi,
+                    output_dir=figure_dir,
                 )
-            )
-        print(f"\n{n_figures} figures in {figure_dir}")
+                if output_path is not None:
+                    figures.append(output_path)
+                    LOGGER.info("figure -> %s", output_path.name)
+
+    batch = fit_files(
+        args.folder,
+        files,
+        baseline=args.baseline,
+        variant=variant,
+        output_folder=args.output_folder,
+        save=not args.no_save,
+        on_file=on_file,
+    )
+
+    if args.plot:
+        print(f"\n{len(figures)} figures in {figure_dir}")
 
     print(f"\n{batch.summary()}")
     not_converged = [
