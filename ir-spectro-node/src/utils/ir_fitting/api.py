@@ -18,6 +18,7 @@ params CSV, and writes one merged CSV.
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -672,6 +673,26 @@ def fit_folder(
 
 
 
+def _init_fit_worker(log_queue) -> None:
+    """Set up a refit worker process: Agg plots, logs sent to the parent."""
+    import logging.handlers
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    root = logging.getLogger()
+    root.handlers[:] = [logging.handlers.QueueHandler(log_queue)]
+    root.setLevel(logging.INFO)
+
+
+class _ForwardToLogger(logging.Handler):
+    """Hand a worker's log record to the same-named logger in this process,
+    so it reaches the console and the run's log file like a local line."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        logging.getLogger(record.name).handle(record)
+
+
 def fit_files(
     folder: str | Path,
     files: Sequence[str],
@@ -681,6 +702,7 @@ def fit_files(
     output_folder: str = "_test",
     save: bool = True,
     on_file: FileCallback | None = None,
+    workers: int = 1,
 ) -> BatchFitResult:
     """Refit an explicit list of subIFG files from one dataset folder.
 
@@ -689,6 +711,11 @@ def fit_files(
     measurement's params CSV holds only its listed files' rows. One
     ``refit_<timestamp>.log`` covers the whole call. ``on_file`` is passed to
     :func:`fit_file`. This is the entry point for the refit CLI.
+
+    ``workers`` > 1 fits that many measurements at once, one per process, capped
+    at the core count and the number of measurements. ``on_file`` then runs in
+    the worker, so it must be picklable (a module-level function or class
+    instance, not a closure). Workers inherit this process's priority class.
     """
     folder_path = resolve_folder(folder)
     by_measurement: dict[str, list[str]] = {}
@@ -701,31 +728,91 @@ def fit_files(
 
     batch = BatchFitResult(folder_name=folder_path.name)
     names = sorted(by_measurement)
+    n_workers = max(1, min(workers, os.cpu_count() or 1, len(names)))
+    fit_kwargs = dict(
+        baseline=baseline,
+        variant=variant,
+        output_folder=output_folder,
+        save=save,
+        log_file=False,
+        on_file=on_file,
+    )
     with _run_log(folder_path.name, output_folder, enabled=save) as log_path:
         batch.log_path = log_path
         if save:
             _log_run_header(folder_path.name, names, baseline, variant, output_folder)
             LOGGER.info("files (%d): %s", len(files), " ".join(sorted(map(str, files))))
-        for index, base_name in enumerate(names, start=1):
-            LOGGER.info("measurement %d/%d: %s", index, len(names), base_name)
-            try:
-                batch.measurements.append(
-                    fit_file(
-                        folder_path / base_name,
-                        baseline=baseline,
-                        variant=variant,
-                        output_folder=output_folder,
-                        save=save,
-                        log_file=False,
-                        file_keys=by_measurement[base_name],
-                        on_file=on_file,
+        if n_workers == 1:
+            for index, base_name in enumerate(names, start=1):
+                LOGGER.info("measurement %d/%d: %s", index, len(names), base_name)
+                try:
+                    batch.measurements.append(
+                        fit_file(
+                            folder_path / base_name,
+                            file_keys=by_measurement[base_name],
+                            **fit_kwargs,
+                        )
                     )
-                )
-            except Exception:  # one bad measurement must not stop the batch
-                LOGGER.exception("%s: measurement failed", base_name)
+                except Exception:  # one bad measurement must not stop the batch
+                    LOGGER.exception("%s: measurement failed", base_name)
+        else:
+            batch.measurements = _fit_parallel(
+                folder_path, names, by_measurement, fit_kwargs, n_workers
+            )
         LOGGER.info("%s", batch.summary())
     return batch
 
+
+def _fit_parallel(
+    folder_path: Path,
+    names: list[str],
+    by_measurement: dict[str, list[str]],
+    fit_kwargs: dict,
+    n_workers: int,
+) -> list[MeasurementFitResult]:
+    """Run :func:`fit_file` for each measurement across ``n_workers`` processes."""
+    import logging.handlers
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    LOGGER.info("parallel: %d workers over %d measurements", n_workers, len(names))
+    # Each worker is one fit; stop BLAS in each from also spreading over every
+    # core. Must be in the environment before the workers import numpy.
+    for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        os.environ.setdefault(var, "1")
+
+    context = multiprocessing.get_context("spawn")
+    log_queue = context.Queue()
+    listener = logging.handlers.QueueListener(log_queue, _ForwardToLogger())
+    listener.start()
+    results: list[MeasurementFitResult] = []
+    try:
+        with ProcessPoolExecutor(
+            max_workers=n_workers,
+            mp_context=context,
+            initializer=_init_fit_worker,
+            initargs=(log_queue,),
+        ) as pool:
+            futures = {
+                pool.submit(
+                    fit_file,
+                    folder_path / base_name,
+                    file_keys=by_measurement[base_name],
+                    **fit_kwargs,
+                ): base_name
+                for base_name in names
+            }
+            for done, future in enumerate(as_completed(futures), start=1):
+                base_name = futures[future]
+                try:
+                    results.append(future.result())
+                except Exception:  # one bad measurement must not stop the batch
+                    LOGGER.exception("%s: measurement failed", base_name)
+                    continue
+                LOGGER.info("measurement %d/%d done: %s", done, len(names), base_name)
+    finally:
+        listener.stop()
+    return sorted(results, key=lambda item: item.file_name)
 
 if __name__ == "__main__":
     # Edit the constants below, then run:

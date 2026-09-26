@@ -13,13 +13,18 @@ Usage:
     python scripts\\run_refit.py --plot --output-folder _test-1
     python scripts\\run_refit.py --folder nn1120-4_pd_ceo2_000 \\
         --measurements "*-021" --delta-groups delta10 --plot
+    python scripts\\run_refit.py --folder nn1120-3_pd_ceo2_000 \\
+        --measurements "*" --limit 0 --plot --workers 8
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 path = Path(__file__).resolve().parents[3]
@@ -135,7 +140,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run at normal process priority. By default the refit drops to "
         "below-normal on Windows so OPUS, the instrument server and the pump "
-        "loop on the lab machine are never starved.",
+        "loop on the lab machine are never starved. Workers inherit it.",
+    )
+    output.add_argument(
+        "--workers",
+        type=_worker_count,
+        default=1,
+        help="Fit this many measurements at once, one process each "
+        f"(default: %(default)s; max {os.cpu_count()}, the core count). At the "
+        "default below-normal priority, extra workers use idle cores only.",
     )
     output.add_argument(
         "--dry-run",
@@ -145,14 +158,58 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _worker_count(text: str) -> int:
+    """argparse type for --workers: 1 up to the core count."""
+    count = int(text)
+    cores = os.cpu_count() or 1
+    if not 1 <= count <= cores:
+        raise argparse.ArgumentTypeError(f"must be 1 to {cores} (the core count)")
+    return count
+
+
+@dataclass
+class _FigureWriter:
+    """Per-file ``on_file`` callback: write that file's figures as it finishes.
+
+    A module-level class rather than a closure so it pickles into --workers
+    processes.
+    """
+
+    windows: list[tuple[float, float]]
+    dpi: int
+    output_dir: Path
+
+    def __call__(self, measurement, file_result) -> None:
+        # Imported here: src.visualizations depends on this package.
+        from src.visualizations.plot_individual_fit import plot_file_fit
+
+        for window in self.windows:
+            output_path = plot_file_fit(
+                file_result,
+                folder_name=measurement.folder_name,
+                file_name=measurement.file_name,
+                xlim=window,
+                dpi=self.dpi,
+                output_dir=self.output_dir,
+            )
+            if output_path is not None:
+                LOGGER.info("figure -> %s", output_path.name)
+
+
 def _lower_priority() -> None:
     """Drop this process to below-normal priority on Windows (no-op elsewhere)."""
     if sys.platform != "win32":
         return
     import ctypes
+    from ctypes import wintypes
 
     below_normal = 0x4000
-    kernel32 = ctypes.windll.kernel32
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    # Declared, not left to ctypes' default int: the process handle is
+    # pointer-sized and an undeclared call truncates it, so the call fails.
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.SetPriorityClass.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel32.SetPriorityClass.restype = wintypes.BOOL
     if not kernel32.SetPriorityClass(kernel32.GetCurrentProcess(), below_normal):
         LOGGER.warning("could not lower process priority")
 
@@ -206,6 +263,7 @@ def main(argv: list[str] | None = None) -> None:
         print("Baseline -> saved *_CarbonylFitBaseline.csv (recipe flags ignored)")
     print(f"Peaks -> {len(peaks)} from ir_fitting.fit: {' '.join(map(str, peaks))}")
     print(f"Optimizer -> {FIT_METHOD}")
+    print(f"Workers -> {args.workers}")
     if not args.no_save:
         print(f"Writing to -> {peak_fit_dir(args.folder) / args.output_folder}")
     if args.plot:
@@ -220,32 +278,17 @@ def main(argv: list[str] | None = None) -> None:
 
     # Figures are written as each file finishes, not after the batch, so a
     # long run can be watched and a crash keeps every figure drawn so far.
-    figures: list[Path] = []
     on_file = None
     if args.plot:
-        from src.visualizations.plot_individual_fit import plot_file_fit
-
         windows = (
             [tuple(w) for w in args.plot_window]
             if args.plot_window
             else list(DEFAULT_PLOT_WINDOWS)
         )
         figure_dir = _figure_dir(args.folder, args.output_folder)
+        on_file = _FigureWriter(windows=windows, dpi=args.dpi, output_dir=figure_dir)
 
-        def on_file(measurement, file_result) -> None:
-            for window in windows:
-                output_path = plot_file_fit(
-                    file_result,
-                    folder_name=measurement.folder_name,
-                    file_name=measurement.file_name,
-                    xlim=window,
-                    dpi=args.dpi,
-                    output_dir=figure_dir,
-                )
-                if output_path is not None:
-                    figures.append(output_path)
-                    LOGGER.info("figure -> %s", output_path.name)
-
+    started = time.time()
     batch = fit_files(
         args.folder,
         files,
@@ -254,10 +297,16 @@ def main(argv: list[str] | None = None) -> None:
         output_folder=args.output_folder,
         save=not args.no_save,
         on_file=on_file,
+        workers=args.workers,
     )
 
     if args.plot:
-        print(f"\n{len(figures)} figures in {figure_dir}")
+        # Counted on disk: with --workers the figures are written in other
+        # processes. The folder is reused, so count only this run's.
+        n_figures = sum(
+            1 for item in figure_dir.glob("*.png") if item.stat().st_mtime >= started
+        )
+        print(f"\n{n_figures} figures in {figure_dir}")
 
     print(f"\n{batch.summary()}")
     not_converged = [
