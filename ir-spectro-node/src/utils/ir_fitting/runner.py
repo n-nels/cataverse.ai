@@ -3,7 +3,7 @@
 Every run is a full refit: all peaks in ``ir_fitting.fit.peak_list_base`` are
 solved jointly against ``raw - baseline``, each existing peak starting from its
 saved fit. The fit itself is the package's own copy in ``voigt.py``; nothing
-here calls into ``src/analysis``. See ``spec-working.md``.
+here calls into ``src/analysis``. See ``spec.md``.
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 Self-contained: carries its own copy of the Voigt fit (``voigt.py``) and reads
 its own ``ir_fitting.fit`` config block, so it can diverge from the live path on
 purpose. Never invoked by the live server path and never writes into source
-data -- output goes to a ``_test`` subfolder. See ``spec-working.md``.
+data -- output goes to a ``_test`` subfolder. See ``spec.md``.
 """
 
 from src.utils.ir_fitting.api import (

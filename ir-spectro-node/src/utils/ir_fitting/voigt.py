@@ -2,8 +2,8 @@
 
 Copied from ``src/analysis/spectral_fitting.py`` so this package can change its
 baseline, peak list and rules without touching the live server. The copy is
-deliberate divergence, guarded by the parity gate in ``spec-working.md`` section
-8: with ``method="leastsq"`` and the same start, it reproduces the live fit
+deliberate divergence, guarded by the parity gate in ``spec.md`` section
+7: with ``method="leastsq"`` and the same start, it reproduces the live fit
 exactly. The default optimizer differs from live; see :data:`FIT_METHOD`.
 
 Nothing here imports ``src.analysis``.

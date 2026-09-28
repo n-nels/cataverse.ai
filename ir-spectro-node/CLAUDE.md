@@ -60,7 +60,7 @@ baseline-recipe flags as the baseline CLI (shared via
 `baseline_cli.add_recipe_arguments`). Peaks and rules are edited in yaml, not
 flags. It drops to below-normal priority by default, because this is the lab
 machine (OPUS, `run_server.py` and `run_norhoff.py` run here). Design and
-validation: `src/utils/ir_fitting/spec-working.md`. `api.py`'s `__main__`
+validation: `src/utils/ir_fitting/spec.md`. `api.py`'s `__main__`
 (edit-constants) remains for whole-measurement or whole-folder runs.
 
 `src/utils/kinetics/` is the tidier programmatic wrapper over the batch writer:

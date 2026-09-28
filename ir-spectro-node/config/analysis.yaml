@@ -540,7 +540,7 @@ ir_fitting:
       - 2186
       - 2175
     # std_distribution settings for each baseline segment. The anchors and the
-    # cut are constants in src/utils/ir_fitting/baseline.py (default_variant).
+    # cut are constants in src/utils/ir_fitting/baseline.py (BaselineVariant() defaults).
     baseline:
       half_window: 10
       interp_half_window: 5
