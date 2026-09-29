@@ -10,7 +10,8 @@ uv sync                          # install deps (uv is the package manager; Pyth
 python scripts\run_server.py     # OPUS ZMQ instrument server (production entry point)
 python scripts\run_norhoff.py    # Norhof LN2 pump control loop (separate process)
 python scripts\run_analysis.py   # batch/offline analysis — see note below
-python scripts\run_kinetics_classification.py  # batch classification CLI — see note below
+python scripts\run_kinetics_fit.py             # offline kinetics reprocessing CLI — see note below
+python scripts\run_kinetics_classification.py  # classifier ground-truth scoring CLI — see note below
 python scripts\run_baseline_experiment.py      # baseline experiment CLI — see note below
 python scripts\run_refit.py                    # offline 24-peak refit CLI — see note below
 
@@ -26,20 +27,25 @@ how batch work is run (`scripts/run_analysis.py`, `src/analysis/main.py`).
 To run a single file through the pipeline, edit those constants rather than
 adding argparse.
 
-**Three CLIs are the exceptions.** The first is batch classification:
-`scripts/run_kinetics_classification.py`
-(wrapping `src/utils/kinetics/classify_cli.py`) is an argparse CLI, added because the
-classification algorithm itself is under active iteration (see
-`src/utils/kinetics/classification.py` and `docs/spec.md`) and needs a
-`--classifier` flag to A/B candidate detectors and run the ground-truth check
-(`--validate`) without editing source. `--classifier` defaults to `combined`
-(`classify_trajectory_combined`, 285/288 per `docs/spec.md` §6.2) — the plain
-original detector is still available as `--classifier default` (264/288) for
-comparison. Batch *fitting* (`fit_file`/`fit_folder`/`fit_folder_by_sum_models`)
-is **not** covered by this CLI and still follows the edit-constants convention,
-via `src/utils/kinetics/api.py`'s own `__main__` block.
+**Four CLIs are the exceptions.** The first two are **offline kinetics**
+(design and validation: `src/utils/kinetics/spec.md`, working spec `spec-working.md`):
 
-The second is **baseline runs**: `scripts/run_baseline_experiment.py`
+- `scripts/run_kinetics_fit.py` (wrapping `src/utils/kinetics/fit_cli.py` →
+  `api.build_areas` / `api.process_folder`) reprocesses a dataset's refit output.
+  `--build-areas` turns `<dataset>\_reprocess\*_CarbonylPeakFitParams.csv` into area
+  CSVs, with time from the subIFG log, never from params rows, and sums from the
+  `ir_fitting.fit` groups. It then writes live-schema, live-equivalent kinetics into
+  `_reprocess\_test\`: monomer → secondary_pfo, cluster → pfo, and a causal per-row
+  `cluster_sum` classification. `--classify-only` skips the (slow) fits. It runs at
+  below-normal priority by default. `--workers N` runs N measurements at once, one
+  process each.
+- `scripts/run_kinetics_classification.py` (wrapping `classify_cli.py`) only scores a
+  detector against `ground_truth.json` (`--validate`, `--classifier`,
+  `--input-subfolder`, `--folders`). The classifier is under active iteration
+  (`docs/spec_nuc-clf.md`); `--classifier` defaults to `combined` (285/288 on live
+  data, 257/288 on the refit 15-peak `cluster_sum`).
+
+The third is **baseline runs**: `scripts/run_baseline_experiment.py`
 (wrapping `src/utils/ir_fitting/baseline_cli.py` → `api.run_baseline`), for the
 same reason — the baseline recipe needs flags to vary it without editing source.
 It runs one recipe and writes one figure per file; nothing else. With no
@@ -50,7 +56,7 @@ lower anchors `1955 1800 1820`, cut at 1955) on the eight default files, under
 comparison and diagnostic machinery (twin checks, seam/band metrics,
 `baseline_comparison.csv`) was removed — see `context/2026-09-20-baseline-cleanup-and-cli.md`.
 
-The third is **offline refits**: `scripts/run_refit.py` (wrapping
+The fourth is **offline refits**: `scripts/run_refit.py` (wrapping
 `src/utils/ir_fitting/refit_cli.py` → `api.fit_files`). It refits every peak in
 `ir_fitting.fit` (`config/analysis.yaml`) on selected subIFG files, using
 `least_squares` and seeding from the saved params CSV. It writes refit-only
@@ -63,10 +69,10 @@ machine (OPUS, `run_server.py` and `run_norhoff.py` run here). Design and
 validation: `src/utils/ir_fitting/spec.md`. `api.py`'s `__main__`
 (edit-constants) remains for whole-measurement or whole-folder runs.
 
-`src/utils/kinetics/` is the tidier programmatic wrapper over the batch writer:
-`from src.utils.kinetics import fit_file, fit_folder, classify_file`. It defaults
-to writing into a `_test` output subfolder — keep that default when
-experimenting; never overwrite source data in place.
+`src/utils/kinetics/` is also importable:
+`from src.utils.kinetics import build_areas, process_file, process_folder`. Output
+defaults to a `_test` subfolder — keep that default when experimenting; never
+overwrite source data in place.
 
 ## Architecture
 
@@ -108,37 +114,40 @@ column set.
 
 **Two kinetics implementations exist — check which one you are editing.**
 `src/analysis/kinetics_fitting.py` is the live/real-time implementation used by
-the server pipeline. `src/utils/kinetics/{models,classification,utils,writer}.py`
-is a parallel class-based (`MODELS` / `CLASSIFIER` / `WRITER`, wired together at
-the bottom of `writer.py`) implementation used for offline reprocessing —
-`models.py` holds the PFO/secondary-PFO model strategies, `classification.py`
-holds `KineticClassification` (the default detector plus several in-progress
-detection candidates — see below), `utils.py` holds dataframe/CSV helpers, and
-`writer.py` holds `KineticWriter`, the row-preparation/writing orchestration,
-plus the module-level singletons. This offline copy duplicates the models, the
-classification thresholds (`FLAT_WINDOW_S`, `MIN_FLAT_START_S`, `EPS_FLAT_DEFAULT`,
-`RISE_DELTA_DEFAULT`) and the parameter-name lists found in
-`kinetics_fitting.py`. A change to model or classification behavior usually has
-to land in both, or the two paths silently disagree. Porting a validated
-offline classifier into the live path is tracked as separate, future,
-out-of-scope work in `docs/spec.md` §8 — do not do it as a side effect of
+the server pipeline. `src/utils/kinetics/` is a parallel class-based implementation
+used for offline reprocessing (`MODELS` / `CLASSIFIER` / `WRITER`, wired together at
+the bottom of `writer.py`):
+- `models.py`: PFO/secondary-PFO.
+- `classification.py`: detectors plus the causal `latch_sweep`.
+- `writer.py`: `REGIME_MODELS` and the per-measurement classify/fit/write.
+- `timeline.py` / `areas.py`: params → area CSVs.
+
+The offline models duplicate live's, and are verified bit-identical against
+`append_fit_results(latest_only=False)` (see `src/utils/kinetics/spec.md`). Both
+sides read the classification thresholds from the yaml `kinetics_classification`
+block. The offline side differs by design in three ways: groups come from
+`ir_fitting.fit`, the label is causal, and time comes from the subIFG log. A change
+to model behavior usually has to land in both, or the two paths silently disagree.
+Porting a validated offline classifier into the live path is separate, future,
+out-of-scope work (`docs/spec_nuc-clf.md` §8). Do not do it as a side effect of
 editing one side.
 
 **Models.** Cluster peaks get PFO `q(t) = q_0 + q_e(1 - exp(-k t))`; monomer peaks
 get a coupled-ODE secondary PFO solved with `solve_ivp`. Peak membership is not
-hardcoded — `_get_peak_names` reads `cluster_peaks_base` / `monomer_peaks_base`
-from `config/analysis.yaml` and applies the isotope shift. `monomer_sum` and
-`cluster_sum` rows are synthesized before fitting and are grouped by `Peak_Name`
-only, aggregating across all `Delta_Group` values.
+hardcoded. Live `_get_peak_names` reads `voigt_fit.cluster_peaks_base` /
+`monomer_peaks_base`; offline `utils.group_peak_names` reads the `ir_fitting.fit` groups.
+Both apply the isotope shift. `monomer_sum` / `cluster_sum` rows are summed per
+`(Time, Delta_Group, File)`. Trajectories are then fitted per `Peak_Name`, with all
+`Delta_Group` rows interleaved in time.
 
 **Classification** (`classify_trajectory`) labels a trajectory `continuous` or
 `discontinuous` by finding a flat window followed by a sustained rise; a
 discontinuous trajectory also gets `pre_`/`post_` breakpoint PFO fits around
 `growth_onset_s`. The offline `KineticClassification` (`src/utils/kinetics/classification.py`)
-additionally carries `classify_trajectory_sustained_rise`, `classify_trajectory_drawdown`,
-and `classify_trajectory_combined` — active detection candidates being scored
-against `ground_truth.json`, not dead alternatives; select one via
-`scripts\run_kinetics_classification.py --classifier {sustained_rise,drawdown,combined}`.
+adds `classify_trajectory_drawdown` and `classify_trajectory_combined` (the default).
+It labels causally: `latch_sweep` sweeps growing prefixes and latches `discontinuous`
+after 3 consecutive fires. Select a detector via
+`scripts\run_kinetics_classification.py --classifier {default,drawdown,combined}`.
 
 ### Configuration
 

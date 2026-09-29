@@ -1,27 +1,50 @@
-"""Prepare kinetics fit/classification rows and write legacy-merged CSV outputs."""
+"""Classify and kinetics-fit one measurement's area CSV (live-equivalent).
+
+Also holds the module-level singletons (``UTILS``, ``MODELS``, ``CLASSIFIER``,
+``WRITER``) the rest of the package uses.
+"""
 
 from __future__ import annotations
 
-import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-path = Path(__file__).resolve().parents[3]
-if str(path) not in sys.path:
-    sys.path.append(str(path))
-
 from src.core import config
 
-from .classification import KineticClassification
+from .classification import KineticClassification, latch_sweep, sorted_trajectory
 from .models import KineticModels, _ModelRowSpec
 from .utils import _KineticUtilities
 
 SEARCH_ROOT = Path(config.get_path("data.peak_fit"))
 AREA_SUFFIX = config.get_setting("filenames.carbonyl_fit.area_suffix")
+
+# Kinetic model per (peak group, regime). The regime of a time point is the
+# causal cluster_sum latch state at that time. The discontinuous entries are
+# placeholders (the continuous model on the expanding window) until the
+# before/after-detection models exist -- that work only fills in this table.
+REGIME_MODELS: dict[tuple[str, str], str] = {
+    ("monomer", "continuous"): "secondary_pfo",
+    ("monomer", "discontinuous"): "secondary_pfo",
+    ("cluster", "continuous"): "pfo",
+    ("cluster", "discontinuous"): "pfo",
+}
+SUM_OF_GROUP = {"monomer": "monomer_sum", "cluster": "cluster_sum"}
+
+AREA_COLUMNS = [
+    "File",
+    "Delta_Group",
+    "Peak_Name",
+    "Peak_Center",
+    "Time (s)",
+    "Cumulative_Peak_Area",
+    "Cumulative_Integral",
+]
+CLASSIFICATION_COLUMNS = ["classification", "growth_onset_s"]
 
 
 class KineticWriter:
@@ -62,31 +85,6 @@ class KineticWriter:
             ),
         }
 
-    def _prepare_model_rows_for_file(
-        self,
-        model_key: str,
-        df_legacy: pd.DataFrame,
-        *,
-        min_points: int,
-        peak_names: list[str] | None,
-        mode: str,
-        p0: list[float] | None,
-        carry_forward_p0: bool,
-        monomer_sum_peaks: list[str] | None = None,
-        cluster_sum_peaks: list[str] | None = None,
-    ) -> pd.DataFrame:
-        return self.prepare_model_fit_rows(
-            model_key,
-            df_legacy,
-            min_points=min_points,
-            peak_names=peak_names,
-            mode=mode,
-            p0=p0,
-            carry_forward_p0=carry_forward_p0,
-            monomer_sum_peaks=monomer_sum_peaks,
-            cluster_sum_peaks=cluster_sum_peaks,
-        )
-
     def _select_secondary_p0(
         self,
         time_s: NDArray[np.float64],
@@ -116,8 +114,7 @@ class KineticWriter:
             return float(r2) if np.isfinite(r2) else -np.inf
 
         baseline_r2 = eval_r2(best_p0)
-        if baseline_r2 > best_r2:
-            best_r2 = baseline_r2
+        best_r2 = max(best_r2, baseline_r2)
         if best_r2 >= threshold_r2:
             return best_p0
 
@@ -184,521 +181,252 @@ class KineticWriter:
             min_points=min_points,
         )
 
-    def _classification_payload(
+    def kinetic_columns(self) -> list[str]:
+        """Kinetic output columns, in the live ``*_CarbonylPeakArea.csv`` order."""
+        columns = list(CLASSIFICATION_COLUMNS)
+        for key in ("secondary_pfo", "pfo"):
+            spec = self.model_specs[key]
+            columns += [spec.r2_col, spec.rmse_col]
+            for value_key, stderr_key in spec.param_map:
+                columns.append(value_key)
+                if stderr_key is not None:
+                    columns.append(stderr_key)
+        return columns
+
+    def classify_by_time(
         self,
-        group: pd.DataFrame,
-        peak_name: str,
-        min_points: int,
-        classify_fn: Callable[..., dict[str, Any]] | None = None,
-    ) -> tuple[float | str, float | str, dict[str, Any]]:
-        classification_value: float | str = np.nan
-        breakpoint_used_value: float | str = np.nan
-        classification: dict[str, Any] = {}
-
-        if peak_name == "cluster_sum" and len(group) >= min_points:
-            time_s_all = group["Time (s)"].to_numpy(dtype=float)
-            intensity_all = group["Cumulative_Peak_Area"].to_numpy(dtype=float)
-            classify = (
-                classify_fn
-                if classify_fn is not None
-                else self.classifier.classify_trajectory_combined
-            )
-            classification = classify(time_s_all, intensity_all)
-            for key, value in classification.items():
-                if (key.startswith("pre_") or key.startswith("post_")) and isinstance(
-                    value, float
-                ):
-                    classification[key] = float(value)
-
-            classification_raw = classification.get("classification")
-            classification_value = (
-                str(classification_raw) if classification_raw is not None else np.nan
-            )
-            breakpoint_raw = classification.get("growth_onset_s")
-            breakpoint_used_value = (
-                float(breakpoint_raw) if breakpoint_raw is not None else np.nan
-            )
-
-        return classification_value, breakpoint_used_value, classification
-
-    def prepare_model_fit_rows(
-        self,
-        model_key: str,
         df: pd.DataFrame,
         *,
+        classify_fn: Callable[..., dict[str, Any]] | None = None,
         min_points: int = 4,
-        peak_names: list[str] | None = None,
-        mode: str = "rolling",
-        p0: list[float] | None = None,
-        carry_forward_p0: bool = True,
-        monomer_sum_peaks: list[str] | None = None,
-        cluster_sum_peaks: list[str] | None = None,
-    ) -> pd.DataFrame:
-        """Prepare fit-result rows for one DataFrame.
+    ) -> dict[float, dict[str, Any]]:
+        """Causal per-time classification of ``cluster_sum``.
 
-        Parameters
-        ----------
-        model_key : str
-            Which model to fit: ``"pfo"`` or ``"secondary_pfo"``.
-        df : pd.DataFrame
-            CarbonylPeakArea data with ``Peak_Name``, ``Time (s)``,
-            and ``Cumulative_Peak_Area`` columns.
-        min_points : int
-            Minimum data points required before fitting a peak group.
-        peak_names : list[str] | None
-            Restrict fitting to these peak names.  None = all peaks.
-        mode : str
-            ``"rolling"`` — for each time point, fit using all data up
-            to and including that time (expanding window).  Produces one
-            row per time point per peak.
-            ``"full_series"`` — fit once using all data, producing one
-            row per peak at the latest time.
-        p0 : list[float] | None
-            User-supplied initial guess for the optimizer.  None = use
-            built-in defaults.
-        carry_forward_p0 : bool
-            When True (default), the p0 that produced the best r^2 at
-            time point N is used as the starting seed for the p0 search
-            at time point N+1.  When False, each time point starts from
-            ``p0`` (or defaults) independently.  Only affects
-            ``secondary_pfo`` in ``"rolling"`` mode.
-        monomer_sum_peaks : list[str] | None
-            Override which Peak_Name rows get summed into ``monomer_sum``.
-            None = use the config-defined definition (or the input CSV's
-            existing monomer_sum row, if already present).
-        cluster_sum_peaks : list[str] | None
-            Same override, for ``cluster_sum``.
+        Runs ``classification.latch_sweep`` once over the time-sorted
+        trajectory (the same sweep the ground-truth harness scores). A time
+        is ``discontinuous`` once the latch has engaged at or before its last
+        row (rows sharing a time, one per Delta_Group, take the state after the
+        last of them), ``continuous`` before that, and NaN while fewer than
+        ``min_points`` points exist. Latched times also carry
+        ``growth_onset_s`` and the ``pre_*``/``post_*`` summary from the
+        latching prefix.
         """
-        spec = self.model_specs.get(model_key)
-        if spec is None:
-            raise ValueError(f"Unknown model_key: {model_key}")
-        if mode not in {"rolling", "full_series"}:
-            raise ValueError("mode must be one of: rolling, full_series")
-
-        df = self.utils.prepare_peak_area_df(
-            df,
-            monomer_sum_peaks=monomer_sum_peaks,
-            cluster_sum_peaks=cluster_sum_peaks,
+        time_s, intensity = sorted_trajectory(df, "cluster_sum")
+        if time_s.size == 0:
+            return {}
+        classify = (
+            classify_fn
+            if classify_fn is not None
+            else self.classifier.classify_trajectory_combined
         )
-        if peak_names is not None:
-            df = cast(pd.DataFrame, df[df["Peak_Name"].isin(peak_names)].copy())
-
-        records: list[dict[str, float | str]] = []
-        for group_key, group_raw in df.groupby("Peak_Name"):
-            group = cast(
-                pd.DataFrame, group_raw.sort_values("Time (s)").reset_index(drop=True)
+        latch = latch_sweep(classify, time_s, intensity, min_points=min_points)
+        latched_extra: dict[str, Any] = {}
+        if latch.n_points is not None:
+            onset = latch.result.get("growth_onset_s")
+            latched_extra["growth_onset_s"] = (
+                float(onset) if onset is not None else np.nan
             )
-            peak_name = str(group_key)
-
-            previous_p0: list[float] | None = None
-            previous_r2: float | None = None
-            r2_improvement_threshold = 0.01
-
-            classification_value, breakpoint_used_value, classification = (
-                self._classification_payload(group, peak_name, min_points)
-            )
-
-            if len(group) < min_points:
-                continue
-
-            if mode == "full_series":
-                unique_time = float(group["Time (s)"].max())
-                time_s = group["Time (s)"].to_numpy(dtype=float)
-                intensity = group["Cumulative_Peak_Area"].to_numpy(dtype=float)
-                if len(time_s) < min_points:
-                    continue
-                current_row = group[group["Time (s)"] == unique_time].iloc[0]
-                effective_p0 = self._select_secondary_p0_for_secondary(
-                    time_s,
-                    intensity,
-                    model_key=model_key,
-                    use_prior_p0=carry_forward_p0,
-                    previous_p0=previous_p0,
-                    previous_r2=previous_r2,
-                    user_p0=p0,
-                    min_points=min_points,
-                )
-                popt, std_errors, r_squared, rmse = spec.fit_fn(
-                    time_s, intensity, effective_p0
-                )
-                if (
-                    model_key == "secondary_pfo"
-                    and carry_forward_p0
-                    and np.isfinite(r_squared)
-                    and (
-                        previous_r2 is None
-                        or r_squared > previous_r2 + r2_improvement_threshold
-                    )
-                ):
-                    previous_p0 = (
-                        list(effective_p0) if effective_p0 is not None else None
-                    )
-                    previous_r2 = float(r_squared)
-
-                record: dict[str, float | str] = {
-                    "Peak_Name": str(current_row["Peak_Name"]),
-                    "Time (s)": float(unique_time),
-                    spec.r2_col: r_squared,
-                    spec.rmse_col: rmse,
-                    "classification": classification_value,
-                    "growth_onset_s": breakpoint_used_value,
+            latched_extra.update(
+                {
+                    key: value
+                    for key, value in latch.result.items()
+                    if key.startswith(("pre_", "post_"))
                 }
+            )
 
-                if (
-                    peak_name == "cluster_sum"
-                    and classification_value == "discontinuous"
-                ):
-                    for key, value in classification.items():
-                        if key.startswith("pre_") or key.startswith("post_"):
-                            record[key] = value
-
-                for idx, (value_key, stderr_key) in enumerate(spec.param_map):
-                    value = popt[idx] if idx < len(popt) else np.nan
-                    record[value_key] = float(value) if np.isfinite(value) else np.nan
-                    if stderr_key is not None:
-                        stderr = std_errors[idx] if idx < len(std_errors) else np.nan
-                        record[stderr_key] = (
-                            float(stderr) if np.isfinite(stderr) else np.nan
-                        )
-
-                records.append(record)
+        by_time: dict[float, dict[str, Any]] = {}
+        for unique_time in np.unique(time_s):
+            n_points = int(np.searchsorted(time_s, unique_time, side="right"))
+            if n_points < min_points:
+                by_time[float(unique_time)] = {"classification": np.nan}
+            elif latch.n_points is not None and n_points >= latch.n_points:
+                by_time[float(unique_time)] = {
+                    "classification": "discontinuous",
+                    **latched_extra,
+                }
             else:
-                for unique_time in sorted(group["Time (s)"].unique()):
-                    mask = group["Time (s)"] <= unique_time
-                    time_s = group.loc[mask, "Time (s)"].to_numpy(dtype=float)
-                    intensity = group.loc[mask, "Cumulative_Peak_Area"].to_numpy(
-                        dtype=float
-                    )
-                    if len(time_s) < min_points:
-                        continue
+                by_time[float(unique_time)] = {"classification": "continuous"}
+        return by_time
 
-                    current_row = group[group["Time (s)"] == unique_time].iloc[0]
-                    effective_p0 = self._select_secondary_p0_for_secondary(
+    def _fit_trajectory_rolling(
+        self,
+        peak_name: str,
+        group: str,
+        time_s: NDArray[np.float64],
+        intensity: NDArray[np.float64],
+        regime_of: Callable[[float], str],
+        *,
+        min_points: int,
+        p0: list[float] | None,
+        carry_forward_p0: bool,
+    ) -> list[dict[str, Any]]:
+        """Expanding-window fit at every unique time (live ``latest_only=False``)."""
+        records: list[dict[str, Any]] = []
+        previous_model: str | None = None
+        previous_p0: list[float] | None = None
+        previous_r2: float | None = None
+        for unique_time in np.unique(time_s):
+            mask = time_s <= unique_time
+            if int(mask.sum()) < min_points:
+                continue
+            model_key = REGIME_MODELS[(group, regime_of(float(unique_time)))]
+            if model_key != previous_model:
+                previous_p0, previous_r2 = None, None
+                previous_model = model_key
+            spec = self.model_specs[model_key]
+            t_slice, y_slice = time_s[mask], intensity[mask]
+            effective_p0 = self._select_secondary_p0_for_secondary(
+                t_slice,
+                y_slice,
+                model_key=model_key,
+                use_prior_p0=carry_forward_p0,
+                previous_p0=previous_p0,
+                previous_r2=previous_r2,
+                user_p0=p0,
+                min_points=min_points,
+            )
+            popt, std_errors, r_squared, rmse = spec.fit_fn(
+                t_slice, y_slice, effective_p0
+            )
+            if (
+                model_key == "secondary_pfo"
+                and carry_forward_p0
+                and np.isfinite(r_squared)
+                and (previous_r2 is None or r_squared > previous_r2 + 0.01)
+            ):
+                previous_p0 = list(effective_p0) if effective_p0 is not None else None
+                previous_r2 = float(r_squared)
+
+            record: dict[str, Any] = {
+                "Peak_Name": peak_name,
+                "Time (s)": float(unique_time),
+                spec.r2_col: r_squared,
+                spec.rmse_col: rmse,
+            }
+            for idx, (value_key, stderr_key) in enumerate(spec.param_map):
+                value = popt[idx] if idx < len(popt) else np.nan
+                record[value_key] = float(value) if np.isfinite(value) else np.nan
+                if stderr_key is not None:
+                    stderr = std_errors[idx] if idx < len(std_errors) else np.nan
+                    record[stderr_key] = float(stderr) if np.isfinite(stderr) else np.nan
+            records.append(record)
+        return records
+
+    def prepare_measurement_rows(
+        self,
+        df_area: pd.DataFrame,
+        *,
+        classify_fn: Callable[..., dict[str, Any]] | None = None,
+        fit: bool = True,
+        min_points: int = 4,
+        p0: dict[str, list[float]] | None = None,
+        carry_forward_p0: bool = False,
+        groups: dict[str, list[str]] | None = None,
+        peak_names: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """Kinetics rows for one measurement, keyed by ``(Peak_Name, Time (s))``.
+
+        Args:
+            df_area: The measurement's area frame (sums already baked in).
+            classify_fn: ``classify_trajectory``-shaped detector for cluster_sum.
+                ``None`` = ``classify_trajectory_combined``.
+            fit: False writes classification only (no kinetic fits).
+            min_points: Minimum points before classifying or fitting.
+            p0: Optional initial guess per model key (``"pfo"``/``"secondary_pfo"``).
+            carry_forward_p0: Seed each time point's secondary_pfo p0 search
+                from the previous one. Off by default: live searches fresh
+                at every point.
+            groups: ``{"monomer": [...], "cluster": [...]}`` atomic peaks.
+                ``None`` = the ``ir_fitting.fit`` groups.
+            peak_names: Optional restriction of which rows are fitted.
+        """
+        df = df_area.copy()
+        df["Time (s)"] = pd.to_numeric(df["Time (s)"], errors="coerce")
+        df["Cumulative_Peak_Area"] = pd.to_numeric(
+            df["Cumulative_Peak_Area"], errors="coerce"
+        )
+        by_time = self.classify_by_time(
+            df, classify_fn=classify_fn, min_points=min_points
+        )
+        records: dict[tuple[str, float], dict[str, Any]] = {
+            ("cluster_sum", t): {"Peak_Name": "cluster_sum", "Time (s)": t, **payload}
+            for t, payload in by_time.items()
+        }
+
+        def regime_of(time_value: float) -> str:
+            label = by_time.get(time_value, {}).get("classification")
+            return "discontinuous" if label == "discontinuous" else "continuous"
+
+        if fit:
+            groups = groups or {
+                group: self.utils.group_peak_names(group) for group in SUM_OF_GROUP
+            }
+            p0 = p0 or {}
+            for group, atomic in groups.items():
+                for peak_name in [*atomic, SUM_OF_GROUP[group]]:
+                    if peak_names is not None and peak_name not in peak_names:
+                        continue
+                    time_s, intensity = sorted_trajectory(df, peak_name)
+                    for record in self._fit_trajectory_rolling(
+                        peak_name,
+                        group,
                         time_s,
                         intensity,
-                        model_key=model_key,
-                        use_prior_p0=carry_forward_p0,
-                        previous_p0=previous_p0,
-                        previous_r2=previous_r2,
-                        user_p0=p0,
+                        regime_of,
                         min_points=min_points,
-                    )
-                    popt, std_errors, r_squared, rmse = spec.fit_fn(
-                        time_s, intensity, effective_p0
-                    )
-                    if (
-                        model_key == "secondary_pfo"
-                        and carry_forward_p0
-                        and np.isfinite(r_squared)
-                        and (
-                            previous_r2 is None
-                            or r_squared > previous_r2 + r2_improvement_threshold
-                        )
+                        p0=p0.get(REGIME_MODELS[(group, "continuous")]),
+                        carry_forward_p0=carry_forward_p0,
                     ):
-                        previous_p0 = (
-                            list(effective_p0) if effective_p0 is not None else None
-                        )
-                        previous_r2 = float(r_squared)
+                        key = (peak_name, record["Time (s)"])
+                        records.setdefault(key, {}).update(record)
 
-                    record = {
-                        "Peak_Name": str(current_row["Peak_Name"]),
-                        "Time (s)": float(unique_time),
-                        spec.r2_col: r_squared,
-                        spec.rmse_col: rmse,
-                        "classification": classification_value,
-                        "growth_onset_s": breakpoint_used_value,
-                    }
+        if not records:
+            return pd.DataFrame(columns=["Peak_Name", "Time (s)", *self.kinetic_columns()])
+        rows = pd.DataFrame(list(records.values()))
+        # Every kinetic column is always present (stable schema); pre_/post_
+        # classification summaries follow.
+        ordered = self.kinetic_columns()
+        tail = sorted(
+            c for c in rows.columns if c not in {"Peak_Name", "Time (s)", *ordered}
+        )
+        return rows.reindex(columns=["Peak_Name", "Time (s)", *ordered, *tail])
 
-                    if (
-                        peak_name == "cluster_sum"
-                        and classification_value == "discontinuous"
-                    ):
-                        for key, value in classification.items():
-                            if key.startswith("pre_") or key.startswith("post_"):
-                                record[key] = value
-
-                    for idx, (value_key, stderr_key) in enumerate(spec.param_map):
-                        value = popt[idx] if idx < len(popt) else np.nan
-                        record[value_key] = (
-                            float(value) if np.isfinite(value) else np.nan
-                        )
-                        if stderr_key is not None:
-                            stderr = (
-                                std_errors[idx] if idx < len(std_errors) else np.nan
-                            )
-                            record[stderr_key] = (
-                                float(stderr) if np.isfinite(stderr) else np.nan
-                            )
-
-                    records.append(record)
-
-        return pd.DataFrame(records) if records else pd.DataFrame()
-
-    def prepare_pfo_classification_rows(
+    def write_measurement(
         self,
-        df: pd.DataFrame,
-        *,
-        min_points: int = 4,
-        peak_names: list[str] | None = None,
-        classify_fn: Callable[..., dict[str, Any]] | None = None,
-    ) -> pd.DataFrame:
-        df = self.utils.prepare_peak_area_df(df)
-        if peak_names is not None:
-            df = cast(pd.DataFrame, df[df["Peak_Name"].isin(peak_names)].copy())
-
-        records: list[dict[str, float | str]] = []
-        for group_key, group_raw in df.groupby("Peak_Name"):
-            group = cast(
-                pd.DataFrame, group_raw.sort_values("Time (s)").reset_index(drop=True)
-            )
-            peak_name = str(group_key)
-
-            classification_value, breakpoint_used_value, classification = (
-                self._classification_payload(group, peak_name, min_points, classify_fn)
-            )
-
-            for idx in range(len(group)):
-                current_row = group.iloc[idx]
-                record: dict[str, float | str] = {
-                    "Peak_Name": str(current_row["Peak_Name"]),
-                    "Time (s)": float(current_row["Time (s)"]),
-                    "classification": classification_value,
-                    "growth_onset_s": breakpoint_used_value,
-                }
-                if (
-                    peak_name == "cluster_sum"
-                    and classification_value == "discontinuous"
-                ):
-                    for key, value in classification.items():
-                        if key.startswith("pre_") or key.startswith("post_"):
-                            record[key] = value
-                records.append(record)
-
-        return pd.DataFrame(records) if records else pd.DataFrame()
-
-    def write_model_fit_params(
-        self,
-        model_key: str,
-        carbonyl_peak_area_path: str | Path,
+        area_path: str | Path,
         *,
         output_folder_name: str = "_test",
-        min_points: int = 4,
-        peak_names: list[str] | None = None,
-        mode: str = "rolling",
-        p0: list[float] | None = None,
-        use_prior_p0: bool = True,
-        monomer_sum_peaks: list[str] | None = None,
-        cluster_sum_peaks: list[str] | None = None,
-    ) -> Path:
-        """Fit a single kinetics model to one CarbonylPeakArea CSV.
+        **kwargs: Any,
+    ) -> tuple[Path, pd.DataFrame]:
+        """Classify (and fit) one area CSV and write it to ``output_folder_name``.
 
-        Reads the CSV, fits the model, merges results back into the
-        legacy data, and writes the output to ``output_folder_name``.
-
-        Parameters
-        ----------
-        model_key : str
-            Which model to fit: ``"pfo"`` or ``"secondary_pfo"``.
-        carbonyl_peak_area_path : str | Path
-            Path to the input ``*_CarbonylPeakArea.csv``.
-        output_folder_name : str
-            Subdirectory name for output CSVs (e.g. ``"_test"``).
-        min_points : int
-            Minimum number of time points required before fitting starts.
-        peak_names : list[str] | None
-            Restrict fitting to these peak names.  None = all peaks.
-        mode : str
-            ``"rolling"`` fits at every time point with an expanding window.
-            ``"full_series"`` fits once using all data.
-        p0 : list[float] | None
-            User-supplied initial guess for the optimizer.  None = use
-            built-in defaults.
-        use_prior_p0 : bool
-            When True (default), the p0 that produced the best r^2 at
-            time point N is used as the starting seed for the p0 search
-            at time point N+1.  When False, each time point starts from
-            ``p0`` (or defaults) independently.  Only affects
-            ``secondary_pfo`` in ``"rolling"`` mode.
-        monomer_sum_peaks : list[str] | None
-            Override which Peak_Name rows get summed into ``monomer_sum``.
-            None = use the config-defined definition (or the input CSV's
-            existing monomer_sum row, if already present).
-        cluster_sum_peaks : list[str] | None
-            Same override, for ``cluster_sum``.
+        The output is the area frame, unchanged and in its row order, with the
+        kinetic columns left-joined on ``(Peak_Name, Time (s))``. It is built
+        fresh, so no kinetics from an earlier run can leak in.
         """
-        carbonyl_peak_area_path = Path(carbonyl_peak_area_path)
-        df_legacy = pd.read_csv(carbonyl_peak_area_path)
-        df_legacy = self.utils.prepare_peak_area_df(
-            df_legacy,
-            monomer_sum_peaks=monomer_sum_peaks,
-            cluster_sum_peaks=cluster_sum_peaks,
+        area_path = Path(area_path)
+        df_area = pd.read_csv(area_path)
+        df_area = df_area.drop(
+            columns=[c for c in df_area.columns if c not in AREA_COLUMNS]
         )
-
-        fit_params = self._prepare_model_rows_for_file(
-            model_key,
-            df_legacy,
-            min_points=min_points,
-            peak_names=peak_names,
-            mode=mode,
-            p0=p0,
-            carry_forward_p0=use_prior_p0,
-        )
-        if fit_params.empty:
-            raise ValueError(f"No fit results were produced for model: {model_key}")
-        return self.utils.write_fit_params_to_legacy(
-            carbonyl_peak_area_path,
-            fit_params,
-            output_folder_name=output_folder_name,
-            legacy_df=df_legacy,
-        )
-
-    def write_sum_model_fit_params(
-        self,
-        carbonyl_peak_area_path: str | Path,
-        *,
-        monomer_model_key: str = "secondary_pfo",
-        cluster_model_key: str = "pfo",
-        output_folder_name: str = "_test",
-        min_points: int = 4,
-        mode: str = "rolling",
-        monomer_p0: list[float] | None = None,
-        cluster_p0: list[float] | None = None,
-        carry_forward_p0: bool = True,
-    ) -> Path:
-        """Fit monomer and cluster groups with separate model assignments.
-
-        Monomer group uses config-based monomer peaks + ``monomer_sum``,
-        fitted with ``monomer_model_key`` (default: ``secondary_pfo``).
-        Cluster group uses config-based cluster peaks + ``cluster_sum``,
-        fitted with ``cluster_model_key`` (default: ``pfo``).
-        Results are merged into one legacy output CSV.
-
-        Parameters
-        ----------
-        carbonyl_peak_area_path : str | Path
-            Path to the input ``*_CarbonylPeakArea.csv``.
-        monomer_model_key : str
-            Model for monomer peaks (default ``"secondary_pfo"``).
-        cluster_model_key : str
-            Model for cluster peaks (default ``"pfo"``).
-        output_folder_name : str
-            Subdirectory name for output CSVs (e.g. ``"_test"``).
-        min_points : int
-            Minimum number of time points required before fitting starts.
-        mode : str
-            ``"rolling"`` fits at every time point with an expanding window.
-            ``"full_series"`` fits once using all data.
-        monomer_p0 : list[float] | None
-            Initial guess for monomer model optimizer.  None = defaults.
-        cluster_p0 : list[float] | None
-            Initial guess for cluster model optimizer.  None = defaults.
-        carry_forward_p0 : bool
-            When True (default), the p0 that produced the best r^2 at
-            time point N is used as the starting seed for the p0 search
-            at time point N+1.  When False, each time point starts from
-            the user p0 (or defaults) independently.  Only affects
-            ``secondary_pfo`` in ``"rolling"`` mode.
-        """
-        carbonyl_peak_area_path = Path(carbonyl_peak_area_path)
-        df_legacy = pd.read_csv(carbonyl_peak_area_path)
-        df_legacy = self.utils.prepare_peak_area_df(df_legacy)
-
-        monomer_peak_names = [
-            *self.utils.get_monomer_peak_names(isotope=None),
-            "monomer_sum",
-        ]
-        cluster_peak_names = [
-            *self.utils.get_peak_names("cluster_peaks_base", isotope=None),
-            "cluster_sum",
-        ]
-
-        overlap = set(monomer_peak_names) & set(cluster_peak_names)
-        if overlap:
-            raise ValueError(
-                "Monomer/cluster peak sets overlap in config: "
-                + ", ".join(sorted(overlap))
-            )
-
-        monomer_rows = self._prepare_model_rows_for_file(
-            monomer_model_key,
-            df_legacy,
-            min_points=min_points,
-            peak_names=monomer_peak_names,
-            mode=mode,
-            p0=monomer_p0,
-            carry_forward_p0=carry_forward_p0,
-        )
-        cluster_rows = self._prepare_model_rows_for_file(
-            cluster_model_key,
-            df_legacy,
-            min_points=min_points,
-            peak_names=cluster_peak_names,
-            mode=mode,
-            p0=cluster_p0,
-            carry_forward_p0=carry_forward_p0,
-        )
-
-        frames = [frame for frame in [monomer_rows, cluster_rows] if not frame.empty]
-        if not frames:
-            raise ValueError("No fit results were produced for monomer/cluster groups.")
-
-        fit_params = pd.concat(frames, ignore_index=True)
-        return self.utils.write_fit_params_to_legacy(
-            carbonyl_peak_area_path,
-            fit_params,
-            output_folder_name=output_folder_name,
-            legacy_df=df_legacy,
-        )
-
-    def write_pfo_classification(
-        self,
-        carbonyl_peak_area_path: str | Path,
-        *,
-        output_folder_name: str = "_test",
-        min_points: int = 4,
-        peak_names: list[str] | None = None,
-        classify_fn: Callable[..., dict[str, Any]] | None = None,
-    ) -> Path:
-        carbonyl_peak_area_path = Path(carbonyl_peak_area_path)
-        df_legacy = pd.read_csv(carbonyl_peak_area_path)
-        df_legacy = self.utils.prepare_peak_area_df(df_legacy)
-        fit_params = self.prepare_pfo_classification_rows(
-            df_legacy,
-            min_points=min_points,
-            peak_names=peak_names,
-            classify_fn=classify_fn,
-        )
-        if fit_params.empty:
-            raise ValueError("No classification results were produced.")
-        return self.utils.write_fit_params_to_legacy(
-            carbonyl_peak_area_path,
-            fit_params,
-            output_folder_name=output_folder_name,
-            legacy_df=df_legacy,
-        )
-
-    def remove_legacy_pfo_columns_file(
-        self,
-        carbonyl_peak_area_path: str | Path,
-        *,
-        output_folder_name: str = "_test",
-        prefixes: tuple[str, ...] = ("pfo",),
-    ) -> Path:
-        """Remove columns whose names start with any of ``prefixes`` from one CSV."""
-        carbonyl_peak_area_path = Path(carbonyl_peak_area_path)
-        df = pd.read_csv(carbonyl_peak_area_path)
-        cleaned_df, _dropped_columns = self.utils.drop_columns_with_prefixes(
-            df, prefixes
-        )
-        return self.utils.write_plain_legacy_output(
-            carbonyl_peak_area_path,
-            cleaned_df,
-            output_folder_name=output_folder_name,
-        )
-
+        rows = self.prepare_measurement_rows(df_area, **kwargs)
+        df_area["Time (s)"] = pd.to_numeric(df_area["Time (s)"], errors="coerce")
+        merged = df_area.merge(rows, on=["Peak_Name", "Time (s)"], how="left")
+        output_dir = self.utils.resolve_output_dir(area_path.parent, output_folder_name)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / area_path.name
+        merged.to_csv(output_path, index=False)
+        return output_path, rows
 
 # --- Instances ---
 UTILS = _KineticUtilities()
 MODELS = KineticModels(UTILS)
 CLASSIFIER = KineticClassification(MODELS, UTILS)
 WRITER = KineticWriter(UTILS, MODELS, CLASSIFIER)
+
+# Detectors selectable by name (CLI --classifier; picklable into workers).
+CLASSIFIERS: dict[str, Callable[..., dict[str, Any]]] = {
+    "combined": CLASSIFIER.classify_trajectory_combined,
+    "default": CLASSIFIER.classify_trajectory,
+    "drawdown": CLASSIFIER.classify_trajectory_drawdown,
+}

@@ -1,30 +1,105 @@
-"""Trajectory classification: flat-then-rise, sustained-rise, and drawdown detectors.
+"""Trajectory classification: flat-then-rise and drawdown detectors, and the causal latch.
 
-Several detection variants live side by side here deliberately -- they are
-active nucleation-classifier detection candidates being scored against
-``ground_truth.json`` (see ``validation.py`` and ``docs/spec.md``), not dead
-alternatives. ``classify_trajectory`` is the default/baseline detector;
-``classify_trajectory_sustained_rise``, ``classify_trajectory_drawdown`` and
-``classify_trajectory_combined`` are candidates under evaluation, selectable
-via ``classify_cli.py``'s ``--classifier`` flag.
+``classify_trajectory_combined`` (flat-then-rise OR drawdown) is the detector
+in use; ``classify_trajectory`` (flat-then-rise) and
+``classify_trajectory_drawdown`` are its two parts, kept selectable via
+``--classifier`` for scoring against ``ground_truth.json`` (docs/spec_nuc-clf.md).
+The sustained-rise variant was removed: it scored net worse (spec_nuc-clf §6.2).
+
+``latch_sweep`` turns any detector into the causal, monotonic-once-triggered
+label used both by the ground-truth harness and the written column.
 """
 
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
+
+from src.core import config
 
 from .models import KineticModels
 from .utils import _KineticUtilities
 
-FLAT_WINDOW_S = 20000.0
-MIN_FLAT_START_S = 10000.0
-SMOOTHING_WINDOW = 4
-EPS_FLAT_DEFAULT = 1e-6
-RISE_DELTA_DEFAULT = 1.1e-1
+# Thresholds from the kinetics_classification block of config/analysis.yaml,
+# the same block live src/analysis/kinetics_fitting.py reads.
+_SETTINGS = config.get_analysis_setting("kinetics_classification") or {}
+FLAT_WINDOW_S = float(_SETTINGS["flat_window_s"])
+MIN_FLAT_START_S = float(_SETTINGS["min_flat_start_s"])
+SMOOTHING_WINDOW = int(_SETTINGS["smoothing_window"])
+EPS_FLAT_DEFAULT = float(_SETTINGS["eps_flat"])
+RISE_DELTA_DEFAULT = float(_SETTINGS["rise_delta"])
+
+# The two known transient false positives in nn1120-3_pd_ceo2_003 fire for at
+# most 2 consecutive prefixes before reverting (...-097: runs of 1 and 2;
+# ...-115: runs of 1 and 1). Requiring 3 consecutive "discontinuous" prefixes
+# before latching sits just above that measured noise ceiling
+# (docs/spec_nuc-clf.md §4).
+REQUIRED_CONSECUTIVE_FIRES = 3
+
+
+@dataclass
+class Latch:
+    """Where a causal prefix sweep latched ``discontinuous``, if it did."""
+
+    n_points: int | None
+    """Prefix length at which the latch engaged. Row ``n_points - 1`` of the
+    time-sorted trajectory is the first latched row. ``None``: never latched."""
+    result: dict[str, Any]
+    """The classifier's output at that prefix (``growth_onset_s``, ``pre_*``/``post_*``)."""
+
+
+def latch_sweep(
+    classify_fn: Callable[..., dict[str, Any]],
+    time_s: NDArray[np.float64],
+    intensity: NDArray[np.float64],
+    *,
+    min_points: int,
+    required_consecutive: int = REQUIRED_CONSECUTIVE_FIRES,
+) -> Latch:
+    """Sweep growing prefixes; latch once ``discontinuous`` fires on
+    ``required_consecutive`` consecutive prefixes, and never revert.
+
+    This is the monotonic-once-triggered aggregation of docs/spec_nuc-clf.md
+    §4: what a real-time pipeline sees, one incoming point at a time. It is the
+    single definition shared by the ground-truth harness (``validation.ever_fires``)
+    and the written per-row ``classification`` column, so the two cannot drift.
+    """
+    consecutive = 0
+    for k in range(min_points, len(time_s) + 1):
+        result = classify_fn(time_s[:k], intensity[:k])
+        if result.get("classification") == "discontinuous":
+            consecutive += 1
+            if consecutive >= required_consecutive:
+                return Latch(n_points=k, result=result)
+        else:
+            consecutive = 0
+    return Latch(n_points=None, result={})
+
+
+def sorted_trajectory(
+    df: pd.DataFrame, peak_name: str
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """``(Time (s), Cumulative_Peak_Area)`` of one ``Peak_Name``, time-sorted.
+
+    Sorted exactly as live ``kinetics_fitting`` sorts (pandas' default sort):
+    rows sharing a time (one per Delta_Group) then reach the optimizer in the
+    same order, so floating-point sums -- and ill-conditioned fits -- match
+    live bit for bit. NaN areas (spectra with no fit) are dropped.
+    """
+    rows = df[df["Peak_Name"] == peak_name].dropna(
+        subset=["Time (s)", "Cumulative_Peak_Area"]
+    )
+    rows = rows.sort_values("Time (s)")
+    return (
+        rows["Time (s)"].to_numpy(dtype=float),
+        rows["Cumulative_Peak_Area"].to_numpy(dtype=float),
+    )
 
 
 class KineticClassification:
@@ -175,79 +250,6 @@ class KineticClassification:
         result.update(self._pre_post_pfo_summary(time_s, intensity, breakpoint_s))
         return result
 
-    def detect_discontinuity_sustained_rise(
-        self,
-        time_s: NDArray[np.float64],
-        intensity: NDArray[np.float64],
-        eps_flat: float,
-        rise_delta: float,
-    ) -> tuple[bool, float | None]:
-        """Like ``detect_discontinuity``, but doesn't require the trajectory
-        to still be elevated at the very last ~5% of points.
-
-        ``detect_discontinuity`` rejects any trajectory that has decayed back
-        toward baseline by its final points, no matter how large the rise was
-        in between (spec.md §5's diagnosed mechanism for why
-        ``nn1120-4_pd_ceo2_000`` positives go undetected: they rise sharply
-        mid-run and decay back down by the end). This variant instead checks
-        whether a *sustained* (smoothed, not single-point) elevation above
-        baseline ever occurred anywhere after the flat-window transition,
-        tolerating a later decay.
-        """
-        flat_window, transition_end = self.find_flat_transition(
-            time_s, intensity, eps_flat, MIN_FLAT_START_S, FLAT_WINDOW_S
-        )
-        if flat_window is None or transition_end is None:
-            return False, None
-
-        flat_start, flat_end, _ = flat_window
-        start_idx = np.searchsorted(time_s, flat_start, side="left")
-        end_idx = np.searchsorted(time_s, flat_end, side="right")
-        baseline = float(np.mean(intensity[start_idx:end_idx]))
-
-        post_idx = np.searchsorted(time_s, transition_end, side="right")
-        post_time = time_s[post_idx:]
-        post_intensity = intensity[post_idx:]
-        if post_intensity.size == 0:
-            return False, None
-
-        smooth_result = self.running_mean(post_time, post_intensity, SMOOTHING_WINDOW)
-        if smooth_result is not None:
-            _, smooth_post = smooth_result
-            max_post = float(np.max(smooth_post)) if smooth_post.size else -np.inf
-        else:
-            max_post = float(np.max(post_intensity))
-
-        if max_post < baseline + rise_delta:
-            return False, None
-
-        return True, transition_end
-
-    def classify_trajectory_sustained_rise(
-        self,
-        time_s: NDArray[np.float64],
-        intensity: NDArray[np.float64],
-        eps_flat: float = EPS_FLAT_DEFAULT,
-        rise_delta: float = RISE_DELTA_DEFAULT,
-    ) -> dict[str, Any]:
-        """``classify_trajectory`` using ``detect_discontinuity_sustained_rise``."""
-        result: dict[str, Any] = {}
-        if len(time_s) < 3:
-            result["classification"] = "fit_failed"
-            return result
-
-        is_disc, breakpoint_s = self.detect_discontinuity_sustained_rise(
-            time_s, intensity, eps_flat, rise_delta
-        )
-        if not is_disc or breakpoint_s is None:
-            result["classification"] = "continuous"
-            return result
-
-        result["classification"] = "discontinuous"
-        result["growth_onset_s"] = breakpoint_s
-        result.update(self._pre_post_pfo_summary(time_s, intensity, breakpoint_s))
-        return result
-
     def detect_discontinuity_drawdown(
         self,
         time_s: NDArray[np.float64],
@@ -262,7 +264,7 @@ class KineticClassification:
         Inspecting the ``nn1120-4_pd_ceo2_000`` trajectories this was built
         for showed they have *no* flat lead-in anywhere -- they rise sharply
         from the very first recorded point, peak, then decay almost
-        monotonically for the rest of the run (see docs/JOURNAL.md round 3).
+        monotonically for the rest of the run (see docs/JOURNAL_nuc-clf.md round 3).
         That shape is a peak-then-reversal, not a level shift, so this checks
         two purely causal, running quantities computed from the (smoothed)
         trajectory-so-far:

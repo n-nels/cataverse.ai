@@ -1,36 +1,224 @@
-"""User-facing kinetics API with minimal entry points."""
+"""User-facing kinetics API.
+
+- ``build_areas``: refit params -> ``*_CarbonylPeakArea.csv`` (``areas.py``).
+- ``process_file`` / ``process_folder``: causal classification plus the
+  live-equivalent rolling kinetic fits (``writer.py``).
+"""
 
 from __future__ import annotations
 
-import sys
+import logging
+import os
+from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-path = Path(__file__).resolve().parents[3]
-if str(path) not in sys.path:
-    sys.path.append(str(path))
-
+from src.utils.kinetics.areas import AreaBuildReport, build_folder_areas
 from src.utils.kinetics.result_types import BatchFitResult, FitRunResult
-from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT, WRITER
+from src.utils.kinetics.writer import AREA_SUFFIX, CLASSIFIERS, SEARCH_ROOT, WRITER
+
+LOGGER = logging.getLogger(__name__)
+MODELS_LOGGER = "src.utils.kinetics.models"
 
 
-def _discover_area_csvs(dataset_path: Path) -> list[Path]:
-    """Find ``*_CarbonylPeakArea.csv`` files under a dataset folder.
+class _TimeoutCounter(logging.Handler):
+    """Count secondary_pfo ODE timeouts (0.1 s wall clock each) during one file.
 
-    Excludes prior output/reference subfolders (``_test``, ``arxiv``,
-    ``CalibrationData``).
+    A timeout makes that solve's objective infinite, so results depend on
+    machine load; the count makes that visible per file.
     """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.count = 0
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if "timed out" in record.getMessage():
+            self.count += 1
+
+
+def _discover_area_csvs(
+    dataset_path: Path, input_subfolder: str | None = None
+) -> list[Path]:
+    """Find ``*_CarbonylPeakArea.csv`` files for a dataset folder.
+
+    With ``input_subfolder`` (e.g. ``"_reprocess"``): exactly the files in
+    ``<dataset>/<input_subfolder>/``, non-recursive. Without it: the live files
+    under the dataset folder, excluding output/reference subfolders (``_test``,
+    ``_reprocess``, ``arxiv``, ``CalibrationData``).
+    """
+    if input_subfolder:
+        return sorted((dataset_path / input_subfolder).glob(f"*{AREA_SUFFIX}"))
+    excluded = {"_test", "_reprocess", "arxiv", "CalibrationData"}
     return [
         path
-        for path in sorted(dataset_path.rglob("*_CarbonylPeakArea.csv"))
-        if "_test" not in path.parts
-        and "arxiv" not in path.parts
-        and "CalibrationData" not in path.parts
-        and path.name.endswith(str(AREA_SUFFIX))
+        for path in sorted(dataset_path.rglob(f"*{AREA_SUFFIX}"))
+        if not excluded.intersection(path.parts)
     ]
+
+
+def _dataset_path(dataset_folder: str | Path) -> Path:
+    dataset_path = Path(dataset_folder)
+    return dataset_path if dataset_path.is_absolute() else SEARCH_ROOT / dataset_path
+
+
+def build_areas(
+    dataset_folder: str,
+    *,
+    input_subfolder: str = "_reprocess",
+    measurements: list[str] | None = None,
+) -> list[AreaBuildReport]:
+    """Build ``*_CarbonylPeakArea.csv`` from the params CSVs in ``<dataset>/<input_subfolder>``.
+
+    See ``areas.py``: time from the per-spectrum timeline, sums from the
+    ``ir_fitting.fit`` groups.
+    """
+    return build_folder_areas(
+        dataset_folder, input_subfolder=input_subfolder, measurements=measurements
+    )
+
+
+def process_file(
+    path: str | Path,
+    *,
+    output_folder: str = "_test",
+    classifier: str = "combined",
+    fit: bool = True,
+    min_points: int = 4,
+    carry_forward_p0: bool = False,
+    peak_names: list[str] | None = None,
+) -> FitRunResult:
+    """Classify and fit one area CSV, live-equivalently, into ``output_folder``.
+
+    Monomer peaks + ``monomer_sum`` get secondary_pfo, cluster peaks +
+    ``cluster_sum`` get pfo (``writer.REGIME_MODELS``), and ``cluster_sum``
+    gets the causal per-row ``classification`` from ``classifier`` (a
+    ``writer.CLASSIFIERS`` key). ``fit=False`` writes the classification only.
+    The result's ``warnings`` report ODE timeouts, if any.
+    """
+    file_path = Path(path)
+    if not file_path.exists():
+        raise FileNotFoundError(file_path)
+    counter = _TimeoutCounter()
+    models_logger = logging.getLogger(MODELS_LOGGER)
+    models_logger.addHandler(counter)
+    try:
+        output_path, rows = WRITER.write_measurement(
+            file_path,
+            output_folder_name=output_folder,
+            classify_fn=CLASSIFIERS[classifier],
+            fit=fit,
+            min_points=min_points,
+            carry_forward_p0=carry_forward_p0,
+            peak_names=peak_names,
+        )
+    finally:
+        models_logger.removeHandler(counter)
+    summary: dict[str, float] = {}
+    for model in ("secondary_pfo", "pfo"):
+        for key, value in _metrics_summary(rows, model).items():
+            summary[f"{model}_{key}"] = value
+    return FitRunResult(
+        path=file_path,
+        model=None,
+        mode="rolling",
+        n_rows_input=int(rows["Peak_Name"].nunique()) if not rows.empty else 0,
+        n_rows_fit=len(rows),
+        output_path=output_path,
+        metrics_summary=summary,
+        warnings=[f"{counter.count} ODE timeouts"] if counter.count else [],
+        fit_params=rows,
+    )
+
+
+def _process_file_in_worker(path: Path, kwargs: dict[str, Any]) -> FitRunResult:
+    """``process_file`` in a worker process; rows are on disk, so not returned."""
+    return replace(process_file(path, **kwargs), fit_params=pd.DataFrame())
+
+
+def _init_worker() -> None:
+    """Quiet a worker: its per-solve timeout warnings are counted, not printed."""
+    logging.getLogger().setLevel(logging.ERROR)
+
+
+def process_folder(
+    dataset_folder: str | Path,
+    *,
+    input_subfolder: str | None = "_reprocess",
+    measurements: list[str] | None = None,
+    on_file: Callable[[FitRunResult], None] | None = None,
+    workers: int = 1,
+    **kwargs: Any,
+) -> BatchFitResult:
+    """``process_file`` over every area CSV of one dataset folder.
+
+    ``measurements`` restricts to these measurement base names. ``on_file`` is
+    called after each file (progress reporting). ``workers`` > 1 processes that
+    many files at once, one process each, as the ``ir_fitting`` refit does.
+    Workers inherit this process's priority class.
+    """
+    dataset_path = _dataset_path(dataset_folder)
+    csv_files = _discover_area_csvs(dataset_path, input_subfolder)
+    if measurements is not None:
+        wanted = set(measurements)
+        csv_files = [
+            p for p in csv_files if p.name.removesuffix(str(AREA_SUFFIX)) in wanted
+        ]
+    outputs: list[Path] = []
+    failures: dict[str, str] = {}
+
+    def record(result: FitRunResult) -> None:
+        if result.output_path is not None:
+            outputs.append(result.output_path)
+        if on_file is not None:
+            on_file(result)
+
+    n_workers = max(1, min(workers, os.cpu_count() or 1, len(csv_files)))
+    if n_workers == 1:
+        for csv_file in csv_files:
+            try:
+                result = process_file(csv_file, **kwargs)
+            except Exception as exc:  # noqa: BLE001 - record and keep going
+                failures[str(csv_file)] = str(exc)
+                continue
+            record(result)
+    else:
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+
+        # One fit per worker: stop BLAS in each from also spreading over every
+        # core. Must be in the environment before the workers import numpy.
+        for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+            os.environ.setdefault(var, "1")
+        LOGGER.info("parallel: %d workers over %d files", n_workers, len(csv_files))
+        with ProcessPoolExecutor(
+            max_workers=n_workers,
+            mp_context=multiprocessing.get_context("spawn"),
+            initializer=_init_worker,
+        ) as pool:
+            futures = {
+                pool.submit(_process_file_in_worker, csv_file, kwargs): csv_file
+                for csv_file in csv_files
+            }
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                except Exception as exc:  # noqa: BLE001 - one file must not stop the batch
+                    failures[str(futures[future])] = str(exc)
+                    continue
+                record(result)
+    return BatchFitResult(
+        dataset_folder=dataset_path,
+        n_files_found=len(csv_files),
+        n_files_success=len(outputs),
+        n_files_failed=len(failures),
+        outputs=outputs,
+        failures=failures,
+    )
 
 
 def _metrics_summary(df: pd.DataFrame, model: str | None) -> dict[str, float]:
@@ -50,465 +238,13 @@ def _metrics_summary(df: pd.DataFrame, model: str | None) -> dict[str, float]:
             pd.to_numeric(df[r2_col], errors="coerce"),
             dtype=float,
         )
-        if r2_values.size > 0:
+        if np.isfinite(r2_values).any():
             summary["median_r2"] = float(np.nanmedian(r2_values))
     if rmse_col and rmse_col in df.columns:
         rmse_values = np.asarray(
             pd.to_numeric(df[rmse_col], errors="coerce"),
             dtype=float,
         )
-        if rmse_values.size > 0:
+        if np.isfinite(rmse_values).any():
             summary["median_rmse"] = float(np.nanmedian(rmse_values))
     return summary
-
-
-def fit_file(
-    path: str | Path,
-    *,
-    model: str = "secondary_pfo",
-    peak_names: list[str] | None = None,
-    mode: str = "rolling",
-    min_points: int = 4,
-    init: list[float] | None = None,
-    use_prior_p0: bool = True,
-    output_folder: str | None = "_test",
-    save: bool = True,
-    monomer_sum_peaks: list[str] | None = None,
-    cluster_sum_peaks: list[str] | None = None,
-) -> FitRunResult:
-    """Fit one ``*_CarbonylPeakArea.csv`` file.
-
-    Args:
-        path: Path to one CarbonylPeakArea CSV.
-        model: Kinetic model key. Supported: ``"pfo"``, ``"secondary_pfo"``.
-        peak_names: Optional Peak_Name filter. ``None`` fits all available peaks.
-        mode: Execution mode selector. ``"full_series"`` runs one fit per peak
-            using all time points. ``"rolling"`` runs cumulative fits for each
-            unique time using all points up to that time.
-        min_points: Minimum points required before fitting a trajectory slice.
-        init: Optional initial parameter list (p0) passed to the model fit.
-        use_prior_p0: If True, successful secondary-p0 values are carried forward
-            between rows (only accepted if r² improves by > 0.01). If False,
-            fitting starts fresh from ``init`` (or defaults) for every row.
-        output_folder: Output subfolder name when ``save=True``.
-        save: If True, write merged legacy-style CSV output.
-        monomer_sum_peaks: Optional Peak_Name list overriding which peaks are
-            summed into ``monomer_sum``. ``None`` keeps the config-defined
-            definition (or the input CSV's existing monomer_sum row).
-        cluster_sum_peaks: Same override, for ``cluster_sum``.
-
-    Returns:
-        FitRunResult containing in-memory fit rows and optional output path.
-    """
-    file_path = Path(path)
-    if not file_path.exists():
-        raise FileNotFoundError(file_path)
-
-    if mode not in {"full_series", "rolling"}:
-        raise ValueError("mode must be one of: full_series, rolling")
-    if model not in {"pfo", "secondary_pfo"}:
-        raise ValueError("model must be one of: pfo, secondary_pfo")
-
-    df_input = pd.read_csv(file_path)
-    n_rows_input = len(df_input)
-    fit_rows = WRITER.prepare_model_fit_rows(
-        model,
-        df_input,
-        min_points=min_points,
-        peak_names=peak_names,
-        mode=mode,
-        p0=init,
-        carry_forward_p0=use_prior_p0,
-        monomer_sum_peaks=monomer_sum_peaks,
-        cluster_sum_peaks=cluster_sum_peaks,
-    )
-
-    output_path: Path | None = None
-    if save:
-        if output_folder is None:
-            raise ValueError("output_folder must be set when save=True")
-        output_path = WRITER.write_model_fit_params(
-            model,
-            file_path,
-            output_folder_name=output_folder,
-            min_points=min_points,
-            peak_names=peak_names,
-            mode=mode,
-            p0=init,
-            use_prior_p0=use_prior_p0,
-            monomer_sum_peaks=monomer_sum_peaks,
-            cluster_sum_peaks=cluster_sum_peaks,
-        )
-
-    return FitRunResult(
-        path=file_path,
-        model=model,
-        mode=mode,
-        n_rows_input=n_rows_input,
-        n_rows_fit=len(fit_rows),
-        output_path=output_path,
-        metrics_summary=_metrics_summary(fit_rows, model),
-        warnings=[],
-        fit_params=fit_rows,
-    )
-
-
-def classify_file(
-    path: str | Path,
-    *,
-    peak_names: list[str] | None = None,
-    min_points: int = 4,
-    output_folder: str | None = "_test",
-    save: bool = True,
-    classify_fn: Callable[..., dict[str, Any]] | None = None,
-) -> FitRunResult:
-    """Run classification-only workflow on one ``*_CarbonylPeakArea.csv`` file.
-
-    Args:
-        path: Path to one CarbonylPeakArea CSV.
-        peak_names: Optional Peak_Name filter. ``None`` classifies all peaks.
-        min_points: Minimum points required for classification logic.
-        output_folder: Output subfolder name when ``save=True``.
-        save: If True, write merged legacy-style CSV output.
-        classify_fn: Optional override for the ``classify_trajectory``-shaped
-            callable used on ``cluster_sum`` (e.g.
-            ``CLASSIFIER.classify_trajectory_combined``). ``None`` keeps the
-            default ``KineticClassification.classify_trajectory`` behavior.
-
-    Returns:
-        FitRunResult with classification rows and optional output path.
-    """
-    file_path = Path(path)
-    if not file_path.exists():
-        raise FileNotFoundError(file_path)
-
-    df_input = pd.read_csv(file_path)
-    n_rows_input = len(df_input)
-    fit_rows = WRITER.prepare_pfo_classification_rows(
-        df_input,
-        min_points=min_points,
-        peak_names=peak_names,
-        classify_fn=classify_fn,
-    )
-
-    output_path: Path | None = None
-    if save:
-        if output_folder is None:
-            raise ValueError("output_folder must be set when save=True")
-        output_path = WRITER.write_pfo_classification(
-            file_path,
-            output_folder_name=output_folder,
-            min_points=min_points,
-            peak_names=peak_names,
-            classify_fn=classify_fn,
-        )
-
-    return FitRunResult(
-        path=file_path,
-        model=None,
-        mode=None,
-        n_rows_input=n_rows_input,
-        n_rows_fit=len(fit_rows),
-        output_path=output_path,
-        metrics_summary={},
-        warnings=[],
-        fit_params=fit_rows,
-    )
-
-
-def classify_folder(
-    dataset_folder: str | Path,
-    *,
-    peak_names: list[str] | None = None,
-    min_points: int = 4,
-    output_folder: str = "_test",
-    classify_fn: Callable[..., dict[str, Any]] | None = None,
-) -> BatchFitResult:
-    """Classify all matching CarbonylPeakArea files in one dataset folder.
-
-    Args:
-        dataset_folder: Absolute folder path or relative folder under SEARCH_ROOT.
-        peak_names: Optional Peak_Name filter. ``None`` classifies all peaks.
-        min_points: Minimum points required for classification logic.
-        output_folder: Output subfolder name for merged outputs.
-        classify_fn: Optional override for the ``classify_trajectory``-shaped
-            callable used on ``cluster_sum`` (see ``classify_file``).
-
-    Returns:
-        BatchFitResult summarizing successes, failures, and output files.
-    """
-    dataset_path = Path(dataset_folder)
-    if not dataset_path.is_absolute():
-        dataset_path = SEARCH_ROOT / dataset_path
-
-    csv_files = _discover_area_csvs(dataset_path)
-
-    outputs: list[Path] = []
-    failures: dict[str, str] = {}
-    for csv_file in csv_files:
-        try:
-            result = classify_file(
-                csv_file,
-                peak_names=peak_names,
-                min_points=min_points,
-                output_folder=output_folder,
-                save=True,
-                classify_fn=classify_fn,
-            )
-            if result.output_path is not None:
-                outputs.append(result.output_path)
-        except Exception as exc:
-            failures[str(csv_file)] = str(exc)
-
-    return BatchFitResult(
-        dataset_folder=dataset_path,
-        n_files_found=len(csv_files),
-        n_files_success=len(outputs),
-        n_files_failed=len(failures),
-        outputs=outputs,
-        failures=failures,
-    )
-
-
-def fit_folder(
-    dataset_folder: str | Path,
-    *,
-    model: str = "secondary_pfo",
-    peak_names: list[str] | None = None,
-    mode: str = "rolling",
-    min_points: int = 4,
-    init: list[float] | None = None,
-    use_prior_p0: bool = True,
-    output_folder: str = "_test",
-    monomer_sum_peaks: list[str] | None = None,
-    cluster_sum_peaks: list[str] | None = None,
-) -> BatchFitResult:
-    """Fit all matching CarbonylPeakArea files in one dataset folder.
-
-    Args:
-        dataset_folder: Absolute folder path or relative folder under SEARCH_ROOT.
-        model: Kinetic model key. Supported: ``"pfo"``, ``"secondary_pfo"``.
-        peak_names: Optional Peak_Name filter. ``None`` fits all available peaks.
-        mode: Execution mode selector passed through to ``fit_file``.
-        min_points: Minimum points required before fitting a trajectory slice.
-        init: Optional initial parameter list (p0) passed to the model fit.
-        use_prior_p0: If True, successful secondary-p0 values are carried forward
-            between rows (only accepted if r² improves by > 0.01). If False,
-            fitting starts fresh from ``init`` (or defaults) for every row.
-        output_folder: Output subfolder name for merged outputs.
-        monomer_sum_peaks: Optional Peak_Name list overriding which peaks are
-            summed into ``monomer_sum``. ``None`` keeps the config-defined
-            definition (or each input CSV's existing monomer_sum row).
-        cluster_sum_peaks: Same override, for ``cluster_sum``.
-
-    Returns:
-        BatchFitResult summarizing successes, failures, and output files.
-    """
-    if mode not in {"full_series", "rolling"}:
-        raise ValueError("mode must be one of: full_series, rolling")
-    if model not in {"pfo", "secondary_pfo"}:
-        raise ValueError("model must be one of: pfo, secondary_pfo")
-
-    dataset_path = Path(dataset_folder)
-    if not dataset_path.is_absolute():
-        dataset_path = SEARCH_ROOT / dataset_path
-
-    csv_files = _discover_area_csvs(dataset_path)
-
-    outputs: list[Path] = []
-    failures: dict[str, str] = {}
-    for csv_file in csv_files:
-        try:
-            _ = fit_file(
-                csv_file,
-                model=model,
-                peak_names=peak_names,
-                mode=mode,
-                min_points=min_points,
-                init=init,
-                use_prior_p0=use_prior_p0,
-                output_folder=output_folder,
-                save=True,
-                monomer_sum_peaks=monomer_sum_peaks,
-                cluster_sum_peaks=cluster_sum_peaks,
-            )
-            outputs.append(csv_file.parent / output_folder / csv_file.name)
-        except Exception as exc:
-            failures[str(csv_file)] = str(exc)
-
-    return BatchFitResult(
-        dataset_folder=dataset_path,
-        n_files_found=len(csv_files),
-        n_files_success=len(outputs),
-        n_files_failed=len(failures),
-        outputs=outputs,
-        failures=failures,
-    )
-
-
-def fit_folder_by_sum_models(
-    dataset_folder: str | Path,
-    *,
-    monomer_model: str = "secondary_pfo",
-    cluster_model: str = "pfo",
-    mode: str = "rolling",
-    min_points: int = 4,
-    monomer_init: list[float] | None = None,
-    cluster_init: list[float] | None = None,
-    carry_forward_p0: bool = True,
-    output_folder: str = "_test",
-) -> BatchFitResult:
-    """Fit monomer and cluster groups with different models in one pass.
-
-    Uses config-based peak lists and writes one merged output file per input:
-    - monomer peaks + ``monomer_sum`` -> ``monomer_model``
-    - cluster peaks + ``cluster_sum`` -> ``cluster_model``
-
-    The ``use_prior_p0`` option applies to the monomer (secondary) model only:
-    - True: successful secondary-p0 values are carried forward between rows
-      (only accepted if r² improves by > 0.01).
-    - False: fitting starts fresh from ``monomer_init`` (or defaults) for every row.
-    """
-    if mode not in {"full_series", "rolling"}:
-        raise ValueError("mode must be one of: full_series, rolling")
-    for model in (monomer_model, cluster_model):
-        if model not in {"pfo", "secondary_pfo"}:
-            raise ValueError("model must be one of: pfo, secondary_pfo")
-
-    dataset_path = Path(dataset_folder)
-    if not dataset_path.is_absolute():
-        dataset_path = SEARCH_ROOT / dataset_path
-
-    csv_files = _discover_area_csvs(dataset_path)
-
-    outputs: list[Path] = []
-    failures: dict[str, str] = {}
-    for csv_file in csv_files:
-        try:
-            output_path = WRITER.write_sum_model_fit_params(
-                csv_file,
-                monomer_model_key=monomer_model,
-                cluster_model_key=cluster_model,
-                output_folder_name=output_folder,
-                min_points=min_points,
-                mode=mode,
-                monomer_p0=monomer_init,
-                cluster_p0=cluster_init,
-                carry_forward_p0=carry_forward_p0,
-            )
-            outputs.append(output_path)
-        except Exception as exc:
-            failures[str(csv_file)] = str(exc)
-
-    return BatchFitResult(
-        dataset_folder=dataset_path,
-        n_files_found=len(csv_files),
-        n_files_success=len(outputs),
-        n_files_failed=len(failures),
-        outputs=outputs,
-        failures=failures,
-    )
-
-
-def remove_legacy_pfo_columns_file(
-    path: str | Path,
-    *,
-    output_folder: str = "_test",
-    prefixes: tuple[str, ...] = ("pfo",),
-) -> FitRunResult:
-    """Remove legacy columns (default prefix ``"pfo"``) from one CSV.
-
-    Args:
-        path: Path to one ``*_CarbonylPeakArea.csv`` file.
-        output_folder: Output subfolder name for cleaned CSV.
-        prefixes: Column-name prefixes to remove. Default removes any column
-            whose name starts with ``"pfo"``.
-
-    Returns:
-        FitRunResult with ``fit_params`` containing the cleaned dataframe.
-    """
-    file_path = Path(path)
-    if not file_path.exists():
-        raise FileNotFoundError(file_path)
-
-    df_input = pd.read_csv(file_path)
-    n_rows_input = len(df_input)
-    output_path = WRITER.remove_legacy_pfo_columns_file(
-        file_path,
-        output_folder_name=output_folder,
-        prefixes=prefixes,
-    )
-    cleaned_df = pd.read_csv(output_path)
-    removed_count = len(df_input.columns) - len(cleaned_df.columns)
-
-    return FitRunResult(
-        path=file_path,
-        model=None,
-        mode=None,
-        n_rows_input=n_rows_input,
-        n_rows_fit=len(cleaned_df),
-        output_path=output_path,
-        metrics_summary={"columns_removed": float(max(removed_count, 0))},
-        warnings=[],
-        fit_params=cleaned_df,
-    )
-
-
-def remove_legacy_pfo_columns_folder(
-    dataset_folder: str | Path,
-    *,
-    output_folder: str = "_test",
-    prefixes: tuple[str, ...] = ("pfo",),
-) -> BatchFitResult:
-    """Remove legacy columns (default prefix ``"pfo"``) in a folder.
-
-    Args:
-        dataset_folder: Absolute path or relative folder under ``SEARCH_ROOT``.
-        output_folder: Output subfolder name for cleaned CSVs.
-        prefixes: Column-name prefixes to remove. Default removes any column
-            whose name starts with ``"pfo"``.
-
-    Returns:
-        BatchFitResult for all matching ``*_CarbonylPeakArea.csv`` files.
-    """
-    dataset_path = Path(dataset_folder)
-    if not dataset_path.is_absolute():
-        dataset_path = SEARCH_ROOT / dataset_path
-
-    csv_files = _discover_area_csvs(dataset_path)
-
-    outputs: list[Path] = []
-    failures: dict[str, str] = {}
-    for csv_file in csv_files:
-        try:
-            output_path = WRITER.remove_legacy_pfo_columns_file(
-                csv_file,
-                output_folder_name=output_folder,
-                prefixes=prefixes,
-            )
-            outputs.append(output_path)
-        except Exception as exc:
-            failures[str(csv_file)] = str(exc)
-
-    return BatchFitResult(
-        dataset_folder=dataset_path,
-        n_files_found=len(csv_files),
-        n_files_success=len(outputs),
-        n_files_failed=len(failures),
-        outputs=outputs,
-        failures=failures,
-    )
-
-
-if __name__ == "__main__":
-    fit_folder_by_sum_models(
-        dataset_folder=SEARCH_ROOT / "nn1120-3_pd_ceo2_004",
-        monomer_model="secondary_pfo",
-        cluster_model="pfo",
-        mode="rolling",
-        min_points=4,
-        monomer_init=None,
-        cluster_init=None,
-        carry_forward_p0=False,
-        output_folder="_test",
-    )

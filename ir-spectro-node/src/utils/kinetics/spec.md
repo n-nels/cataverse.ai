@@ -1,211 +1,102 @@
-# src/utils/kinetics — offline reprocessing CLIs
+# src/utils/kinetics — offline kinetics reprocessing
 
-This package has **two separate CLIs**, deliberately kept apart:
+**Status: in build.** Offline only. The live server never calls it, and it never writes
+into source data. The working spec, with the decisions, validation tables and
+progress log, is `spec-working.md`. Classifier design is in `docs/spec_nuc-clf.md`.
 
-| CLI | Script | Job | Underlying API |
-|---|---|---|---|
-| Classify | `scripts/run_kinetics_classification.py` | Label a `cluster_sum` trajectory `continuous`/`discontinuous` | `src/utils/kinetics/classify_cli.py` → `api.classify_file` / `api.classify_folder` |
-| Fit | `scripts/run_kinetics_fit.py` | Fit a PFO/secondary-PFO kinetic model and produce rate constants | `src/utils/kinetics/fit_cli.py` → `api.fit_file` / `api.fit_folder` |
+## 0. Read first
 
-They were split apart after a reprocessing attempt that mixed the two: redefining
-`monomer_sum` has nothing to do with classification (only `cluster_sum` is ever
-classified), and the classify CLI never fits kinetic parameters at all — its
-`pfo_*`/`pfo-sec_*` output columns are NaN by design. Use the fit CLI for
-anything involving PFO/secondary-PFO parameters.
+```bash
+# 1. refit params -> area CSVs, then 2. classify + kinetic fits (live-equivalent)
+uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --build-areas
+uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --classify-only   # fast
+uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --measurements <base name>
+uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --workers 8   # one process per measurement
 
-Both CLIs only orchestrate existing `src/utils/kinetics/{utils,writer,api}.py`
-logic — neither adds new fitting or classification behavior.
+# Score a detector against ground_truth.json
+uv run python scripts\run_kinetics_classification.py --validate
+uv run python scripts\run_kinetics_classification.py --validate --input-subfolder _reprocess
+```
 
-Neither CLI touches `src/analysis/` (the live, real-time server pipeline) or
-`config/analysis.yaml`'s `monomer_peaks_base`/`cluster_peaks_base` (the config
-that pipeline reads). Redefining sums here is scoped entirely to one offline
-CLI run; it never changes what the instrument computes live.
+### Traps
 
-## Fit CLI — `scripts/run_kinetics_fit.py`
+- **Time never comes from params rows.** `Time (s)` is a running sum of
+  `Time_Delta (s)`, so a missing or failed fit would shift every later time. The
+  timeline (`timeline.py`) takes each spectrum's `Time_Delta` from the subIFG log
+  instead.
+- **The sums are fixed in the area CSV.** They come from the `ir_fitting.fit` groups
+  (`utils.group_peak_names`): monomer = 2113/2103/2093, cluster = 15 peaks, including
+  the six low-band peaks. There are no per-run sum flags. Rebuild the areas to change a sum.
+- **`classification` is causal.** Each row carries the latch state as of that time
+  (`classification.latch_sweep`: 3 consecutive fires, never reverts). It is not a
+  hindsight label, and it is the same sweep the ground-truth harness scores.
+- **Sort order is part of parity.** `sorted_trajectory` sorts exactly as live does.
+  A stable sort changes floating-point sums enough to move ill-conditioned
+  secondary_pfo fits.
+- **secondary_pfo is slow**, and has a 0.1 s wall-clock ODE timeout per solve, so a
+  heavily loaded machine can change results. Run at below-normal priority (the CLI
+  default). `--workers N` runs N measurements at once, one process each, as the
+  refit does. More load means more timeouts, which are reported per file
+  (`N ODE timeouts`).
 
-### Target (required, mutually exclusive)
+## 1. Pipeline
 
-| Flag | Meaning |
+```
+<dataset>\_reprocess\*_CarbonylPeakFitParams.csv         (refit output)
+   │  timeline.build_timeline  (subIFG log + exp params → Time_Delta per spectrum)
+   │  areas.build_peak_area_df (live compute_cumulative_peak_area_df on the full grid,
+   ▼                            sums from ir_fitting.fit groups)
+<dataset>\_reprocess\*_CarbonylPeakArea.csv
+   │  writer.prepare_measurement_rows:
+   │    classify_by_time   causal cluster_sum label (latch_sweep)
+   │    rolling fits       REGIME_MODELS[(group, regime)] per time point
+   ▼
+<dataset>\_reprocess\_test\*_CarbonylPeakArea.csv          (live schema)
+```
+
+| Module | Role |
 |---|---|
-| `--path PATH` | Fit one `*_CarbonylPeakArea.csv` file. |
-| `--folder FOLDER` | Fit every matching file under a dataset folder (absolute path, or a name relative to `SEARCH_ROOT` = `config/paths.yaml`'s `data.peak_fit`). |
+| `timeline.py` | One row per subIFG spectrum (from the log), with `Time_Delta (s)` |
+| `areas.py` | Params + timeline → area CSV. A spectrum with no fit keeps its time and gets NaN area |
+| `classification.py` | Detectors (`combined` = flat-then-rise OR drawdown), `latch_sweep`, `sorted_trajectory` |
+| `models.py` | pfo and secondary_pfo (copies of live, same results) |
+| `writer.py` | `REGIME_MODELS`, per-measurement classify + rolling fit + write; singletons |
+| `api.py` | `build_areas`, `process_file`, `process_folder` |
+| `validation.py` | Ground-truth harness (`run_validation`, `ever_fires`) |
+| `fit_cli.py` / `classify_cli.py` | The two CLIs (`scripts\run_kinetics_fit.py`, `scripts\run_kinetics_classification.py`) |
+| `monomer_features.py` | Research module (LaMer landmarks); not part of the pipeline |
 
-### Kwargs
+## 2. Models
 
-| Flag | Default | Maps to (`api.fit_file`/`fit_folder`) | Meaning |
-|---|---|---|---|
-| `--model {pfo,secondary_pfo}` | `secondary_pfo` | `model` | Which kinetic model to fit. `pfo`: `q(t) = q_0 + q_e(1 - exp(-k t))`. `secondary_pfo`: coupled-ODE secondary PFO (`k_a`, `q_e`, `k_s`/`k_p`, `q_inf`) — see `CLAUDE.md` for the current-iteration constraints (`q_0` fixed, `k_p_ratio` bound, `q_inf` cap, etc.). |
-| `--peak-names NAME [NAME ...]` | `None` (all peaks) | `peak_names` | Restrict fitting to these `Peak_Name` values, e.g. `monomer_sum`, `cluster_sum`, or an explicit `Peak_<value>`. This is a **row filter** — which rows get fit — not the sum definition. |
-| `--mode {full_series,rolling}` | `rolling` | `mode` | `rolling`: fit at every time point using an expanding window (all points up to and including that time) — one result row per time point. `full_series`: fit once using the whole trajectory; result is written to the row at the max time only, every earlier row's kinetic columns stay NaN. |
-| `--min-points N` | `4` | `min_points` | Minimum data points required before a trajectory slice is fit. Below this, the row is skipped. |
-| `--init V [V ...]` | `None` (built-in defaults) | `init` | Initial parameter guess (p0) for the optimizer. Length must match the model: `pfo` takes 3 values (`k`, `q_e`, `q_0`); `secondary_pfo` takes 5 (`k_a`, `q_e`, `k_s`, `k_p_ratio`, `q_inf`). |
-| `--use-prior-p0` / `--no-use-prior-p0` | `--use-prior-p0` (True) | `use_prior_p0` | `secondary_pfo` + `rolling` only. When on, a time point's successful p0 seeds the next time point's search (only carried forward if r² improved by > 0.01). `--no-use-prior-p0` restarts from `--init`/defaults at every row. |
-| `--output-folder NAME` | `_test` | `output_folder` | Output subfolder name, created alongside the source file. Source is never overwritten. |
-| `--monomer-sum-peaks NAME [NAME ...]` | `None` | `monomer_sum_peaks` | **Redefine `monomer_sum`** for this run — see below. |
-| `--cluster-sum-peaks NAME [NAME ...]` | `None` | `cluster_sum_peaks` | Same, for `cluster_sum`. |
+`REGIME_MODELS` maps `(group, regime)` to a model. The regime at a time point is the
+cluster_sum latch state at that time.
 
-### Why `rolling` is the default: relationship to the live pipeline's `latest_only`
-
-The live server pipeline (`src/analysis/kinetics_fitting.py`) doesn't use
-`mode` at all — it has its own flag, `append_fit_results(..., latest_only: bool
-= True)`. The two aren't the same knob, but they're closely related, and
-knowing the mapping explains why this CLI now defaults to `rolling` instead of
-`full_series`:
-
-| Live pipeline | Offline fit CLI equivalent | Behavior |
+| Group (rows fitted) | continuous | discontinuous |
 |---|---|---|
-| `latest_only=True` (real-time default) | closest to `rolling`, built incrementally | Each time a new point arrives, fit *only* the newest time point (using all preceding points as the window) and merge with previously-saved kinetics rows carried forward. Over the life of a run this produces the same end state as running `rolling` once over the complete file: one fit per time point. |
-| `latest_only=False` (batch/offline path, via `run_kinetics_fit` per `CLAUDE.md`) | `rolling` | Refits every time point from scratch in one pass, ignoring prior kinetics columns. This is what this CLI's `rolling` mode does. |
-| — | `full_series` | Has **no live-pipeline equivalent**. It fits once over the whole trajectory and writes the result to a single row (the final time point), discarding what an earlier point's fit would have been — the live pipeline never does this. |
+| monomer peaks + `monomer_sum` | secondary_pfo | secondary_pfo (placeholder) |
+| cluster peaks + `cluster_sum` | pfo | pfo (placeholder) |
 
-Because `full_series` has no analog in production and `rolling` is what
-actually matches how kinetics get fit in real time, `rolling` is the default
-here. Use `--mode full_series` only when you deliberately want a single
-end-of-run fit summary rather than a per-row trajectory of fits.
+The discontinuous entries are placeholders until the before/after-detection models
+exist (four equations: two sums × two regimes). Fits are rolling (an expanding window
+at every unique time, live `latest_only=False`). The secondary_pfo p0 search starts
+fresh at every point, as live does; `--use-prior-p0` turns carry-forward on.
+Unknown-group peaks get areas but no fits.
 
-### Redefining `monomer_sum` / `cluster_sum`
+## 3. Validation (details in `spec-working.md`)
 
-`monomer_sum` and `cluster_sum` are synthetic rows: the sum of `Cumulative_Peak_Area`
-across a group of atomic peaks, at each `(Time (s), Delta_Group, File)`. Which
-peaks belong to each group is normally `config/analysis.yaml`'s
-`monomer_peaks_base` / `cluster_peaks_base` (isotope-shifted at read time) —
-and in practice, the source CSV usually already has `monomer_sum`/`cluster_sum`
-rows baked in by the live pipeline (`src/analysis/output.py`), computed with
-that config definition.
+| Check | Result |
+|---|---|
+| Timeline `Time_Delta` vs saved live params, all 7 datasets | 24,199/24,199 exact |
+| Area builder vs live area CSVs (live params, `voigt_fit` groups), nn1120-3_004 | 34/34 identical (float rounding) |
+| Kinetic fits vs live `append_fit_results(latest_only=False)`, `004-019`, all peaks | all 20 kinetic columns bit-identical, 453 rows |
+| Written `classification` vs harness verdict, nn1120-3_004 | 34/34 agree, never reverts |
+| Harness `combined`: live / refit 9-peak / refit 15-peak | 285 / 275 / 257 of 288 |
 
-`--monomer-sum-peaks` / `--cluster-sum-peaks` let you override the peak group
-for one offline run, without touching `config/analysis.yaml`:
+## 4. Open
 
-```
---monomer-sum-peaks Peak_2113 Peak_2103 Peak_2093
-```
-
-Pass the **final `Peak_Name` values as they appear in the CSV** — the same
-units as `--peak-names` — not raw base wavenumbers (no isotope-shift math
-happens here). To find the current shifted names for a peak group, read them
-off any `*_CarbonylPeakArea.csv`'s `Peak_Name` column, or compute them from
-`config/analysis.yaml`'s base list plus `isotope_shift_cm1`.
-
-When either override is given:
-1. Any existing `monomer_sum`/`cluster_sum` row of that type is dropped from
-   the loaded data first.
-2. It's rebuilt from scratch by summing exactly the peaks you listed.
-3. The other sum (if not overridden) is left as-is — either the baked-in row
-   from the source CSV, or rebuilt from the config default if the source CSV
-   didn't have one.
-
-Omitting a flag leaves that sum untouched (whatever's already in the CSV, or
-the config default). This is why the flags default to `None` rather than an
-empty list — there's a real difference between "don't touch this sum" and
-"sum zero peaks."
-
-### Examples
-
-```
-# Fit secondary_pfo on monomer_sum for one file, using the config's monomer definition
-uv run python scripts/run_kinetics_fit.py --path <file>_CarbonylPeakArea.csv --model secondary_pfo --peak-names monomer_sum
-
-# Same, but redefine monomer_sum to drop one peak for this run only
-uv run python scripts/run_kinetics_fit.py --path <file>_CarbonylPeakArea.csv --model secondary_pfo --peak-names monomer_sum --monomer-sum-peaks Peak_2113 Peak_2103 Peak_2093
-
-# Batch-fit pfo on cluster_sum across a whole dataset folder, rolling window
-uv run python scripts/run_kinetics_fit.py --folder nn1120-2_pd_ceo2_000 --model pfo --peak-names cluster_sum --mode rolling
-
-# Redefine both sums for a batch run, starting fresh p0 every row
-uv run python scripts/run_kinetics_fit.py --folder nn1120-2_pd_ceo2_000 --model secondary_pfo --peak-names monomer_sum --monomer-sum-peaks Peak_2113 Peak_2103 Peak_2093 --cluster-sum-peaks Peak_2073 Peak_2062 Peak_2050 --no-use-prior-p0
-```
-
-Output for `--path` prints the written file path, row count, and (when
-present) `median_r2`/`median_rmse` across the fitted rows. Output for
-`--folder` prints `N/M files fit under <folder>` plus one `FAILED <file>: <error>`
-line per failure.
-
-## Classify CLI — `scripts/run_kinetics_classification.py`
-
-Unrelated to fitting — no kinetic parameters (`pfo_*`/`pfo-sec_*`) are ever
-produced here. This CLI answers one question per `cluster_sum` trajectory:
-did nucleation growth start ("`discontinuous`", with a `growth_onset_s`
-breakpoint) or not ("`continuous`")?
-
-### What classification does
-
-`classify_trajectory` (and its variants, see below) look at a `cluster_sum`
-trajectory (`Time (s)` vs. `Cumulative_Peak_Area`) and try to find a flat
-lead-in window followed by a sustained rise:
-
-1. `find_flat_transition` scans forward for a window (`flat_window_s`,
-   `min_flat_start_s` from `config/analysis.yaml`'s `kinetics_classification`)
-   where the local slope stays within `eps_flat` of zero, then finds where
-   that flat window ends (the slope stops being flat).
-2. The trajectory is `discontinuous` only if it's still meaningfully elevated
-   above that flat baseline (by more than `rise_delta`) at its final points —
-   otherwise it's `continuous`.
-3. If `discontinuous`, `growth_onset_s` is set to the transition point (or a
-   smoothed version of it), and a PFO model is fit separately on the
-   before/after slices (`pre_pfo_*` / `post_pfo_*` columns) — **this is a
-   diagnostic PFO summary fit for classification purposes only**, distinct
-   from the fit CLI's `pfo`/`secondary_pfo` output columns.
-
-Only `Peak_Name == "cluster_sum"` is ever run through this logic — `monomer_sum`
-and every atomic `Peak_<value>` row pass through with `classification`/
-`growth_onset_s` left as NaN, whether or not `--peak-names` restricts to them.
-
-### Classifier variants (`--classifier`)
-
-Several detectors live side by side in `classification.py` as active,
-scored candidates (see `docs/spec.md`), not dead alternatives:
-
-| `--classifier` value | Method | Approach |
-|---|---|---|
-| `combined` (default) | `classify_trajectory_combined` | Fires `discontinuous` if *either* the flat-then-rise rule *or* the drawdown rule (below) fires. Current best performer — 285/288 per `docs/spec.md` §6.2. |
-| `default` | `classify_trajectory` | The original flat-then-rise-only detector (264/288). Rejects a trajectory that has decayed back toward baseline by its final ~5% of points, no matter how large the rise was in between. |
-| `sustained_rise` | `classify_trajectory_sustained_rise` | Like `default`, but doesn't require the trajectory to still be elevated at the very end — checks whether a *sustained* (smoothed) elevation above baseline ever occurred anywhere after the flat-window transition, tolerating a later decay. |
-| `drawdown` | `classify_trajectory_drawdown` | A different shape entirely: no flat-window search. Detects a rise-then-decay "hump" by comparing the running max so far against the pre-peak minimum (`rise_magnitude`) and against the current value (`drawdown`). Built for trajectories with no flat lead-in that rise sharply from the first point, peak, then decay. |
-
-### `--validate`
-
-Ignores `--path`/`--folder` entirely. Recomputes classification from raw
-`Time (s)`/`Cumulative_Peak_Area` `cluster_sum` rows (never trusts a
-`classification` column already baked into the CSV) for every file listed in
-`ground_truth.json`, and scores the chosen `--classifier` against each file's
-known label. Correctness uses **monotonic-once-triggered aggregation**: for
-each file, the detector is swept over every growing prefix of the trajectory
-(`ever_fires`); a `discontinuous`-labeled file is correct iff the detector
-fires `discontinuous` for `REQUIRED_CONSECUTIVE_FIRES` (3) consecutive
-prefixes at *some* point; a `continuous`-labeled file is correct iff that
-never happens. `report.print_summary()` prints overall accuracy, a
-confusion-matrix-style breakdown (`tp`/`fn`/`tn`/`fp`), per-folder accuracy,
-and every mismatch. See `validation.py` and `docs/spec.md`/`docs/prompt.md`
-for the full definition.
-
-### Kwargs
-
-| Flag | Default | Maps to (`api.classify_file`/`classify_folder`) | Meaning |
-|---|---|---|---|
-| `--path` / `--folder` | — | `path` / `dataset_folder` | Same target semantics as the fit CLI. |
-| `--validate` | off | (bypasses `api`, calls `validation.run_validation`) | See above. |
-| `--classifier {default,sustained_rise,drawdown,combined}` | `combined` | `classify_fn` | Which detector labels `cluster_sum` — see table above. |
-| `--peak-names NAME [NAME ...]` | `None` (all peaks) | `peak_names` | Row filter, same meaning as the fit CLI — but only `cluster_sum` rows ever get a `classification` value regardless of this filter. |
-| `--min-points N` | `4` | `min_points` | Minimum points required before classification runs on a `cluster_sum` group. |
-| `--output-folder NAME` | `_test` | `output_folder` | Same semantics as the fit CLI — created alongside the source file, source never overwritten. |
-
-This CLI has no `--monomer-sum-peaks`/`--cluster-sum-peaks` — redefining sums
-is a fitting concern, not a classification one, and only the fit CLI exposes it.
-
-### Examples
-
-```
-# Classify every cluster_sum trajectory in a dataset folder with the default (best) detector
-uv run python scripts/run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004
-
-# Classify one file with a specific detector variant
-uv run python scripts/run_kinetics_classification.py --path <file>_CarbonylPeakArea.csv --classifier drawdown
-
-# Score a detector against ground_truth.json instead of writing output
-uv run python scripts/run_kinetics_classification.py --validate --classifier combined
-```
-
-Output for `--path` prints the written file path and row count. Output for
-`--folder` prints `N/M files classified under <folder>` plus one
-`FAILED <file>: <error>` line per failure. Output for `--validate` prints the
-`ValidationReport` summary described above.
+- Classifier on the refit 15-peak `cluster_sum`: 257/288 (21/48 discontinuous found).
+  The low band grows and fills in the nn1120-4 drawdown hump. Accepted for now;
+  retuning is separate work.
+- secondary_pfo returns NaN when `monomer_sum` is all ≤ 0 (inverted `q_e` bound), as
+  live does. This affects 14/296 refit files.
+- The discontinuous-regime models (above).

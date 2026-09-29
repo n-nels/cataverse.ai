@@ -1,151 +1,180 @@
-"""Command-line entry point for the offline kinetics model-fitting workflow.
+"""Command-line entry point for offline kinetics reprocessing.
 
-Wraps ``api.fit_file``/``api.fit_folder`` behind one argparse CLI: pick a
-kinetic model (``pfo`` or ``secondary_pfo``) and which peaks to fit it against
-(e.g. ``monomer_sum``, ``cluster_sum``, or any individual ``Peak_Name``), plus
-the fit's other parameters (mode, min-points, initial guess, output folder).
+One run per dataset folder (or file) produces the live-equivalent
+``*_CarbonylPeakArea.csv``:
 
-This is deliberately separate from ``classify_cli.py`` (classification): classifying a
-trajectory's shape and fitting its kinetic parameters are different jobs, and
-mixing their outputs made a prior reprocessing attempt hard to reason about.
+- monomer peaks + ``monomer_sum`` get secondary_pfo;
+- cluster peaks + ``cluster_sum`` get pfo (``writer.REGIME_MODELS``);
+- ``cluster_sum`` gets the causal per-row ``classification`` (``classification.latch_sweep``).
+
+Inputs are the area CSVs in ``<dataset>/<input-subfolder>/`` (default
+``_reprocess``, the refit output), and ``--build-areas`` first (re)builds them
+from the refit params (``areas.py``). Output goes to
+``<dataset>/<input-subfolder>/<output-folder>/``. Sums and groups come from the
+``ir_fitting.fit`` block of ``config/analysis.yaml``, not from flags.
+
+Runs at below-normal process priority by default: this is the lab machine.
 
 Usage:
-    python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --model pfo --peak-names cluster_sum
-    python scripts\\run_kinetics_fit.py --path <file>.csv --model secondary_pfo --peak-names monomer_sum --mode rolling
-    python scripts\\run_kinetics_fit.py --path <file>.csv --model pfo --peak-names monomer_sum --no-use-prior-p0
+    python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --build-areas
+    python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --measurements 20260506_052154_pd_ceo2_004-019
+    python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --classify-only
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
+import math
+import time
 from pathlib import Path
 
-path = Path(__file__).resolve().parents[3]
-if str(path) not in sys.path:
-    sys.path.append(str(path))
-
+from src.utils.ir_fitting.refit_cli import _lower_priority, _worker_count
 from src.utils.kinetics import api
-
-MODEL_CHOICES = ("pfo", "secondary_pfo")
-MODE_CHOICES = ("full_series", "rolling")
+from src.utils.kinetics.classify_cli import CLASSIFIER_CHOICES
+from src.utils.kinetics.result_types import FitRunResult
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Batch-fit a kinetic model against CarbonylPeakArea CSVs.",
+        description="Classify and kinetics-fit CarbonylPeakArea CSVs (live-equivalent).",
     )
-    target = parser.add_mutually_exclusive_group()
-    target.add_argument("--path", type=Path, help="Fit one *_CarbonylPeakArea.csv file.")
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--path", type=Path, help="Process one *_CarbonylPeakArea.csv.")
     target.add_argument(
         "--folder",
-        type=Path,
-        help="Fit every matching file under a dataset folder "
-        "(absolute, or relative to SEARCH_ROOT).",
+        help="Dataset folder name under data.peak_fit (e.g. nn1120-3_pd_ceo2_004).",
     )
     parser.add_argument(
-        "--model",
-        choices=MODEL_CHOICES,
-        default="secondary_pfo",
-        help="Kinetic model to fit (default: %(default)s).",
+        "--measurements",
+        nargs="+",
+        default=None,
+        help="With --folder: only these measurement base names.",
+    )
+    parser.add_argument(
+        "--input-subfolder",
+        default="_reprocess",
+        help="With --folder: read area CSVs from <folder>/<input-subfolder>/ "
+        "(default: %(default)s).",
+    )
+    parser.add_argument(
+        "--build-areas",
+        action="store_true",
+        help="With --folder: (re)build the area CSVs from the params CSVs in "
+        "<folder>/<input-subfolder>/ first.",
+    )
+    parser.add_argument(
+        "--output-folder",
+        default="_test",
+        help="Output subfolder next to the input CSVs (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--classifier",
+        choices=sorted(CLASSIFIER_CHOICES),
+        default="combined",
+        help="cluster_sum detector (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--classify-only",
+        action="store_true",
+        help="Write classification only; no kinetic fits (fast).",
     )
     parser.add_argument(
         "--peak-names",
         nargs="+",
         default=None,
-        help="Which Peak_Name rows to fit, e.g. 'monomer_sum' or 'cluster_sum' "
-        "or one or more explicit 'Peak_<value>' names. Default: all peaks.",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=MODE_CHOICES,
-        default="rolling",
-        help="'rolling' fits at every time point with an expanding window "
-        "(default) -- matches how the live server pipeline fits over the "
-        "life of a run. 'full_series' fits once using all data, writing the "
-        "result only to the row at the final time point.",
+        help="Only fit these Peak_Name rows, e.g. monomer_sum cluster_sum. "
+        "Default: every monomer/cluster group peak and both sums.",
     )
     parser.add_argument("--min-points", type=int, default=4)
     parser.add_argument(
-        "--init",
-        nargs="+",
-        type=float,
-        default=None,
-        help="Initial parameter guess (p0) passed to the optimizer. "
-        "Default: built-in defaults.",
-    )
-    parser.add_argument(
         "--use-prior-p0",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Carry forward the previous row's successful p0 as the next "
-        "row's starting seed (secondary_pfo + rolling mode only). "
-        "Use --no-use-prior-p0 to start fresh from --init/defaults every row.",
+        default=False,
+        help="Seed each time point's secondary_pfo p0 search from the previous "
+        "one. Off by default, as in live.",
     )
     parser.add_argument(
-        "--output-folder",
-        default="_test",
-        help="Output subfolder name for fitted CSVs (default: %(default)s).",
+        "--normal-priority",
+        action="store_true",
+        help="Run at normal process priority (default: below normal).",
     )
     parser.add_argument(
-        "--monomer-sum-peaks",
-        nargs="+",
-        default=None,
-        help="Override which Peak_Name rows are summed into 'monomer_sum', "
-        "e.g. Peak_2113 Peak_2103 Peak_2093. Default: use the config-defined "
-        "definition (or the input CSV's existing monomer_sum row).",
-    )
-    parser.add_argument(
-        "--cluster-sum-peaks",
-        nargs="+",
-        default=None,
-        help="Same override as --monomer-sum-peaks, for 'cluster_sum'.",
+        "--workers",
+        type=_worker_count,
+        default=1,
+        help="With --folder: process this many measurements at once, one process "
+        "each (default: %(default)s). At the default below-normal priority, extra "
+        "workers use idle cores only. More load means more secondary_pfo ODE "
+        "timeouts (0.1 s each), which are reported per file.",
     )
     return parser
 
 
-def main(argv: list[str] | None = None) -> None:
-    parser = build_parser()
-    args = parser.parse_args(argv)
+def _report(result: FitRunResult, label: str) -> None:
+    metrics = " ".join(
+        f"{k}={v:.3g}" for k, v in result.metrics_summary.items() if math.isfinite(v)
+    )
+    notes = " ".join(result.warnings)
+    print(
+        f"{label} {result.path.name}: {result.n_rows_fit} rows {metrics} {notes}".rstrip(),
+        flush=True,
+    )
 
-    if args.path is None and args.folder is None:
-        parser.error("one of --path or --folder is required")
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
+    if not args.normal_priority:
+        _lower_priority()
+
+    kwargs = {
+        "output_folder": args.output_folder,
+        "classifier": args.classifier,
+        "fit": not args.classify_only,
+        "min_points": args.min_points,
+        "carry_forward_p0": args.use_prior_p0,
+        "peak_names": args.peak_names,
+    }
 
     if args.path is not None:
-        result = api.fit_file(
-            args.path,
-            model=args.model,
-            peak_names=args.peak_names,
-            mode=args.mode,
-            min_points=args.min_points,
-            init=args.init,
-            use_prior_p0=args.use_prior_p0,
-            output_folder=args.output_folder,
-            monomer_sum_peaks=args.monomer_sum_peaks,
-            cluster_sum_peaks=args.cluster_sum_peaks,
-        )
-        print(f"Wrote {result.output_path} ({result.n_rows_fit} rows)")
-        for key, value in result.metrics_summary.items():
-            print(f"  {key}: {value:.4g}")
+        start = time.perf_counter()
+        result = api.process_file(args.path, **kwargs)
+        _report(result, f"[{time.perf_counter() - start:.0f}s]")
+        print(f"Wrote {result.output_path}")
         return
 
-    batch_result = api.fit_folder(
+    if args.build_areas:
+        reports = api.build_areas(
+            args.folder,
+            input_subfolder=args.input_subfolder,
+            measurements=args.measurements,
+        )
+        print(
+            f"Built {len(reports)} area CSVs; "
+            f"{sum(r.n_missing for r in reports)} spectra without a fit"
+        )
+
+    start = time.perf_counter()
+    done = {"n": 0}
+
+    def on_file(result: FitRunResult) -> None:
+        done["n"] += 1
+        _report(result, f"[{done['n']} done, {time.perf_counter() - start:.0f}s]")
+
+    batch = api.process_folder(
         args.folder,
-        model=args.model,
-        peak_names=args.peak_names,
-        mode=args.mode,
-        min_points=args.min_points,
-        init=args.init,
-        use_prior_p0=args.use_prior_p0,
-        output_folder=args.output_folder,
-        monomer_sum_peaks=args.monomer_sum_peaks,
-        cluster_sum_peaks=args.cluster_sum_peaks,
+        input_subfolder=args.input_subfolder,
+        measurements=args.measurements,
+        on_file=on_file,
+        workers=args.workers,
+        **kwargs,
     )
     print(
-        f"{batch_result.n_files_success}/{batch_result.n_files_found} files "
-        f"fit under {batch_result.dataset_folder}"
+        f"{batch.n_files_success}/{batch.n_files_found} files processed under "
+        f"{batch.dataset_folder}"
     )
-    for path_str, error in batch_result.failures.items():
+    for path_str, error in batch.failures.items():
         print(f"  FAILED {path_str}: {error}")
 
 
