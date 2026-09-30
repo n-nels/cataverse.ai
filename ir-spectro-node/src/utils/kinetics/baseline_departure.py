@@ -215,3 +215,50 @@ def classify_window_rise(
     if rise <= rise_threshold or gated:
         return {"classification": "continuous"}
     return {"classification": "discontinuous", "growth_onset_s": float(time_s[-1])}
+
+
+# Round 3: absolute-amplitude gate (user, after round 2). A real departure
+# also spans a minimum peak-to-trough in Peak_1988: per group, max - min of
+# the smoothed values over the whole prefix so far, median over groups.
+# It is non-decreasing in the prefix, so it can only delay a latch.
+# The gate must hold on the same 3 prefixes the rise fires on, not just by
+# the end of the run: the best such span is 0.0055 for nn1120-3_001-000
+# (continuous) and 0.0069 for 003-091/098 (discontinuous), so 0.006. The
+# user's ~0.01 would drop 003-091/098/004-016/3_001-034; 0.007 drops 091/098.
+AMPLITUDE_MIN = 0.006
+
+
+def prefix_amplitude(
+    payload: NDArray[np.float64], *, smooth_n: int = SMOOTH_N
+) -> float:
+    """Median-over-groups peak-to-trough of the smoothed Peak_1988 prefix."""
+    spans: list[float] = []
+    for code in np.unique(payload[:, 1]):
+        values = payload[payload[:, 1] == code, 0]
+        if values.size < smooth_n:
+            continue
+        smoothed = np.array(
+            [
+                np.median(values[j - smooth_n + 1 : j + 1])
+                for j in range(smooth_n - 1, values.size)
+            ]
+        )
+        spans.append(float(smoothed.max() - smoothed.min()))
+    return float(np.median(spans)) if spans else 0.0
+
+
+def classify_window_rise_gated(
+    time_s: NDArray[np.float64],
+    payload: NDArray[np.float64],
+    *,
+    amplitude_min: float = AMPLITUDE_MIN,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """``classify_window_rise`` that also needs ``prefix_amplitude`` >= ``amplitude_min``."""
+    result = classify_window_rise(time_s, payload, **kwargs)
+    if result["classification"] == "discontinuous" and (
+        prefix_amplitude(payload, smooth_n=kwargs.get("smooth_n", SMOOTH_N))
+        < amplitude_min
+    ):
+        return {"classification": "continuous"}
+    return result

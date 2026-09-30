@@ -89,3 +89,25 @@ Next: see whether 004-018 (a d label) vs 004-025 (a c label) is a label question
   S/N), either label OK.
 - `ground_truth.json` edited (user-approved): 004-018 → continuous; 3_001-034 →
   discontinuous, basis `user_declared_2026-09-30`. Totals unchanged: 65/223.
+
+## Round 3 — 2026-09-30
+
+Added the amplitude gate: `classify_window_rise_gated` in `baseline_departure.py`
+(round 2 AND median-over-groups smoothed Peak_1988 max−min over the prefix ≥ 0.006).
+The gate must hold on the 3 rise-fire prefixes. At 0.007, 003-091/098 were lost
+(best span 0.0069); 001-000 is 0.0055.
+Score 286/288: nn1120-4 33/33; pre 104/104; 004 34/34; 003 115/117. The 2 misses
+are 077 FP and 102 miss, both user-excused; no 080–089 fires. The margin is thin
+and tuned on labels. Latch time not re-measured.
+Next: the user formalizes the 077/102 waiver and signs off on plots.
+
+## User commentary after round 3 — 2026-09-30 (steering for round 4+)
+
+- Round 3's `prefix_amplitude` has no zero floor and no 8 h window, unlike the
+  round-2 rise. A climb from −0.01 to +0.005 scores 0.015 on the gate but 0.005
+  on the rise. Next round: floor the gate the same way (span = max −
+  max(0, trough)). Then recheck whether a gate still separates 001-000 (0.0055)
+  from 003-091/098 (0.0069); both numbers were measured without the floor.
+- Correction to round 3: latch time was measured after the entry. Latch −
+  monomer_sum max = 7.5 h median (IQR 5–12), n = 64, with the max taken per time
+  as the median over groups. That method may differ from round 2's 7 h figure.
