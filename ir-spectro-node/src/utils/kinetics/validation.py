@@ -156,6 +156,7 @@ def run_validation(
     input_subfolder: str | None = None,
     cluster_sum_peaks: list[str] | None = None,
     folders: list[str] | None = None,
+    trajectory_fn: Callable[[pd.DataFrame], tuple[Any, Any]] | None = None,
 ) -> ValidationReport:
     """Score ``classify_fn`` against ``ground_truth.json``.
 
@@ -165,6 +166,10 @@ def run_validation(
         cluster_sum_peaks: Rebuild ``cluster_sum`` from these ``Peak_Name``s
             instead of using the one in the CSV (for comparing definitions).
         folders: Only score ground-truth entries in these dataset folders.
+        trajectory_fn: Build the swept ``(time_s, intensity)`` from the area
+            frame instead of the ``cluster_sum`` rows (e.g. one peak, or a
+            payload array ``classify_fn`` unpacks). ``latch_sweep`` only
+            slices ``[:k]``, so any row-aligned array works.
 
     A file that errors (e.g. no area CSV) is scored wrong, never as a quiet
     ``continuous``.
@@ -185,7 +190,10 @@ def run_validation(
             folder_path = folder_path / input_subfolder
         csv_path = folder_path / entry["file"]
         try:
-            time_s, intensity = _cluster_sum_trajectory(csv_path, cluster_sum_peaks)
+            if trajectory_fn is not None:
+                time_s, intensity = trajectory_fn(pd.read_csv(csv_path))
+            else:
+                time_s, intensity = _cluster_sum_trajectory(csv_path, cluster_sum_peaks)
             fired = ever_fires(
                 classify_fn,
                 time_s,
