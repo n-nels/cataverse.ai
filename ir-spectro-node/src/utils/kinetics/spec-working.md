@@ -278,3 +278,8 @@ Remove as the surrounding code is touched. Record each removal in spec-working.m
   - Full fit of `004-019` + `004-035` with `--workers 2`: 8 min wall time, 0 ODE timeouts.
     `-035` rerun serially into `_test-serial\` is identical to the parallel output
     (1,378 × 29, max diff 0). Short files (~40–50 time points) take about 6.5 min serially.
+- 2026-09-29: removed the unused user `p0` argument from `prepare_measurement_rows` /
+  `_fit_trajectory_rolling` / `_select_secondary_p0_for_secondary` (no caller or flag used it).
+  The secondary_pfo p0 search still starts fresh from its defaults, or from the carried-forward
+  seed with `--use-prior-p0`. Check: `004-035` `monomer_sum` rerun matches the pre-change
+  output to 1e-16, which is CSV round-trip precision.

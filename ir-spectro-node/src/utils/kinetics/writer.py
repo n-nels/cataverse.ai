@@ -154,25 +154,18 @@ class KineticWriter:
         use_prior_p0: bool,
         previous_p0: list[float] | None,
         previous_r2: float | None,
-        user_p0: list[float] | None,
         min_points: int,
     ) -> list[float] | None:
-        """Select effective p0 for secondary_pfo, respecting the ``use_prior_p0`` toggle."""
+        """Select effective p0 for secondary_pfo, respecting the ``use_prior_p0`` toggle.
+
+        pfo takes no p0 (its fit uses built-in defaults).
+        """
         if model_key != "secondary_pfo":
-            return user_p0
+            return None
 
-        if not use_prior_p0:
-            # Start fresh each row: seed from user p0 (or default inside _select_secondary_p0).
-            return self._select_secondary_p0(
-                time_s,
-                intensity,
-                threshold_r2=0.96,
-                user_p0=user_p0,
-                min_points=min_points,
-            )
-
-        # use_prior_p0=True: carry forward successful p0 between rows.
-        seed_p0 = previous_p0 if previous_r2 is not None else user_p0
+        # use_prior_p0: seed the search from the last successful p0; otherwise
+        # start fresh from the defaults inside _select_secondary_p0, as live does.
+        seed_p0 = previous_p0 if use_prior_p0 and previous_r2 is not None else None
         return self._select_secondary_p0(
             time_s,
             intensity,
@@ -257,7 +250,6 @@ class KineticWriter:
         regime_of: Callable[[float], str],
         *,
         min_points: int,
-        p0: list[float] | None,
         carry_forward_p0: bool,
     ) -> list[dict[str, Any]]:
         """Expanding-window fit at every unique time (live ``latest_only=False``)."""
@@ -282,7 +274,6 @@ class KineticWriter:
                 use_prior_p0=carry_forward_p0,
                 previous_p0=previous_p0,
                 previous_r2=previous_r2,
-                user_p0=p0,
                 min_points=min_points,
             )
             popt, std_errors, r_squared, rmse = spec.fit_fn(
@@ -319,7 +310,6 @@ class KineticWriter:
         classify_fn: Callable[..., dict[str, Any]] | None = None,
         fit: bool = True,
         min_points: int = 4,
-        p0: dict[str, list[float]] | None = None,
         carry_forward_p0: bool = False,
         groups: dict[str, list[str]] | None = None,
         peak_names: list[str] | None = None,
@@ -332,7 +322,6 @@ class KineticWriter:
                 ``None`` = ``classify_trajectory_combined``.
             fit: False writes classification only (no kinetic fits).
             min_points: Minimum points before classifying or fitting.
-            p0: Optional initial guess per model key (``"pfo"``/``"secondary_pfo"``).
             carry_forward_p0: Seed each time point's secondary_pfo p0 search
                 from the previous one. Off by default: live searches fresh
                 at every point.
@@ -361,7 +350,6 @@ class KineticWriter:
             groups = groups or {
                 group: self.utils.group_peak_names(group) for group in SUM_OF_GROUP
             }
-            p0 = p0 or {}
             for group, atomic in groups.items():
                 for peak_name in [*atomic, SUM_OF_GROUP[group]]:
                     if peak_names is not None and peak_name not in peak_names:
@@ -374,7 +362,6 @@ class KineticWriter:
                         intensity,
                         regime_of,
                         min_points=min_points,
-                        p0=p0.get(REGIME_MODELS[(group, "continuous")]),
                         carry_forward_p0=carry_forward_p0,
                     ):
                         key = (peak_name, record["Time (s)"])
