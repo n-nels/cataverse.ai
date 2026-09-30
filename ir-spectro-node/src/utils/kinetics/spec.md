@@ -1,8 +1,20 @@
 # src/utils/kinetics — offline kinetics reprocessing
 
-**Status: in build.** Offline only. The live server never calls it, and it never writes
-into source data. The working spec, with the decisions, validation tables and
-progress log, is `spec-working.md`. Classifier design is in `docs/spec_nuc-clf.md`.
+**Status: implemented. Verified on nn1120-3_pd_ceo2_004.** Offline only. The live
+server never calls it, and it never writes into source data. Refit areas are built for
+all 7 datasets. Full kinetic fits beyond the verification files are limited by
+secondary_pfo cost (§5). Folders are run one at a time.
+
+This file describes what the package does now. How it got here (what was tried,
+measured and rejected) is in `context/2026-09-29-kinetics-reprocessing-on-refit.md`.
+Classifier design is in `docs/spec_nuc-clf.md`.
+
+**Purpose.** Rerun kinetics on the 24-peak refit (`src/utils/ir_fitting`, output in
+`C:\Data\peakFit\<dataset>\_reprocess\`), with sums redefined from the refit's groups.
+The output is live-schema, live-equivalent `*_CarbonylPeakArea.csv` files. This package
+also holds the ground-truth harness for the nucleation classifier.
+
+---
 
 ## 0. Read first
 
@@ -18,18 +30,32 @@ uv run python scripts\run_kinetics_classification.py --validate
 uv run python scripts\run_kinetics_classification.py --validate --input-subfolder _reprocess
 ```
 
+Other fit flags: `--peak-names` limits which rows are fitted, `--output-folder`
+defaults to `_test`, `--use-prior-p0` seeds each p0 search from the previous point,
+and `--normal-priority` turns off the below-normal default. Importable as
+`from src.utils.kinetics import build_areas, process_file, process_folder`.
+
 ### Traps
 
 - **Time never comes from params rows.** `Time (s)` is a running sum of
   `Time_Delta (s)`, so a missing or failed fit would shift every later time. The
   timeline (`timeline.py`) takes each spectrum's `Time_Delta` from the subIFG log
-  instead.
+  instead. A spectrum with no fit keeps its time and gets NaN area. Its unknown area
+  increment is simply missing from later cumulative values: no interpolation. Kinetics
+  drops NaN-area rows before fitting.
+- **Live area CSVs are not a clean reference for time.** In 14 measurements live never
+  recorded some spectra, so their live times are shifted after the gap. Older live files
+  also left the delta1 seed out of `Time (s)`, which puts them 97–120 s early. The
+  ground truth was labeled on those live times.
 - **The sums are fixed in the area CSV.** They come from the `ir_fitting.fit` groups
-  (`utils.group_peak_names`): monomer = 2113/2103/2093, cluster = 15 peaks, including
-  the six low-band peaks. There are no per-run sum flags. Rebuild the areas to change a sum.
+  (`_KineticUtilities.group_peak_names`): monomer = 2113/2103/2093, cluster = 15 peaks,
+  including the six low-band peaks. There are no per-run sum flags. Rebuild the areas
+  to change a sum. Live reads `voigt_fit` instead, so the two sides' sums differ by design.
 - **`classification` is causal.** Each row carries the latch state as of that time
   (`classification.latch_sweep`: 3 consecutive fires, never reverts). It is not a
-  hindsight label, and it is the same sweep the ground-truth harness scores.
+  hindsight label, and it is the same sweep the ground-truth harness scores. Duplicate
+  times take the state after their last row. `pre_*`/`post_*` columns appear only on
+  files that latch, as in live.
 - **Sort order is part of parity.** `sorted_trajectory` sorts exactly as live does.
   A stable sort changes floating-point sums enough to move ill-conditioned
   secondary_pfo fits.
@@ -38,6 +64,11 @@ uv run python scripts\run_kinetics_classification.py --validate --input-subfolde
   default). `--workers N` runs N measurements at once, one process each, as the
   refit does. More load means more timeouts, which are reported per file
   (`N ODE timeouts`).
+- **`Cumulative_Integral` is not rebuilt.** The refit copies `Data_Integral` from the
+  live rows, so it lacks the step of any spectrum live never recorded. Kinetics does not
+  read it.
+- **Model changes land twice.** `models.py` duplicates live `kinetics_fitting`. A model
+  change that lands on one side only makes the two disagree silently.
 
 ## 1. Pipeline
 
@@ -54,17 +85,23 @@ uv run python scripts\run_kinetics_classification.py --validate --input-subfolde
 <dataset>\_reprocess\_test\*_CarbonylPeakArea.csv          (live schema)
 ```
 
+Spectrum discovery matches the refit: isoX files excluded, `manually_skip_files`
+applied. Each spectrum's time comes from the subIFG log, plus any extra file found on
+disk. Outputs are built fresh per measurement, never merged onto an existing CSV.
+`_discover_area_csvs` globs only `input_subfolder` when it is given, and otherwise
+excludes `_reprocess`.
+
 | Module | Role |
 |---|---|
-| `timeline.py` | One row per subIFG spectrum (from the log), with `Time_Delta (s)` |
-| `areas.py` | Params + timeline → area CSV. A spectrum with no fit keeps its time and gets NaN area |
-| `classification.py` | Detectors (`combined` = flat-then-rise OR drawdown), `latch_sweep`, `sorted_trajectory` |
+| `timeline.py` | One row per subIFG spectrum (from the log), with `Time_Delta (s)` from the live `io.py` loaders |
+| `areas.py` | Params + timeline → area CSV. Logs one warning per missing params row |
+| `classification.py` | Detectors (`combined` = flat-then-rise OR drawdown), `latch_sweep`, `sorted_trajectory`. Thresholds come from yaml `kinetics_classification`, which live reads too |
 | `models.py` | pfo and secondary_pfo (copies of live, same results) |
 | `writer.py` | `REGIME_MODELS`, per-measurement classify + rolling fit + write; singletons |
-| `api.py` | `build_areas`, `process_file`, `process_folder` |
-| `validation.py` | Ground-truth harness (`run_validation`, `ever_fires`) |
+| `api.py` | `build_areas`, `process_file`, `process_folder` (`workers=N`: spawn, BLAS pinned to 1 thread) |
+| `validation.py` | Ground-truth harness (`run_validation`, `ever_fires`); an errored file scores wrong |
 | `fit_cli.py` / `classify_cli.py` | The two CLIs (`scripts\run_kinetics_fit.py`, `scripts\run_kinetics_classification.py`) |
-| `monomer_features.py` | Research module (LaMer landmarks); not part of the pipeline |
+| `monomer_features.py` | Research module (LaMer landmarks); not part of the pipeline. Revisit at the four-equation stage |
 
 ## 2. Models
 
@@ -80,23 +117,63 @@ The discontinuous entries are placeholders until the before/after-detection mode
 exist (four equations: two sums × two regimes). Fits are rolling (an expanding window
 at every unique time, live `latest_only=False`). The secondary_pfo p0 search starts
 fresh at every point, as live does; `--use-prior-p0` turns carry-forward on.
-Unknown-group peaks get areas but no fits.
+Fits cover the 18 atomic group peaks (3 monomer + 15 cluster) and both sums. Peaks in
+no group get areas but no fits.
 
-## 3. Validation (details in `spec-working.md`)
+## 3. Data notes (refit, all 7 datasets, 296 area files)
+
+- 58 spectra were never recorded live. They now get real times from the timeline.
+- Spectra with no refit fit (NaN area at the correct time):
+  - nn1120-2 `-004` delta8.0026 (fitted live, but the file is gone from disk);
+  - nn1120-4 `-000` delta8.0130 (SVD failure);
+  - 11 spectra of nn1120-4 `-041` (not refit; probably still acquiring at refit time).
+- nn1120-3_003 `-072` has only delta1 spectra, so it gets no area rows and no output.
+- Live params hold 3 corrupted `File` values (`.638`, `99.548`, `146918916` in
+  nn1120-3_003 `-027/-038/-106`).
+
+## 4. Validation
 
 | Check | Result |
 |---|---|
 | Timeline `Time_Delta` vs saved live params, all 7 datasets | 24,199/24,199 exact |
-| Area builder vs live area CSVs (live params, `voigt_fit` groups), nn1120-3_004 | 34/34 identical (float rounding) |
-| Kinetic fits vs live `append_fit_results(latest_only=False)`, `004-019`, all peaks | all 20 kinetic columns bit-identical, 453 rows |
+| Area builder vs live area CSVs (live params, `voigt_fit` groups), nn1120-3_004 | 34/34 identical (float rounding). Measurements with gaps differ only in time after the gap, as expected |
+| Kinetic fits vs live `append_fit_results(latest_only=False)`, `004-019`, all peaks | all 20 kinetic columns bit-identical, 453 rows (0 ODE timeouts) |
 | Written `classification` vs harness verdict, nn1120-3_004 | 34/34 agree, never reverts |
-| Harness `combined`: live / refit 9-peak / refit 15-peak | 285 / 275 / 257 of 288 |
+| Parallel (`--workers 2`) vs serial, `004-035` | identical |
 
-## 4. Open
+Classifier (`combined`, latch 3) against `ground_truth.json`, 288 files:
 
-- Classifier on the refit 15-peak `cluster_sum`: 257/288 (21/48 discontinuous found).
-  The low band grows and fills in the nn1120-4 drawdown hump. Accepted for now;
-  retuning is separate work.
-- secondary_pfo returns NaN when `monomer_sum` is all ≤ 0 (inverted `q_e` bound), as
-  live does. This affects 14/296 refit files.
-- The discontinuous-regime models (above).
+| Input | Correct | Hit | Missed | FP |
+|---|---|---|---|---|
+| live, 9-peak | 285 | 47 | 1 | 2 |
+| refit, 9-peak | 275 | 40 | 8 | 5 |
+| refit, 15-peak (**in use**) | 257 | 21 | 27 | 4 |
+
+Most of the refit 15-peak losses are in nn1120-4_000 (16/33). There the low band
+(mostly 1928/1913) grows steadily and fills in the drawdown hump the detector keys on.
+nn1120-3_003's refit misses (`-091/-094/-098/-110`) already appear with the 9-peak sum,
+so there the refit's re-apportioned cluster areas are the cause. The ground truth is
+not edited without the user.
+
+## 5. Cost
+
+Rolling secondary_pfo is the bottleneck. At below-normal priority, `monomer_sum` alone on
+`004-008` (271 time points) took 80 min and hit 165 ODE timeouts. A file has 4
+secondary_pfo trajectories, so a long file takes about 5 h serially. A short file
+(40–50 points) takes about 6.5 min. `--classify-only` on a whole folder takes seconds.
+
+## 6. Open
+
+- Classifier on the refit 15-peak `cluster_sum`: 257/288. Accepted for now;
+  retuning is separate work (`docs/spec_nuc-clf.md`).
+- secondary_pfo returns NaN for the whole trajectory when `monomer_sum` is all ≤ 0: the
+  `q_e` bound `(0, 2·max(y))` inverts and `minimize` raises. Live does the same. This
+  affects 14/296 refit files. It belongs to the model redesign.
+- Timeouts are wall-clock, so results under load are not reproducible bit for bit.
+
+## 7. Out of scope
+
+- The discontinuous-regime models (the four equations) and renaming the labels.
+- `src/analysis/`, `voigt_fit`, and the live path. That includes porting the
+  classifier to live (`docs/spec_nuc-clf.md` §8).
+- Labeling the 6 unlabeled nn1120-4 files and the 3 refit-only measurements.

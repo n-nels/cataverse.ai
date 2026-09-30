@@ -219,7 +219,7 @@ if __name__ == "__main__":
         time_unit="s",
         constituents={
             "monomer": {"peaks": None, "sum": True},
-            "cluster": {"peaks": [1928, 1988, 2030, 2062, 2073], "sum": True},
+            "cluster": {"peaks": [1928, 1988, 2030], "sum": True},
         },
         groups="ir_fitting",
     )
