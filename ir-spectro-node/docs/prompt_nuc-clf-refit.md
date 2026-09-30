@@ -61,15 +61,44 @@ Constraints (carried over from the nuc-clf loop, still binding):
 
 ## Y — success criterion, and how to check it
 
-**Y is met when** the validation harness reports **288/288** correct on the
-refit areas, by the causal prefix-sweep definition: a `discontinuous`-labeled
-file is correct iff the latch engages at some prefix; a `continuous`-labeled
-file is correct iff it never engages. **Label only** — latch time is not
-scored. Report it beside the `monomer_sum` maximum time as a diagnostic.
+**Revised 2026-09-30 (user):** the original 288/288 target is dropped. The
+refit changed the data, and the algorithm-derived `continuous` labels in 003/004
+are suspect (e.g. `003-113` should match `003-110`). `ground_truth.json` is kept
+unedited as a reference; only the parts the user vouches for are scored hard.
+
+Correctness uses the causal prefix-sweep definition: a file is `discontinuous`
+iff the latch engages at some prefix. **Label only** — latch time is not scored.
+Report it beside the `monomer_sum` maximum time as a diagnostic.
+
+**Y is met when all four hold:**
+1. **nn1120-4_pd_ceo2_000: 33/33** against `ground_truth.json`. The user
+   re-reviewed this folder on 2026-09-30, so these labels are authoritative.
+2. **Pre-20250722 folders: 104/104 quiet.** That covers nn1120-2_pd_ceo2_000,
+   nn1120-3_pd_ceo2_000/_001/_002, all basis `user_confirmed_matches_algorithm`.
+   The user expects these "mostly continuous". Any file that fires goes to the
+   user with its plot; it does not count as a pass until the user relabels it.
+3. **nn1120-3_pd_ceo2_003: 117/117**, with one tolerance: **at most 2 files in
+   `003-080`…`003-089` may fire** (basis `user_declared_2026-09-30_ambiguous`;
+   the user calls that signal ambiguous). The user relabeled this folder on
+   2026-09-30:
+   - `000`–`089` are `continuous`;
+   - `090`–`120` are `discontinuous`, except `107`, `108` and `117`;
+   - that gives 26 discontinuous / 91 continuous.
+   This supersedes `spec_nuc-clf.md` §4's "003-109 is continuous" decision.
+4. **nn1120-3_pd_ceo2_004: 34/34.** The user relabeled this folder on
+   2026-09-30:
+   - discontinuous: `008 014 016 018 020 021 022 024 026 028 029 030 031 032
+     033 034`;
+   - everything else is continuous;
+   - that gives 16 discontinuous / 18 continuous.
+   The user called `008` (low S/N), `014`, `016`, `021` and `031` borderline
+   (basis `user_declared_2026-09-30_borderline`). They are still scored as
+   `discontinuous`. Any tolerance for missing them is the user's call.
 
 **How to check it:** `src/utils/kinetics/validation.py::run_validation(...,
 input_subfolder="_reprocess")` against `src/utils/kinetics/ground_truth.json`
-(288 files; 48 discontinuous / 240 continuous), or its CLI
+(288 files; 65 discontinuous / 223 continuous as of the 2026-09-30 relabels;
+nn1120-4 is 23 discontinuous / 10 continuous, with `000-011` now `continuous`), or its CLI
 `python scripts\run_kinetics_classification.py --validate --input-subfolder
 _reprocess --classifier <name>`. If the new detector needs rows other than
 `cluster_sum`, extend the harness so it hands the detector the right
@@ -82,6 +111,12 @@ harness with the existing `combined` detector on `_reprocess` and confirm it
 still gives 257/288 (21 hit, 27 missed, 4 FP). If it doesn't, the harness is
 wrong and nothing built on it is trustworthy yet.
 
-Report per round: overall score, the confusion counts, the by-folder table, and
-the mismatch list. A result that only holds at the full trajectory length (batch)
+Report per round:
+- the four parts of Y separately:
+  - nn1120-4 x/33;
+  - pre-20250722 quiet x/104;
+  - 003 x/117, plus fires in 080–089;
+  - 004 x/34, with borderline misses called out;
+- the full 288 harness line, for reference only, not as the target;
+- the mismatch list. A result that only holds at the full trajectory length (batch)
 is not a pass.

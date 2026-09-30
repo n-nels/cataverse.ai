@@ -9,3 +9,83 @@ monomer before 2.5 h, so the rise sits inside the baseline window.
 Label question: 9 algorithm-labeled `continuous` files in 003/004 match
 positives (`003_reprocess\_test\nuc-clf-refit_r1_label_pairs.png`).
 Next: take σ from high-frequency roughness, not an early window.
+
+## User commentary after round 1 — 2026-09-30 (steering for round 2+)
+
+- Agrees `003-110` and `003-113` should share a label. The algorithm-basis
+  `continuous` labels in 003/004 are suspect. The new detector should keep most
+  prior discontinuous hits and is expected to find more.
+- No steady Peak_1988 baseline means nucleation has already started. So an
+  event can be a threshold above a 0 baseline, since Peak_1988 usually starts at
+  or below 0.
+- `ground_truth.json` no longer strictly applies because the data changed, but
+  keep it as a ballpark reference (user: "it should be ballpark >300 with
+  improved detector sensitivity").
+- Expected: data before 20250722 mostly `continuous`; nn1120-4_pd_ceo2 mostly
+  `discontinuous`. **nn1120-4_pd_ceo2_000 labels are accurate** (user just
+  reviewed them). 003/004 are mixed; the user will settle them from plots later
+  (fine-tuning).
+- Implication for Y: 288/288 against the current 003/004 labels is not the
+  target as stated. Revisit Y with the user before scoring against it again.
+
+## Y revised — 2026-09-30 (user)
+
+288/288 dropped. The new three-part Y is in `prompt_nuc-clf-refit.md`: nn1120-4
+33/33; 104/104 pre-20250722 files quiet; 003/004 keep all 24 current positives,
+and the user signs off on per-file plots. Scored against the new Y, round 1 was
+nn1120-4 26/33, pre-20250722 102/104 (`2_000-008` and `3_001-007` fire), and
+003/004 floor 13/24.
+
+## Labels updated — 2026-09-30 (user)
+
+User relabeled nn1120-3_pd_ceo2_003 in `ground_truth.json`:
+- `000`–`089` continuous, with `080`–`089` ambiguous (≤2 may fire);
+- `090`–`120` discontinuous, except `107`/`108`/`117`;
+- 12 files flipped to discontinuous: 093/095/097/101–105/109/113/115/120;
+- 003 is now 26 discontinuous / 91 continuous;
+- `003-109` reverses the old spec §4 decision.
+
+nn1120-4 `000-011` is now continuous (the user's review), so round 1's nn1120-4
+score is 27/33, not 26. 004 is next. Y is now four parts; see the prompt.
+
+## Labels updated — 2026-09-30 (user), 004
+
+User relabeled nn1120-3_pd_ceo2_004 in `ground_truth.json`:
+- discontinuous: 008/014/016/018/020/021/022/024/026/028–034;
+- 6 files flipped to discontinuous (016/018/024/031/033/034); none flipped the
+  other way;
+- borderline, still scored discontinuous: 008 (low S/N), 014, 016, 021, 031.
+
+Totals: 004 is 16/18, all files 65/223. Every folder's labels are now
+user-declared or user-confirmed, so Y is fully scorable by the harness.
+
+## Round 2 — 2026-09-30
+
+Calibration: `combined` = 240/288 on the new labels. New detector in
+`baseline_departure.py`: `run_validation(input_subfolder="_reprocess",
+classify_fn=classify_window_rise, trajectory_fn=peak_monomer_trajectory)`.
+- Rise, per group: smoothed Peak_1988 − max(0, 8 h min). Fire when the group
+  median exceeds 0.00275 au (fixed, not σ-scaled; z added nothing) and
+  monomer_sum > 0.
+- Both parameters were tuned on the scored labels.
+
+Score 283/288:
+- 4: 33/33.
+- pre: 102/104 (FP 3_001-000/034).
+- 003: 115/117 (FP 077, miss 102).
+- 004: 33/34 (miss 018, where monomer < 0 blocks it).
+
+Latch−monomer max = 7 h median. Plots: `003_reprocess\_test\nuc-clf-refit_r2_mismatches.png`.
+Next: see whether 004-018 (a d label) vs 004-025 (a c label) is a label question.
+
+## User commentary after round 2 — 2026-09-30 (steering for round 3+)
+
+- Fixed-au threshold accepted. Add an absolute-amplitude gate (~0.01 au
+  peak-to-trough): 3_001-000 has the right shape but spans only ~0.008.
+- Negative monomer_sum at the latch must dismiss the classification (round 2's
+  gate already does this). **004-018 → continuous** (like 004-025).
+- **3_001-034 → discontinuous.**
+- 003-102 miss is fine ("the rules are the rules"); 003-077 is borderline (low
+  S/N), either label OK.
+- `ground_truth.json` edited (user-approved): 004-018 → continuous; 3_001-034 →
+  discontinuous, basis `user_declared_2026-09-30`. Totals unchanged: 65/223.

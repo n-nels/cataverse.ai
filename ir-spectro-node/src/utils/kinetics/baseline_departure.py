@@ -118,3 +118,100 @@ def classify_baseline_departure(
     zeros = np.flatnonzero(path[: path.size] == 0)
     onset = float(t_inc[zeros[-1]]) if zeros.size else float(t_inc[0])
     return {"classification": "discontinuous", "growth_onset_s": onset}
+
+
+# Round 2: windowed rise above a zero-clamped floor.
+# Per Delta_Group (so the ~group offsets cancel), smooth with a causal
+# median of the last ``smooth_n`` points, then take the latest smoothed value
+# minus max(0, min of the smoothed values in the last ``window_s``).
+# Peak_1988 usually starts at or below 0, so recovery from a negative start
+# does not count as a departure. The file-level rise is the median over
+# groups that have a point inside the window.
+WINDOW_S = 8 * 3600.0
+SMOOTH_N = 3
+RISE_THRESHOLD = 0.00275
+
+
+def window_rise(
+    time_s: NDArray[np.float64],
+    payload: NDArray[np.float64],
+    *,
+    window_s: float = WINDOW_S,
+    smooth_n: int = SMOOTH_N,
+) -> float:
+    """Median-over-groups rise of the newest smoothed point in ``window_s``."""
+    now = float(time_s[-1])
+    rises: list[float] = []
+    for code in np.unique(payload[:, 1]):
+        in_group = payload[:, 1] == code
+        values = payload[in_group, 0]
+        if values.size < smooth_n:
+            continue
+        times = time_s[in_group][smooth_n - 1 :]
+        smoothed = np.array(
+            [
+                np.median(values[j - smooth_n + 1 : j + 1])
+                for j in range(smooth_n - 1, values.size)
+            ]
+        )
+        recent = times >= now - window_s
+        if not recent.any():
+            continue
+        rises.append(smoothed[-1] - max(0.0, float(smoothed[recent].min())))
+    return float(np.median(rises)) if rises else 0.0
+
+
+def peak_monomer_trajectory(
+    df: pd.DataFrame, peak_name: str = PEAK_NAME
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """``peak_trajectory`` plus a column 2: ``monomer_sum`` of the same
+    ``(Time (s), Delta_Group)`` spectrum (NaN if that row is missing)."""
+    time_s, payload = peak_trajectory(df, peak_name)
+    rows = df[df["Peak_Name"] == peak_name].dropna(
+        subset=["Time (s)", "Cumulative_Peak_Area"]
+    )
+    rows = rows.sort_values("Time (s)", kind="stable")
+    monomer = df[df["Peak_Name"] == "monomer_sum"].drop_duplicates(
+        ["Time (s)", "Delta_Group"]
+    )
+    merged = rows[["Time (s)", "Delta_Group"]].merge(
+        monomer[["Time (s)", "Delta_Group", "Cumulative_Peak_Area"]],
+        on=["Time (s)", "Delta_Group"],
+        how="left",
+    )
+    return time_s, np.column_stack(
+        [payload, merged["Cumulative_Peak_Area"].to_numpy(dtype=float)]
+    )
+
+
+def monomer_present(payload: NDArray[np.float64], *, smooth_n: int = SMOOTH_N) -> bool:
+    """Median over groups of the newest smoothed ``monomer_sum`` is > 0.
+
+    Continuous runs with no monomer (``monomer_sum`` < 0 throughout, e.g.
+    nn1120-4 013/016) still show Peak_1988 recovering upward from a
+    negative start; that is not a departure.
+    """
+    latest: list[float] = []
+    for code in np.unique(payload[:, 1]):
+        values = payload[payload[:, 1] == code, 2]
+        values = values[np.isfinite(values)]
+        if values.size >= smooth_n:
+            latest.append(float(np.median(values[-smooth_n:])))
+    return bool(latest) and float(np.median(latest)) > 0.0
+
+
+def classify_window_rise(
+    time_s: NDArray[np.float64],
+    payload: NDArray[np.float64],
+    *,
+    window_s: float = WINDOW_S,
+    smooth_n: int = SMOOTH_N,
+    rise_threshold: float = RISE_THRESHOLD,
+) -> dict[str, Any]:
+    """``discontinuous`` while the windowed rise exceeds ``rise_threshold``
+    and, if the payload carries ``monomer_sum`` (column 2), monomer is present."""
+    rise = window_rise(time_s, payload, window_s=window_s, smooth_n=smooth_n)
+    gated = payload.shape[1] > 2 and not monomer_present(payload, smooth_n=smooth_n)
+    if rise <= rise_threshold or gated:
+        return {"classification": "continuous"}
+    return {"classification": "discontinuous", "growth_onset_s": float(time_s[-1])}
