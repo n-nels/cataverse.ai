@@ -1,19 +1,9 @@
-"""Minimal kinetics API package."""
+"""Offline kinetics reprocessing: areas, causal classification, kinetic fits."""
 
-from src.utils.kinetics.api import (
-    classify_file,
-    fit_file,
-    fit_folder,
-    fit_folder_by_sum_models,
-    remove_legacy_pfo_columns_file,
-    remove_legacy_pfo_columns_folder,
-)
+from src.utils.kinetics.api import build_areas, process_file, process_folder
 
 __all__ = [
-    "fit_file",
-    "fit_folder",
-    "fit_folder_by_sum_models",
-    "classify_file",
-    "remove_legacy_pfo_columns_file",
-    "remove_legacy_pfo_columns_folder",
+    "build_areas",
+    "process_file",
+    "process_folder",
 ]

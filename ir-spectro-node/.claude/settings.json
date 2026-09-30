@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+        "X:/peakFit"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Bash(rm -rf:*)",
+      "Bash(rm -fr:*)",
+      "Bash(rm -r:*)",
+      "Bash(git push)",
+      "Bash(git push:*)",
+      "Bash(pip install)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python -m pip install:*)",
+      "Edit(X:/peakFit/**)"
+    ]
+  }
+}

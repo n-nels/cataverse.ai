@@ -7,55 +7,63 @@
 - Revisit `fsd_peak_indices` handling in `src/analysis/main.py` and ensure alignment with wavenumber expectations.
 - Persisted-CSV parity fix: evaluate a long-term replacement that avoids loading from disk (in-memory history object or cached DataFrame approach).
 - Align 'peak_base_list' in config with name in analysis.
-- Convert *expParams.csv to .json?
 - Revisit `shape_mismatches.log` handling from `plot_spectrum_fit`.
 - Set kinetic fitting parameter by 3 points
 
----
+## Current Session
 
-## Accomplished (this session)
+- [decided] Lock the current `api.py` experiment in `src/utils/ir_fitting/spec.md`:
+  full `(2250, 1750)` ROI; lower-only cut at `1955`; selected upper anchors
+  `(*ANCHOR_POINTS_CM1, 2011, 2010, ..., 2000)`; lower anchors
+  `(1955, 1790, 1800, 1810, 1820)`. The added upper set includes `2006` twice,
+  preserving the current least-squares weighting exactly.
 
-### EDA plotting script
-- Added `src/visualizations/eda/plot_pfo_sec_params_vs_time.py` to plot all `pfo-sec_*`
-  parameters vs time per CSV in `C:\Data\peakFit\nn1120-3_pd_ceo2_004`, saving figures
-  to `C:\Figures\_plot`.
+- [decided] Restored `src/utils/ir_fitting/api.py` to the §14.19 lower-split
+  experiment: full `(2250, 1750)` window, upper anchors `(2240, 2006, 1955)`,
+  lower-only cut at `1955`, and lower anchors `(1955, 1790, 1800, 1810, 1820)`.
+  The lower segment is 1955–1750; the five anchors are experiment-only.
+- [verified] The restored constants and both lower-split variants construct
+  successfully, and `api.py` compiles. Ruff and pytest are unavailable in the
+  current environment.
+
+- [decided] Supersede the 1790 truncation trial for the active baseline run.
+  Restore the full `(2250, 1750)` window, the three upper anchors
+  `(2240, 2006, 1955)`, and a lower-only cut at `1955`.
+- [decided] Add an experiment-only lower anchor set at
+  `(1955, 1790, 1800, 1810, 1820)`. Preserve the established two-endpoint
+  `LOWER_ANCHOR_POINTS_CM1` constant as the default.
+- [measured] The judged run produced 4 variants × 8 files with no degenerate
+  baselines. `upper_max_abs_diff` was exactly zero throughout; both `...-022`
+  guard files gated at 1955 and applied no lower anchors.
+- [measured] On the six ungated files, five lower anchors reduced absolute seam
+  on the first four and increased it on `...-021` and `...-027`, relative to the
+  unanchored lower split. The five-point seam is not governed by the old
+  two-anchor prediction identity.
+- [open] Figures and a breadth check still need visual/scientific judgement;
+  no production ROI or configuration default changed.
+
+- [superseded] The lower-split five-anchor run above was replaced for the next
+  comparison by an uncut full `(2250, 1750)` run.
+- [decided] Keep the established `(2240, 2006, 1955)` anchor trace second in
+  the active variant list (orange); compare it against a single full-ROI
+  least-squares correction with four added points `(1790, 1800, 1810, 1820)`.
+- [measured] The new run produced 8 figures from 8 files with 0 degenerate
+  baselines. Both `...-022` guard files gated only `1955`; the four additional
+  lower anchors still applied. On six ungated files, the green-vs-orange
+  maximum displacement was 5.8--15.5% of signal range.
+- [measured] The 1800 lower-region probe moved from the orange trace's large
+  ±6.5--15.2% / −10.4--10.8% offsets to about +1.0--1.7% on post-crossing and
+  −1.1--1.2% on pre-crossing files. This is a visual/scientific trade, not an
+  automatic quality score; no production default changed.
+- [open] Decide from the generated figures and a breadth check whether the
+  seven-anchor full-ROI curve should remain an experiment-only form.
 
 ## Violations
-- Rule violated: Think-First Protocol (no explicit thinking block before code changes).
-  Context: Implemented plotting script without a recorded Think-First block.
-  Suggested remediation: Include a Think-First block before future code edits.
 
-### Writer stubs (`src/utils/kinetic_fit_writer.py`)
-- `remove_legacy_pfo_columns_file` implemented: reads CSV, drops prefixed columns via
-  `utils.drop_columns_with_prefixes`, writes via `utils.write_plain_legacy_output`.
-- `remove_legacy_pfo_columns_folder` implemented: finds matching CSVs, calls the per-file
-  method, returns list of output paths. Both now delegate to existing utility helpers.
-
-### Scratch pad (`sandbox/signal_processing/scratch_pad.py`)
-- Rewritten from a single combined plot (pfo-sec param vs file index) to a grid of
-  subplots: **one subplot per file**, x-axis = **time (s)**, y-axis = selected parameter.
-- Added rolling mean overlay (`ROLLING_WINDOW=5` configurable) for noisy trajectories.
-- Shared y-axis scale across all subplots for easier comparison.
-- Configurable at top of file: `FOLDER_NAME`, `SUBFOLDER`, `PEAK_NAME`, `PFO_SEC_PARAM`,
-  `ROLLING_WINDOW`, `SUBPLOTS_PER_ROW`, `SAVE_FIGURE_PATH`.
-
-### Pre-existing LSP issues (not addressed this session)
-- `sandbox/signal_processing/plot_secondary_pfo_decomposition.py`: `fill_value='extrapolate'`
-  type error in `scipy.interpolate.interp1d` — pre-existing, unrelated to this session.
-- `src/analysis/output.py`: `DataFrame | Series` return type mismatch — pre-existing.
+- Rule: Ruff's `BLE001` forbids broad `except Exception` handlers.
+  Context: The lint run reported three pre-existing handlers in `api.py`; this
+  session did not alter their behavior because they are outside the anchor change.
+  Suggested remediation: replace them with specific exceptions or add a narrowly
+  justified project-level exception policy in a separate cleanup phase.
 
 ---
-
-## Refactor Plan Status (all complete)
-
-Steps 1-6 of `refactor_plan.md` are fully implemented:
-1. ✅ PFO model updated to true form in analysis (`kinetics_fitting.py`)
-2. ✅ Secondary PFO model added (`coupled_pfo_odes`, `pfo_with_secondary_states`,
-   `fit_secondary_pfo_with_errors`)
-3. ✅ Mixed-model-by-sum workflow (`append_fit_results` → monomer→secondary,
-   cluster→PFO)
-4. ✅ Per-row secondary p0 search with carry-forward (+0.01 r² threshold)
-5. ✅ Classification updated to new PFO column names
-6. ✅ Call sites wired in `main.py` and `output.py`
-
-No remaining open items from the refactor plan.

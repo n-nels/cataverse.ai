@@ -14,6 +14,7 @@ wheels/
 
 # IDE and editor files
 .vscode/
+.claude/settings.local.json
 
 # Windows reserved device names
 nul
@@ -21,7 +22,7 @@ null
 
 # Files
 arxiv/
-docs/
+# docs/
 sandbox/
 # eda/
 
