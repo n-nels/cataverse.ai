@@ -1858,7 +1858,7 @@
     "file": "20260725_143255_pd_ceo2_000-011_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260725_143255_pd_ceo2_000-011",
-    "label": "discontinuous",
+    "label": "continuous",
     "basis": "user_declared_duration_split"
   },
   {
