@@ -1,25 +1,29 @@
-"""Relate the monomer/secondary-process kinetic model to the LaMer picture.
+"""Draw the LaMer domains of each measurement from the classified refit areas.
 
-Loop instance: docs/prompt_monomer-kinetics.md / docs/JOURNAL_monomer-kinetics.md.
-Standalone module, no CLI -- plain functions plus an editable-constants
-``__main__`` block (see prompt_monomer-kinetics.md for why). Scope: monomer_sum
-in the 34 files under C:\\Data\\peakFit\\nn1120-4_pd_ceo2_000\\ only. Does not
-touch cluster_sum's own detector code, and does not use the classifier's
-growth_onset_s as a reference (flagged errant in round 3); no metrics beyond
-monomer_sum/cluster_sum/pfo-sec.
+Origin: the monomer-kinetics loop (docs/JOURNAL_monomer-kinetics.md, rounds
+6-7). Standalone, no CLI -- edit ``FOLDER_NAME`` in ``__main__``.
 
-Round 6: the derivative-based cluster inflection of round 5 is **removed**
-(argmax of a smoothed d/dt bounded at the cluster max -- smoothing-window and
-bound were free parameters). Replaced by four threshold-free landmark
-coordinates: each species' maximum, and the vertical cast of that maximum's
-time onto the other species' curve. The two landmark times slice the run into
-the three LaMer stages -- I prenucleation (t0 -> monomer max), II nucleation
-burst + growth (monomer max -> cluster max), III growth/ripening (cluster max
--> end). Delta_Group stays collapsed to its mean at equal Time (s).
+Input: ``<data.peak_fit>/<folder>/_reprocess/_test_classification/`` area
+CSVs, written by ``scripts\\run_kinetics_classification.py``. They carry
+``monomer_sum`` / ``cluster_sum`` and, once the nucleation detector latches,
+``growth_onset_s`` (the latch time) on the ``cluster_sum`` rows. No kinetic fit
+columns are used.
 
-No normalised curve-crossing landmark is computed on purpose: the two species
-sit on a twin y-axis at different scales, so a literal crossing is an artifact
-of the axis choice. The vertical cast is the scale-free reading.
+Domains, from three threshold-free landmarks and the latch:
+
+    I    t0 -> monomer max            prenucleation accumulation
+    IIa  monomer max -> latch         nucleation burst, before detection
+    IIb  latch -> cluster max         growth after detection
+    III  cluster max -> end           growth / ripening
+
+The landmarks are each species' maximum (Delta_Group collapsed to its mean at
+equal Time (s)). I/II/III need both maxima interior and ordered
+(``region_order_ok``); II is split into IIa/IIb only when the latch falls
+strictly inside it (``latch_position == "in_II"``). Otherwise II stays whole
+and the latch, if any, is drawn as a line only.
+
+Output: one ``*_lamer_domains.png`` per file plus ``lamer_domains.csv`` under
+``<data.figures>/<folder>/plot_lamer_domains/``.
 """
 
 from __future__ import annotations
@@ -35,47 +39,51 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-path = Path(__file__).resolve().parents[3]
+path = Path(__file__).resolve().parents[2]
 if str(path) not in sys.path:
     sys.path.append(str(path))
 
-from src.utils.kinetics.writer import SEARCH_ROOT, UTILS
+from src.core import config
+from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT
 
-PFO_SEC_COLUMNS = [
-    "pfo-sec_k_a_s-1",
-    "pfo-sec_q_e_au",
-    "pfo-sec_k_s_s-1",
-    "pfo-sec_k_p_s-1",
-    "pfo-sec_q_inf_au",
-    "pfo-sec_q0_au",
-]
+INPUT_SUBFOLDER = Path("_reprocess") / "_test_classification"
 
 # A maximum at the very first or very last sample is an endpoint, not a peak
-# (round 4's boundary gate). Both landmarks must clear it before the three
-# LaMer regions are meaningful.
+# (monomer-kinetics round 4's boundary gate). Both landmarks must clear it
+# before the LaMer domains are meaningful.
 INTERIOR_FRAC = (0.05, 0.95)
+
+
+def input_dir(folder_name: str) -> Path:
+    return SEARCH_ROOT / folder_name / INPUT_SUBFOLDER
+
+
+def output_dir(folder_name: str) -> Path:
+    return Path(
+        config.get_path(
+            "data.figures", folder_name, config.get_path("data.plot_lamer_domains")
+        )
+    )
 
 
 def collapse_delta_groups(df: pd.DataFrame, peak_name: str) -> pd.DataFrame:
     """One curve per species: Delta_Group collapsed to its mean at equal Time (s).
 
-    Round 4 established the Delta_Group levels are systematically offset
-    (within-group scatter ~0.03 au vs ~0.30 au between group means), which is
-    why the pooled time-sorted series looked like a sawtooth. Collapsing by the
-    mean is the requested treatment; ``group_std_au``/``n_groups`` are kept per
-    time point so the scatter behind each mean stays visible in the catalog.
+    The Delta_Group levels are systematically offset (within-group scatter
+    ~0.03 au vs ~0.30 au between group means), which is why the pooled
+    time-sorted series looks like a sawtooth. ``group_std_au``/``n_groups``
+    are kept per time point so the scatter behind each mean stays visible.
     """
-    columns = ["Time (s)", "Cumulative_Peak_Area"]
-    if peak_name == "monomer_sum":
-        columns += PFO_SEC_COLUMNS
-    rows = df.loc[df["Peak_Name"] == peak_name, columns].copy()
+    rows = df.loc[
+        df["Peak_Name"] == peak_name, ["Time (s)", "Cumulative_Peak_Area"]
+    ].copy()
     for column in rows.columns:
         rows[column] = pd.to_numeric(rows[column], errors="coerce")
-    rows = rows.dropna(subset=["Time (s)", "Cumulative_Peak_Area"])
+    rows = rows.dropna()
     if rows.empty:
         return rows
 
-    collapsed = rows.groupby("Time (s)", as_index=False).mean(numeric_only=True)
+    collapsed = rows.groupby("Time (s)", as_index=False).mean()
     scatter = (
         rows.groupby("Time (s)")["Cumulative_Peak_Area"]
         .agg(group_std_au="std", n_groups="count")
@@ -83,6 +91,14 @@ def collapse_delta_groups(df: pd.DataFrame, peak_name: str) -> pd.DataFrame:
     )
     collapsed = collapsed.merge(scatter, on="Time (s)", how="left")
     return collapsed.sort_values("Time (s)").reset_index(drop=True)
+
+
+def latch_time(df: pd.DataFrame) -> float:
+    """The nucleation latch time (``growth_onset_s`` on cluster_sum); NaN if none."""
+    onset = pd.to_numeric(
+        df.loc[df["Peak_Name"] == "cluster_sum", "growth_onset_s"], errors="coerce"
+    ).dropna()
+    return float(onset.iloc[0]) if not onset.empty else np.nan
 
 
 def _peak(curve: pd.DataFrame, prefix: str) -> dict[str, float]:
@@ -111,9 +127,7 @@ def _cast(curve: pd.DataFrame, time_s: float) -> tuple[float, bool]:
 
     ``np.interp`` clamps silently outside the grid, which would return a
     plausible-looking endpoint value for a landmark the other species never
-    observed. The flag is carried into the catalog rather than the clamp being
-    hidden -- the two collapsed grids are not guaranteed identical (hence
-    ``n_monomer_points``/``n_cluster_points``).
+    observed, so the in-range flag is carried into the catalog.
     """
     if curve.empty or np.isnan(time_s):
         return np.nan, False
@@ -126,48 +140,39 @@ def _cast(curve: pd.DataFrame, time_s: float) -> tuple[float, bool]:
 
 
 def landmark_coordinates(
-    monomer: pd.DataFrame, cluster: pd.DataFrame
+    monomer: pd.DataFrame, cluster: pd.DataFrame, t_latch: float
 ) -> dict[str, Any]:
-    """The four coordinates that slice the run, and nothing else.
-
-    Each species' maximum is one coordinate; casting that maximum's *time*
-    vertically onto the other species' curve gives the second. No threshold,
-    no derivative, no smoothing window beyond the 3-point tie-break already
-    used to choose which sample is the maximum.
-    """
+    """Each species' maximum, its time cast onto the other curve, and the
+    latch time cast onto both curves."""
     row: dict[str, Any] = {
         **_peak(monomer, "monomer_max"),
         **_peak(cluster, "cluster_max"),
+        "latch_time_s": t_latch,
     }
-
-    t_m = row["monomer_max_time_s"]
-    t_c = row["cluster_max_time_s"]
-
-    value, in_range = _cast(cluster, t_m)
-    row["cluster_at_monomer_max_au"] = value
-    row["cluster_at_monomer_max_in_range"] = in_range
-
-    value, in_range = _cast(monomer, t_c)
-    row["monomer_at_cluster_max_au"] = value
-    row["monomer_at_cluster_max_in_range"] = in_range
+    for name, curve, time_key in (
+        ("cluster_at_monomer_max", cluster, "monomer_max_time_s"),
+        ("monomer_at_cluster_max", monomer, "cluster_max_time_s"),
+        ("monomer_at_latch", monomer, "latch_time_s"),
+        ("cluster_at_latch", cluster, "latch_time_s"),
+    ):
+        value, in_range = _cast(curve, row[time_key])
+        row[f"{name}_au"] = value
+        row[f"{name}_in_range"] = in_range
     return row
 
 
-def lamer_regions(
+def lamer_domains(
     monomer: pd.DataFrame, cluster: pd.DataFrame, row: dict[str, Any]
 ) -> dict[str, Any]:
-    """Slice the run at the two landmark times into LaMer I / II / III.
+    """Slice the run into I / II (IIa + IIb) / III (module docstring).
 
-    I   t0 -> monomer max      prenucleation accumulation
-    II  monomer max -> cluster max   nucleation burst and growth
-    III cluster max -> end     growth / ripening after the cluster maximum
-
-    Only defined when both maxima are interior and ordered (monomer max before
-    cluster max); otherwise ``region_order_ok`` is False and the durations are
-    NaN, so a net-declining cluster curve cannot report a negative region II.
+    Durations are NaN where the domain is undefined, so a net-declining
+    cluster curve cannot report a negative II, and a latch outside II does
+    not produce a split.
     """
     t_m = row["monomer_max_time_s"]
     t_c = row["cluster_max_time_s"]
+    t_l = row["latch_time_s"]
 
     interior = all(
         not np.isnan(row[key]) and INTERIOR_FRAC[0] <= row[key] <= INTERIOR_FRAC[1]
@@ -175,6 +180,18 @@ def lamer_regions(
     )
     ordered = not np.isnan(t_m) and not np.isnan(t_c) and t_m < t_c
     ok = bool(interior and ordered)
+
+    if np.isnan(t_l):
+        position = "none"
+    elif not ok:
+        position = "regions_undefined"
+    elif t_l <= t_m:
+        position = "before_monomer_max"
+    elif t_l >= t_c:
+        position = "after_cluster_max"
+    else:
+        position = "in_II"
+    split = position == "in_II"
 
     times = np.concatenate(
         [
@@ -190,14 +207,17 @@ def lamer_regions(
         "run_end_s": t_end,
         "landmarks_interior": interior,
         "region_order_ok": ok,
+        "latch_position": position,
         "region_I_duration_s": t_m - t_start if ok else np.nan,
         "region_II_duration_s": t_c - t_m if ok else np.nan,
+        "region_IIa_duration_s": t_l - t_m if split else np.nan,
+        "region_IIb_duration_s": t_c - t_l if split else np.nan,
         "region_III_duration_s": t_end - t_c if ok else np.nan,
     }
 
 
 def _slope(curve: pd.DataFrame, t_lo: float, t_hi: float) -> tuple[float, int]:
-    """Least-squares slope (au/s) of a curve over a half-open time slice.
+    """Least-squares slope (au/s) of a curve over a closed time slice.
 
     A slope, not an endpoint difference, so a single noisy sample at a region
     boundary cannot set the sign the LaMer test is about to read.
@@ -216,13 +236,12 @@ def _slope(curve: pd.DataFrame, t_lo: float, t_hi: float) -> tuple[float, int]:
 def lamer_sign_test(
     monomer: pd.DataFrame, cluster: pd.DataFrame, row: dict[str, Any]
 ) -> dict[str, Any]:
-    """Per-region slopes plus the three sign expectations LaMer implies.
+    """Per-domain slopes plus the three sign expectations LaMer implies.
 
-    I is accumulation (monomer rising), II is the burst consuming monomer into
-    clusters (monomer falling, cluster accumulating faster than it did in I).
-    All three are sign comparisons, so nothing here introduces a threshold.
-    Only evaluated where ``region_order_ok``; otherwise the regions themselves
-    are not defined.
+    I is accumulation (monomer rising); II is the burst consuming monomer into
+    clusters (monomer falling, cluster accumulating faster than in I). All
+    three are sign comparisons, so nothing here introduces a threshold. Only
+    evaluated where ``region_order_ok``.
     """
     keys = [
         "monomer_slope_I_au_s",
@@ -267,14 +286,28 @@ def lamer_sign_test(
     }
 
 
-def final_fit_params(monomer: pd.DataFrame) -> dict[str, float]:
-    """Last non-NaN value of each pfo-sec_* column -- the ODE's own end-of-run
-    parameter estimates, reported for context (not used as onset markers)."""
-    out: dict[str, float] = {}
-    for column in PFO_SEC_COLUMNS:
-        series = pd.to_numeric(monomer.get(column), errors="coerce").dropna()
-        out[f"final_{column}"] = float(series.iloc[-1]) if not series.empty else np.nan
-    return out
+def _domain_spans(row: dict[str, Any]) -> list[tuple[float, float, str, str]]:
+    """``(left, right, color, label)`` per drawn domain."""
+    if not row["region_order_ok"]:
+        return []
+    t_m, t_c, t_l = (
+        row["monomer_max_time_s"],
+        row["cluster_max_time_s"],
+        row["latch_time_s"],
+    )
+    middle = (
+        [
+            (t_m, t_l, "tab:purple", "IIa  burst"),
+            (t_l, t_c, "tab:red", "IIb  growth"),
+        ]
+        if row["latch_position"] == "in_II"
+        else [(t_m, t_c, "tab:purple", "II  burst + growth")]
+    )
+    return [
+        (row["run_start_s"], t_m, "tab:green", "I  prenucleation"),
+        *middle,
+        (t_c, row["run_end_s"], "tab:grey", "III  growth / ripening"),
+    ]
 
 
 def _plot_file(
@@ -282,34 +315,27 @@ def _plot_file(
     monomer: pd.DataFrame,
     cluster: pd.DataFrame,
     row: dict[str, Any],
-    output_dir: Path,
+    out_dir: Path,
 ) -> Path:
     fig, ax1 = plt.subplots(figsize=(9.5, 5))
 
     t_m = row["monomer_max_time_s"]
     t_c = row["cluster_max_time_s"]
+    t_l = row["latch_time_s"]
 
-    # LaMer stage shading, mirroring the textbook figure's vertical dividers.
-    if row["region_order_ok"]:
-        spans = [
-            (row["run_start_s"], t_m, "tab:green", "I  prenucleation"),
-            (t_m, t_c, "tab:purple", "II  burst + growth"),
-            (t_c, row["run_end_s"], "tab:grey", "III  growth / ripening"),
-        ]
-        # Regions I and II are narrow (median 5.7% / 10.3% of the run), so the
-        # labels are staggered vertically rather than centered on one line.
-        for height, (left, right, color, label) in zip((0.99, 0.94, 0.99), spans):
-            ax1.axvspan(left, right, color=color, alpha=0.10)
-            ax1.text(
-                (left + right) / 2,
-                height,
-                label,
-                transform=ax1.get_xaxis_transform(),
-                ha="center",
-                va="top",
-                fontsize=8,
-                color=color,
-            )
+    # The early domains are narrow, so labels alternate between two heights.
+    for i, (left, right, color, label) in enumerate(_domain_spans(row)):
+        ax1.axvspan(left, right, color=color, alpha=0.10)
+        ax1.text(
+            (left + right) / 2,
+            0.99 if i % 2 == 0 else 0.94,
+            label,
+            transform=ax1.get_xaxis_transform(),
+            ha="center",
+            va="top",
+            fontsize=8,
+            color=color,
+        )
 
     ax1.plot(
         monomer["Time (s)"],
@@ -339,8 +365,7 @@ def _plot_file(
     labels: list[str] = []
 
     if not np.isnan(t_m):
-        h = ax1.axvline(t_m, color="tab:blue", ls="--", lw=1.6)
-        handles.append(h)
+        handles.append(ax1.axvline(t_m, color="tab:blue", ls="--", lw=1.6))
         labels.append(f"monomer max t={t_m:.0f}s")
         (h,) = ax1.plot(
             t_m, row["monomer_max_amplitude_au"], "*", color="tab:blue", ms=16
@@ -362,9 +387,12 @@ def _plot_file(
                 f"  cast on cluster ({t_m:.0f}, {row['cluster_at_monomer_max_au']:.3f})"
             )
 
+    if not np.isnan(t_l):
+        handles.append(ax1.axvline(t_l, color="tab:red", ls=":", lw=2.0))
+        labels.append(f"nucleation latch t={t_l:.0f}s")
+
     if not np.isnan(t_c):
-        h = ax2.axvline(t_c, color="tab:orange", ls="--", lw=1.6)
-        handles.append(h)
+        handles.append(ax2.axvline(t_c, color="tab:orange", ls="--", lw=1.6))
         labels.append(f"cluster max t={t_c:.0f}s")
         (h,) = ax2.plot(
             t_c, row["cluster_max_amplitude_au"], "*", color="tab:orange", ms=16
@@ -398,17 +426,17 @@ def _plot_file(
         )
         gate = f"   LaMer sign test (M+ in I / M- in II / C faster in II): {marks}"
     else:
-        gate = "  [regions undefined: landmark gate failed]"
+        gate = "  [domains undefined: landmark gate failed]"
     ax1.set_title(f"{csv_path.stem}{gate}", fontsize=10)
     fig.tight_layout()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{csv_path.stem}_monomer_lamer.png"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = out_dir / f"{csv_path.stem}_lamer_domains.png"
     fig.savefig(output_path, dpi=130)
     plt.close(fig)
     return output_path
 
 
-def process_file(csv_path: Path, output_dir: Path) -> dict[str, Any]:
+def process_file(csv_path: Path, out_dir: Path) -> dict[str, Any]:
     df = pd.read_csv(csv_path)
 
     monomer = collapse_delta_groups(df, "monomer_sum")
@@ -419,23 +447,10 @@ def process_file(csv_path: Path, output_dir: Path) -> dict[str, Any]:
         "sample_date": csv_path.name[:8],
         "n_monomer_points": len(monomer),
         "n_cluster_points": len(cluster),
-        **landmark_coordinates(monomer, cluster),
-        **final_fit_params(monomer),
+        **landmark_coordinates(monomer, cluster, latch_time(df)),
     }
-    row.update(lamer_regions(monomer, cluster, row))
+    row.update(lamer_domains(monomer, cluster, row))
     row.update(lamer_sign_test(monomer, cluster, row))
-
-    # Model-side half of the bridge: region II is the burst-plus-growth
-    # duration read off the curves; 1/k_a is the ODE's own uptake timescale.
-    k_a = row.get("final_pfo-sec_k_a_s-1", np.nan)
-    row["k_a_timescale_s"] = 1.0 / k_a if k_a and not np.isnan(k_a) else np.nan
-    row["region_II_over_k_a_timescale"] = (
-        row["region_II_duration_s"] / row["k_a_timescale_s"]
-        if not np.isnan(row["region_II_duration_s"])
-        and not np.isnan(row["k_a_timescale_s"])
-        else np.nan
-    )
-
     row["monomer_group_std_mean_au"] = float(
         monomer["group_std_au"].mean(skipna=True) if not monomer.empty else np.nan
     )
@@ -443,48 +458,52 @@ def process_file(csv_path: Path, output_dir: Path) -> dict[str, Any]:
         cluster["group_std_au"].mean(skipna=True) if not cluster.empty else np.nan
     )
 
-    _plot_file(csv_path, monomer, cluster, row, output_dir)
+    _plot_file(csv_path, monomer, cluster, row, out_dir)
     return row
 
 
-def run_folder(dataset_folder: Path, output_folder: str = "_test") -> pd.DataFrame:
-    csv_files = sorted(dataset_folder.glob("*_CarbonylPeakArea.csv"))
-    # Same guard as the CSV writers: never resolve back onto the source folder.
-    output_dir = UTILS.resolve_output_dir(dataset_folder, output_folder)
+def run_folder(folder_name: str) -> pd.DataFrame:
+    """Every classified area CSV of one dataset: figures + ``lamer_domains.csv``."""
+    source = input_dir(folder_name)
+    csv_files = sorted(source.glob(f"*{AREA_SUFFIX}"))
+    if not csv_files:
+        raise FileNotFoundError(
+            f"no *{AREA_SUFFIX} in {source}; run "
+            f"scripts\\run_kinetics_classification.py --folder {folder_name} first"
+        )
+    out_dir = output_dir(folder_name)
 
     rows: list[dict[str, Any]] = []
     for csv_file in csv_files:
         try:
-            rows.append(process_file(csv_file, output_dir))
+            rows.append(process_file(csv_file, out_dir))
         except Exception as exc:  # noqa: BLE001 - record and keep going
             rows.append({"file": csv_file.name, "error": str(exc)})
 
     catalog = pd.DataFrame(rows)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    catalog_path = output_dir / "monomer_features_lamer_slices.csv"
-    catalog.to_csv(catalog_path, index=False)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    catalog.to_csv(out_dir / "lamer_domains.csv", index=False)
     return catalog
 
 
 if __name__ == "__main__":
-    dataset_folder = SEARCH_ROOT / "nn1120-4_pd_ceo2_000"
-    result = run_folder(dataset_folder)
+    FOLDER_NAME = "nn1120-4_pd_ceo2_000"
+    result = run_folder(FOLDER_NAME)
+    print(f"Wrote {len(result)} files' domains to {output_dir(FOLDER_NAME)}")
     with pd.option_context("display.max_rows", None, "display.width", 240):
         print(
             result[
                 [
                     "file",
                     "monomer_max_time_s",
-                    "cluster_at_monomer_max_au",
+                    "latch_time_s",
                     "cluster_max_time_s",
-                    "monomer_at_cluster_max_au",
                     "region_order_ok",
+                    "latch_position",
                     "region_I_duration_s",
-                    "region_II_duration_s",
+                    "region_IIa_duration_s",
+                    "region_IIb_duration_s",
                     "region_III_duration_s",
-                    "lamer_monomer_rises_in_I",
-                    "lamer_monomer_falls_in_II",
-                    "lamer_cluster_faster_in_II",
                     "lamer_all_three_ok",
                 ]
             ]

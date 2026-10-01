@@ -106,7 +106,6 @@ excludes `_reprocess`.
 | `api.py` | `build_areas`, `process_file`, `process_folder` (`workers=N`: spawn, BLAS pinned to 1 thread) |
 | `validation.py` | Ground-truth harness (`run_validation`, `ever_fires`); an errored file scores wrong |
 | `fit_cli.py` / `classify_cli.py` | The two CLIs (`scripts\run_kinetics_fit.py`, `scripts\run_kinetics_classification.py`: classification-only writes + `--validate`) |
-| `monomer_features.py` | Research module (LaMer landmarks); not part of the pipeline. Revisit at the four-equation stage |
 
 ## 2. Models
 
