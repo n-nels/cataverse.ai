@@ -7,7 +7,8 @@ Input: ``<data.peak_fit>/<folder>/_reprocess/_test_classification/`` area
 CSVs, written by ``scripts\\run_kinetics_classification.py``. They carry
 ``monomer_sum`` / ``cluster_sum`` and, once the nucleation detector latches,
 ``growth_onset_s`` (the latch time) on the ``cluster_sum`` rows. No kinetic fit
-columns are used.
+columns are used. The detector's peak (``PEAK_NAME``, Peak_1988) is drawn on
+its own axis for reference; it does not enter the domains or the catalog.
 
 Domains, from three threshold-free landmarks and the latch:
 
@@ -44,6 +45,7 @@ if str(path) not in sys.path:
     sys.path.append(str(path))
 
 from src.core import config
+from src.utils.kinetics.classification import PEAK_NAME
 from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT
 
 INPUT_SUBFOLDER = Path("_reprocess") / "_test_classification"
@@ -314,10 +316,11 @@ def _plot_file(
     csv_path: Path,
     monomer: pd.DataFrame,
     cluster: pd.DataFrame,
+    detector_peak: pd.DataFrame,
     row: dict[str, Any],
     out_dir: Path,
 ) -> Path:
-    fig, ax1 = plt.subplots(figsize=(9.5, 5))
+    fig, ax1 = plt.subplots(figsize=(10.5, 5))
 
     t_m = row["monomer_max_time_s"]
     t_c = row["cluster_max_time_s"]
@@ -363,6 +366,25 @@ def _plot_file(
 
     handles: list[Any] = []
     labels: list[str] = []
+
+    # The detector's peak sits ~an order of magnitude below cluster_sum, so it
+    # gets its own axis, offset outside ax2's.
+    if not detector_peak.empty:
+        ax3 = ax1.twinx()
+        ax3.spines["right"].set_position(("axes", 1.12))
+        (h,) = ax3.plot(
+            detector_peak["Time (s)"],
+            detector_peak["Cumulative_Peak_Area"],
+            "s-",
+            color="tab:brown",
+            ms=2.5,
+            lw=1.0,
+            alpha=0.8,
+        )
+        handles.append(h)
+        labels.append(f"{PEAK_NAME} (detector peak)")
+        ax3.set_ylabel(f"{PEAK_NAME}, groups collapsed (a.u.)", color="tab:brown")
+        ax3.tick_params(axis="y", labelcolor="tab:brown")
 
     if not np.isnan(t_m):
         handles.append(ax1.axvline(t_m, color="tab:blue", ls="--", lw=1.6))
@@ -458,7 +480,8 @@ def process_file(csv_path: Path, out_dir: Path) -> dict[str, Any]:
         cluster["group_std_au"].mean(skipna=True) if not cluster.empty else np.nan
     )
 
-    _plot_file(csv_path, monomer, cluster, row, out_dir)
+    detector_peak = collapse_delta_groups(df, PEAK_NAME)
+    _plot_file(csv_path, monomer, cluster, detector_peak, row, out_dir)
     return row
 
 
