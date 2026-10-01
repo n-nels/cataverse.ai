@@ -3,7 +3,7 @@
 Batch **fitting** follows the repo convention of editing the constants in the
 ``__main__`` block below. Batch **baseline** runs have an argparse CLI::
 
-    uv run python scripts\run_baseline_experiment.py --help
+    uv run python scripts\run_baseline_fit.py --help
 
 ``run_baseline`` below is what that CLI calls.
 
@@ -820,7 +820,7 @@ if __name__ == "__main__":
     # See CLAUDE.md on the edit-constants convention used across this repo.
     #
     # Baseline runs have their own CLI:
-    #     uv run python scripts\run_baseline_experiment.py --help
+    #     uv run python scripts\run_baseline_fit.py --help
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     import matplotlib
 

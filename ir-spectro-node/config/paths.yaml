@@ -37,6 +37,7 @@ data:
   plot_params_all: "plot_params_all"
   plot_monomer_max: "plot_monomer_max"
   plot_monomer_max_all: "plot_monomer_max_all"
+  plot_lamer_domains: "plot_lamer_domains"
 
   # Visualization subfolders for src/utils/ir_fitting (offline EDA).
   plot_individual_fit: "plot_individual_fit"

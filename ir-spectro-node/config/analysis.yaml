@@ -466,6 +466,18 @@ kinetics_classification:
   eps_flat: 1.0e-6
   rise_delta: 1.1e-1
 
+# Offline nucleation detector (src/utils/kinetics/classification.py) for the
+# 24-peak refit areas. Read by src/utils/kinetics only; live reads the block
+# above. Design and scoring: docs/JOURNAL_nuc-clf-refit.md.
+kinetics_reprocess_classification:
+  peak_name: Peak_1988          # 13CO Peak_Name of the swept peak
+  window_s: 28800.0             # rise is measured above the min of the last 8 h
+  smooth_n: 3                   # causal per-Delta_Group median of this many points
+  rise_threshold: 0.00275       # au; median-over-groups windowed rise must exceed this
+  amplitude_min: 0.006          # au; median-over-groups prefix peak-to-trough
+  zero_floor: false             # amplitude trough is max(0, min) when true
+  required_consecutive: 3       # latch after this many consecutive fires
+
 # -------------------
 # ir_fitting (offline refit)
 # -------------------

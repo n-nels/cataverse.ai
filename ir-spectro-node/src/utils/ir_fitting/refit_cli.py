@@ -9,11 +9,11 @@ edit them there between runs. The baseline recipe comes from the flags below,
 which are the same as the baseline CLI's.
 
 Usage:
-    python scripts\\run_refit.py
-    python scripts\\run_refit.py --plot --output-folder _test-1
-    python scripts\\run_refit.py --folder nn1120-4_pd_ceo2_000 \\
+    python scripts\\run_spectral_fit.py
+    python scripts\\run_spectral_fit.py --plot --output-folder _test-1
+    python scripts\\run_spectral_fit.py --folder nn1120-4_pd_ceo2_000 \\
         --measurements "*-021" --delta-groups delta10 --plot
-    python scripts\\run_refit.py --folder nn1120-3_pd_ceo2_000 \\
+    python scripts\\run_spectral_fit.py --folder nn1120-3_pd_ceo2_000 \\
         --measurements "*" --limit 0 --plot --workers 8
 """
 
@@ -55,7 +55,7 @@ DEFAULT_PLOT_WINDOWS = ((2250.0, 1750.0),)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="run_refit",
+        prog="run_spectral_fit",
         description=(
             "Refit every peak in ir_fitting.fit (config/analysis.yaml) on chosen "
             "subIFG files. Writes params/baseline/residual CSVs and a log into "

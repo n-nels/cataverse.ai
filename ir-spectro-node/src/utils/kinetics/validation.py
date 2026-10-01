@@ -1,8 +1,8 @@
-"""Validate a KineticClassification detector against the ground-truth labels.
+"""Validate the nucleation detector against the ground-truth labels.
 
 Recomputes classification from raw ``Time (s)`` / ``Cumulative_Peak_Area``
-rows for ``Peak_Name == "cluster_sum"`` -- it never reads the ``classification``
-column already baked into the source CSVs by a prior real-time run.
+rows (``classification.nucleation_trajectory``: Peak_1988 + ``monomer_sum``)
+-- it never reads the ``classification`` column already baked into any CSV.
 
 Correctness is defined under monotonic-once-triggered aggregation: a
 ``discontinuous``-labeled file is correct iff the detector fires
@@ -20,15 +20,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from src.utils.kinetics.classification import (
     REQUIRED_CONSECUTIVE_FIRES,
+    classify_nucleation,
     latch_sweep,
-    sorted_trajectory,
+    nucleation_trajectory,
 )
-from src.utils.kinetics.writer import CLASSIFIER, SEARCH_ROOT, WRITER
+from src.utils.kinetics.writer import SEARCH_ROOT
 
 GROUND_TRUTH_PATH = Path(__file__).parent / "ground_truth.json"
 MIN_POINTS = 4
@@ -119,14 +119,6 @@ class ValidationReport:
                 )
 
 
-def _cluster_sum_trajectory(
-    csv_path: Path, cluster_sum_peaks: list[str] | None = None
-) -> tuple[np.ndarray, np.ndarray]:
-    df = pd.read_csv(csv_path)
-    df = WRITER.utils.prepare_peak_area_df(df, cluster_sum_peaks=cluster_sum_peaks)
-    return sorted_trajectory(df, "cluster_sum")
-
-
 def ever_fires(
     classify_fn: Callable[..., dict[str, Any]],
     time_s,
@@ -154,30 +146,27 @@ def run_validation(
     search_root: Path = SEARCH_ROOT,
     required_consecutive: int = REQUIRED_CONSECUTIVE_FIRES,
     input_subfolder: str | None = None,
-    cluster_sum_peaks: list[str] | None = None,
     folders: list[str] | None = None,
     trajectory_fn: Callable[[pd.DataFrame], tuple[Any, Any]] | None = None,
 ) -> ValidationReport:
     """Score ``classify_fn`` against ``ground_truth.json``.
 
     Args:
+        classify_fn: Detector to sweep. ``None`` = ``classify_nucleation``,
+            the one the writer uses.
         input_subfolder: Read each file from ``<folder>/<input_subfolder>/``
             (e.g. ``"_reprocess"``) instead of the live dataset folder.
-        cluster_sum_peaks: Rebuild ``cluster_sum`` from these ``Peak_Name``s
-            instead of using the one in the CSV (for comparing definitions).
         folders: Only score ground-truth entries in these dataset folders.
         trajectory_fn: Build the swept ``(time_s, intensity)`` from the area
-            frame instead of the ``cluster_sum`` rows (e.g. one peak, or a
-            payload array ``classify_fn`` unpacks). ``latch_sweep`` only
+            frame. ``None`` = ``nucleation_trajectory``. ``latch_sweep`` only
             slices ``[:k]``, so any row-aligned array works.
 
     A file that errors (e.g. no area CSV) is scored wrong, never as a quiet
     ``continuous``.
     """
-    classify_fn = (
-        classify_fn
-        if classify_fn is not None
-        else CLASSIFIER.classify_trajectory_combined
+    classify_fn = classify_fn if classify_fn is not None else classify_nucleation
+    trajectory_fn = (
+        trajectory_fn if trajectory_fn is not None else nucleation_trajectory
     )
     entries = json.loads(Path(ground_truth_path).read_text())
 
@@ -190,10 +179,7 @@ def run_validation(
             folder_path = folder_path / input_subfolder
         csv_path = folder_path / entry["file"]
         try:
-            if trajectory_fn is not None:
-                time_s, intensity = trajectory_fn(pd.read_csv(csv_path))
-            else:
-                time_s, intensity = _cluster_sum_trajectory(csv_path, cluster_sum_peaks)
+            time_s, intensity = trajectory_fn(pd.read_csv(csv_path))
             fired = ever_fires(
                 classify_fn,
                 time_s,

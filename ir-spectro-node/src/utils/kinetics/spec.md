@@ -7,7 +7,8 @@ secondary_pfo cost (§5). Folders are run one at a time.
 
 This file describes what the package does now. How it got here (what was tried,
 measured and rejected) is in `context/2026-09-29-kinetics-reprocessing-on-refit.md`.
-Classifier design is in `docs/spec_nuc-clf.md`.
+Classifier history: `docs/spec_nuc-clf.md` (the old cluster_sum rules) and
+`docs/JOURNAL_nuc-clf-refit.md` (the current Peak_1988 detector).
 
 **Purpose.** Rerun kinetics on the 24-peak refit (`src/utils/ir_fitting`, output in
 `C:\Data\peakFit\<dataset>\_reprocess\`), with sums redefined from the refit's groups.
@@ -25,8 +26,10 @@ uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --classi
 uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --measurements <base name>
 uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --workers 8   # one process per measurement
 
-# Score a detector against ground_truth.json
-uv run python scripts\run_kinetics_classification.py --validate
+# Classification only (no fits) -> _reprocess\_test_classification\
+uv run python scripts\run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004
+
+# Score the detector against ground_truth.json
 uv run python scripts\run_kinetics_classification.py --validate --input-subfolder _reprocess
 ```
 
@@ -51,11 +54,13 @@ and `--normal-priority` turns off the below-normal default. Importable as
   (`_KineticUtilities.group_peak_names`): monomer = 2113/2103/2093, cluster = 15 peaks,
   including the six low-band peaks. There are no per-run sum flags. Rebuild the areas
   to change a sum. Live reads `voigt_fit` instead, so the two sides' sums differ by design.
-- **`classification` is causal.** Each row carries the latch state as of that time
-  (`classification.latch_sweep`: 3 consecutive fires, never reverts). It is not a
-  hindsight label, and it is the same sweep the ground-truth harness scores. Duplicate
-  times take the state after their last row. `pre_*`/`post_*` columns appear only on
-  files that latch, as in live.
+- **`classification` is causal.** Each `cluster_sum` row carries the latch state as of
+  that time (`classification.latch_sweep` of `classify_nucleation`: 3 consecutive
+  fires, never reverts). The detector reads Peak_1988 and `monomer_sum`, not
+  `cluster_sum` (§2a). The label is not a hindsight label, and it is the same sweep the
+  ground-truth harness scores. Duplicate times take the state after their last row.
+  `growth_onset_s` is the latch time. Unlike live, there are no `pre_*`/`post_*`
+  columns.
 - **Sort order is part of parity.** `sorted_trajectory` sorts exactly as live does.
   A stable sort changes floating-point sums enough to move ill-conditioned
   secondary_pfo fits.
@@ -79,7 +84,7 @@ and `--normal-priority` turns off the below-normal default. Importable as
    ▼                            sums from ir_fitting.fit groups)
 <dataset>\_reprocess\*_CarbonylPeakArea.csv
    │  writer.prepare_measurement_rows:
-   │    classify_by_time   causal cluster_sum label (latch_sweep)
+   │    classify_by_time   causal nucleation label on cluster_sum rows (latch_sweep)
    │    rolling fits       REGIME_MODELS[(group, regime)] per time point
    ▼
 <dataset>\_reprocess\_test\*_CarbonylPeakArea.csv          (live schema)
@@ -95,13 +100,12 @@ excludes `_reprocess`.
 |---|---|
 | `timeline.py` | One row per subIFG spectrum (from the log), with `Time_Delta (s)` from the live `io.py` loaders |
 | `areas.py` | Params + timeline → area CSV. Logs one warning per missing params row |
-| `classification.py` | Detectors (`combined` = flat-then-rise OR drawdown), `latch_sweep`, `sorted_trajectory`. Thresholds come from yaml `kinetics_classification`, which live reads too |
+| `classification.py` | `classify_nucleation` + `nucleation_trajectory`, `latch_sweep`, `sorted_trajectory`. Parameters come from yaml `kinetics_reprocess_classification` (offline only) |
 | `models.py` | pfo and secondary_pfo (copies of live, same results) |
 | `writer.py` | `REGIME_MODELS`, per-measurement classify + rolling fit + write; singletons |
 | `api.py` | `build_areas`, `process_file`, `process_folder` (`workers=N`: spawn, BLAS pinned to 1 thread) |
 | `validation.py` | Ground-truth harness (`run_validation`, `ever_fires`); an errored file scores wrong |
-| `fit_cli.py` / `classify_cli.py` | The two CLIs (`scripts\run_kinetics_fit.py`, `scripts\run_kinetics_classification.py`) |
-| `monomer_features.py` | Research module (LaMer landmarks); not part of the pipeline. Revisit at the four-equation stage |
+| `fit_cli.py` / `classify_cli.py` | The two CLIs (`scripts\run_kinetics_fit.py`, `scripts\run_kinetics_classification.py`: classification-only writes + `--validate`) |
 
 ## 2. Models
 
@@ -119,6 +123,22 @@ at every unique time, live `latest_only=False`). The secondary_pfo p0 search sta
 fresh at every point, as live does; `--use-prior-p0` turns carry-forward on.
 Fits cover the 18 atomic group peaks (3 monomer + 15 cluster) and both sums. Peaks in
 no group get areas but no fits.
+
+## 2a. Classifier
+
+`classify_nucleation` (from the nuc-clf-refit loop, `docs/JOURNAL_nuc-clf-refit.md`)
+fires at a prefix when all three of these hold:
+
+- **Rise.** For each `Delta_Group`, take the causal 3-point median of Peak_1988. Its
+  newest value minus `max(0, min)` over the last 8 h is the group's rise. The median
+  over groups must exceed 0.00275 au.
+- **Monomer.** The median over groups of the newest smoothed `monomer_sum` is > 0.
+- **Amplitude.** The median over groups of the smoothed prefix's max − min is
+  ≥ 0.006 au. `zero_floor: false`, which is the round-3 form.
+
+The values are in yaml `kinetics_reprocess_classification`. The legacy cluster_sum
+detectors (flat-then-rise, drawdown, combined) were removed from this package on
+2026-10-01. Live `kinetics_fitting.classify_trajectory` is unchanged.
 
 ## 3. Data notes (refit, all 7 datasets, 296 area files)
 
@@ -141,19 +161,16 @@ no group get areas but no fits.
 | Written `classification` vs harness verdict, nn1120-3_004 | 34/34 agree, never reverts |
 | Parallel (`--workers 2`) vs serial, `004-035` | identical |
 
-Classifier (`combined`, latch 3) against `ground_truth.json`, 288 files:
+Classifier (`classify_nucleation`, latch 3) against `ground_truth.json` (288 files,
+65 discontinuous, labels as of 2026-09-30) on `_reprocess`: **286/288**. The two
+mismatches are both in nn1120-3_003, and the user excused both: `-077` (FP, low S/N)
+and `-102` (missed). Every other folder scores 100%. The written column agrees with the
+harness on nn1120-3_004 (15/15 latched files), and `fit_cli --classify-only` writes
+identical files.
 
-| Input | Correct | Hit | Missed | FP |
-|---|---|---|---|---|
-| live, 9-peak | 285 | 47 | 1 | 2 |
-| refit, 9-peak | 275 | 40 | 8 | 5 |
-| refit, 15-peak (**in use**) | 257 | 21 | 27 | 4 |
-
-Most of the refit 15-peak losses are in nn1120-4_000 (16/33). There the low band
-(mostly 1928/1913) grows steadily and fills in the drawdown hump the detector keys on.
-nn1120-3_003's refit misses (`-091/-094/-098/-110`) already appear with the 9-peak sum,
-so there the refit's re-apportioned cluster areas are the cause. The ground truth is
-not edited without the user.
+The legacy `combined` detector scored 257/288 on the refit with the pre-relabel ground
+truth (`docs/JOURNAL_nuc-clf-refit.md`). The ground truth is not edited without the
+user.
 
 ## 5. Cost
 
@@ -164,8 +181,8 @@ secondary_pfo trajectories, so a long file takes about 5 h serially. A short fil
 
 ## 6. Open
 
-- Classifier on the refit 15-peak `cluster_sum`: 257/288. Accepted for now;
-  retuning is separate work (`docs/spec_nuc-clf.md`).
+- Classifier: 286/288 (§4). As new data arrives, retune it in yaml and rescore with
+  `--validate`.
 - secondary_pfo returns NaN for the whole trajectory when `monomer_sum` is all ≤ 0: the
   `q_e` bound `(0, 2·max(y))` inverts and `minimize` raises. Live does the same. This
   affects 14/296 refit files. It belongs to the model redesign.

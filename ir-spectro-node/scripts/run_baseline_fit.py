@@ -2,10 +2,10 @@
 """Entry point for the offline baseline CLI.
 
 Examples:
-    python scripts\\run_baseline_experiment.py
-    python scripts\\run_baseline_experiment.py --anchors 2240 2006 1955 --run-name probe
-    python scripts\\run_baseline_experiment.py --anchor-prominence-frac 0.9
-    python scripts\\run_baseline_experiment.py --folder nn1120-3_pd_ceo2_004 \\
+    python scripts\\run_baseline_fit.py
+    python scripts\\run_baseline_fit.py --anchors 2240 2006 1955 --run-name probe
+    python scripts\\run_baseline_fit.py --anchor-prominence-frac 0.9
+    python scripts\\run_baseline_fit.py --folder nn1120-3_pd_ceo2_004 \\
         --measurements "*-000" --delta-groups delta10 --run-name probe
 """
 

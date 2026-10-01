@@ -1,76 +1,193 @@
-"""Command-line entry point for scoring a classifier against ``ground_truth.json``.
+"""Command-line entry point for nucleation classification of area CSVs.
 
-Runs the validation harness (``validation.py``): the causal prefix sweep with
-the 3-consecutive-fire latch (``classification.latch_sweep``), the same sweep
-that writes the per-row ``classification`` column. ``--classifier`` picks among
-the detector variants in ``classification.py`` (see docs/spec_nuc-clf.md).
+Two modes:
 
-Writing classified CSVs is done by the fit CLI:
-``scripts\\run_kinetics_fit.py --folder <dataset> --classify-only``.
+- **reprocess** (``--folder`` / ``--path``): write each area CSV, unchanged,
+  with the causal per-row ``classification`` and, once latched,
+  ``growth_onset_s`` (the latch time) on the ``cluster_sum`` rows. No kinetic
+  fits; for those use ``scripts\\run_kinetics_fit.py``. Inputs are
+  ``<dataset>/<input-subfolder>/`` (default ``_reprocess``), output goes to
+  ``<dataset>/<input-subfolder>/<output-folder>/``.
+- **validate** (``--validate``): score the detector against
+  ``ground_truth.json`` (``validation.py``), e.g. after retuning it.
+
+The detector is ``classification.classify_nucleation`` (Peak_1988 rise +
+monomer_sum + amplitude gates) under the 3-consecutive-fire latch. Its
+parameters are the ``kinetics_reprocess_classification`` block of
+config/analysis.yaml.
 
 Usage:
-    python scripts\\run_kinetics_classification.py --validate
+    python scripts\\run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004
+    python scripts\\run_kinetics_classification.py --folder "*"
+    python scripts\\run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004 --measurements 20260506_052154_pd_ceo2_004-019
     python scripts\\run_kinetics_classification.py --validate --input-subfolder _reprocess
-    python scripts\\run_kinetics_classification.py --validate --folders nn1120-4_pd_ceo2_000
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
+import math
+from pathlib import Path
 
-from src.utils.kinetics import validation
-from src.utils.kinetics.writer import CLASSIFIERS
+import pandas as pd
 
-CLASSIFIER_CHOICES = CLASSIFIERS
+from src.utils.ir_fitting.refit_cli import _lower_priority
+from src.utils.kinetics import api, validation
+from src.utils.kinetics.result_types import FitRunResult
+from src.utils.kinetics.writer import SEARCH_ROOT
+
+DEFAULT_OUTPUT_FOLDER = "_test_classification"
+"""Not ``_test``: that is where ``run_kinetics_fit.py`` writes fitted CSVs."""
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Score a cluster_sum classifier against ground_truth.json.",
+        description="Write the nucleation classification into CarbonylPeakArea "
+        "CSVs, or score it against ground_truth.json.",
     )
-    parser.add_argument(
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument(
+        "--path", type=Path, help="Classify one *_CarbonylPeakArea.csv."
+    )
+    target.add_argument(
+        "--folder",
+        nargs="+",
+        help="Classify dataset folders under data.peak_fit: names or globs, "
+        'e.g. nn1120-3_pd_ceo2_004, "nn1120-3_*", "*". A glob only matches '
+        "folders that have <input-subfolder>/.",
+    )
+    target.add_argument(
         "--validate",
         action="store_true",
-        help="Run the ground-truth validation (the only mode; kept for "
-        "compatibility).",
+        help="Score the detector against ground_truth.json instead.",
+    )
+    parser.add_argument(
+        "--measurements",
+        nargs="+",
+        default=None,
+        help="With --folder: only these measurement base names.",
     )
     parser.add_argument(
         "--input-subfolder",
         default=None,
-        help="Read each ground-truth file from <folder>/<input-subfolder>/ "
-        "(e.g. _reprocess) instead of the live dataset folder.",
+        help="Read area CSVs from <folder>/<input-subfolder>/ (default: _reprocess "
+        "with --folder; the live dataset folder with --validate).",
+    )
+    parser.add_argument(
+        "--output-folder",
+        default=DEFAULT_OUTPUT_FOLDER,
+        help="Output subfolder next to the input CSVs (default: %(default)s).",
     )
     parser.add_argument(
         "--folders",
         nargs="+",
         default=None,
-        help="Only score ground-truth entries in these dataset folders.",
+        help="With --validate: only score ground-truth entries in these folders.",
     )
+    parser.add_argument("--min-points", type=int, default=4)
     parser.add_argument(
-        "--classifier",
-        choices=sorted(CLASSIFIER_CHOICES),
-        default="combined",
-        help="Which detector to score (default: %(default)s).",
+        "--normal-priority",
+        action="store_true",
+        help="Run at normal process priority (default: below normal).",
     )
-    for removed in ("--path", "--folder"):
-        parser.add_argument(removed, help=argparse.SUPPRESS)
     return parser
+
+
+def _resolve_folders(patterns: list[str], input_subfolder: str) -> list[str]:
+    """Dataset folder names under ``data.peak_fit`` matching ``patterns``.
+
+    A plain name is taken as given (``process_folder`` reports it if empty);
+    a glob keeps only folders that have ``input_subfolder``, so ``"*"`` skips
+    e.g. ``_test``. Raises ``ValueError`` for a glob that matches nothing.
+    """
+    names: list[str] = []
+    for pattern in patterns:
+        if not any(ch in pattern for ch in "*?["):
+            matches = [pattern]
+        else:
+            matches = sorted(
+                path.name
+                for path in SEARCH_ROOT.glob(pattern)
+                if (path / input_subfolder).is_dir()
+            )
+            if not matches:
+                raise ValueError(
+                    f"--folder {pattern!r} matches no folder under {SEARCH_ROOT} "
+                    f"with a {input_subfolder} subfolder"
+                )
+        names += [name for name in matches if name not in names]
+    return names
+
+
+def _latch_hours(rows: pd.DataFrame) -> float | None:
+    """Latch time in hours, from the written ``growth_onset_s``; None if never latched."""
+    if rows.empty or "growth_onset_s" not in rows.columns:
+        return None
+    onset = pd.to_numeric(rows["growth_onset_s"], errors="coerce").dropna()
+    return float(onset.iloc[0]) / 3600.0 if not onset.empty else None
+
+
+def _report(result: FitRunResult) -> None:
+    hours = _latch_hours(result.fit_params)
+    verdict = (
+        "continuous"
+        if hours is None or not math.isfinite(hours)
+        else f"discontinuous, latched at {hours:.2f} h"
+    )
+    print(f"{result.path.name}: {verdict}", flush=True)
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.path is not None or args.folder is not None:
-        parser.error(
-            "--path/--folder moved to the fit CLI: "
-            r"scripts\run_kinetics_fit.py --folder <dataset> --classify-only"
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
+
+    if args.validate:
+        report = validation.run_validation(
+            input_subfolder=args.input_subfolder,
+            folders=args.folders,
         )
-    report = validation.run_validation(
-        classify_fn=CLASSIFIER_CHOICES[args.classifier],
-        input_subfolder=args.input_subfolder,
-        folders=args.folders,
-    )
-    report.print_summary()
+        report.print_summary()
+        return
+
+    if not args.normal_priority:
+        _lower_priority()
+    kwargs = {
+        "output_folder": args.output_folder,
+        "fit": False,
+        "min_points": args.min_points,
+    }
+
+    if args.path is not None:
+        result = api.process_file(args.path, **kwargs)
+        _report(result)
+        print(f"Wrote {result.output_path}")
+        return
+
+    input_subfolder = args.input_subfolder or "_reprocess"
+    try:
+        folders = _resolve_folders(args.folder, input_subfolder)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    for folder in folders:
+        if len(folders) > 1:
+            print(f"\n== {folder}", flush=True)
+        batch = api.process_folder(
+            folder,
+            input_subfolder=input_subfolder,
+            measurements=args.measurements,
+            on_file=_report,
+            **kwargs,
+        )
+        output_dir = batch.outputs[0].parent if batch.outputs else batch.dataset_folder
+        print(
+            f"{batch.n_files_success}/{batch.n_files_found} files written to "
+            f"{output_dir}"
+        )
+        for path_str, error in batch.failures.items():
+            print(f"  FAILED {path_str}: {error}")
 
 
 if __name__ == "__main__":

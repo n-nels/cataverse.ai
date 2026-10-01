@@ -389,7 +389,7 @@ if __name__ == "__main__":
     # Edit these constants to run a batch.
     #
     # This module *views* saved baselines. To run a baseline recipe, use
-    # scripts\run_baseline_experiment.py (src/utils/ir_fitting/api.py::run_baseline).
+    # scripts\run_baseline_fit.py (src/utils/ir_fitting/api.py::run_baseline).
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     import matplotlib
 

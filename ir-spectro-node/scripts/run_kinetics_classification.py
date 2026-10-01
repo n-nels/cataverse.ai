@@ -3,8 +3,8 @@
 
 Examples:
     python scripts\\run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004
-    python scripts\\run_kinetics_classification.py --path <file>.csv --classifier drawdown
-    python scripts\\run_kinetics_classification.py --validate --classifier combined
+    python scripts\\run_kinetics_classification.py --path <file>.csv
+    python scripts\\run_kinetics_classification.py --validate --input-subfolder _reprocess
 """
 
 import sys

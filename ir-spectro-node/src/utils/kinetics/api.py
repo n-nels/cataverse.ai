@@ -19,7 +19,7 @@ import pandas as pd
 
 from src.utils.kinetics.areas import AreaBuildReport, build_folder_areas
 from src.utils.kinetics.result_types import BatchFitResult, FitRunResult
-from src.utils.kinetics.writer import AREA_SUFFIX, CLASSIFIERS, SEARCH_ROOT, WRITER
+from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT, WRITER
 
 LOGGER = logging.getLogger(__name__)
 MODELS_LOGGER = "src.utils.kinetics.models"
@@ -86,7 +86,6 @@ def process_file(
     path: str | Path,
     *,
     output_folder: str = "_test",
-    classifier: str = "combined",
     fit: bool = True,
     min_points: int = 4,
     carry_forward_p0: bool = False,
@@ -96,8 +95,10 @@ def process_file(
 
     Monomer peaks + ``monomer_sum`` get secondary_pfo, cluster peaks +
     ``cluster_sum`` get pfo (``writer.REGIME_MODELS``), and ``cluster_sum``
-    gets the causal per-row ``classification`` from ``classifier`` (a
-    ``writer.CLASSIFIERS`` key). ``fit=False`` writes the classification only.
+    gets the causal per-row nucleation ``classification``
+    (``classification.classify_nucleation``) and, once latched,
+    ``growth_onset_s`` (the latch time). ``fit=False`` writes the
+    classification only.
     The result's ``warnings`` report ODE timeouts, if any.
     """
     file_path = Path(path)
@@ -110,7 +111,6 @@ def process_file(
         output_path, rows = WRITER.write_measurement(
             file_path,
             output_folder_name=output_folder,
-            classify_fn=CLASSIFIERS[classifier],
             fit=fit,
             min_points=min_points,
             carry_forward_p0=carry_forward_p0,
