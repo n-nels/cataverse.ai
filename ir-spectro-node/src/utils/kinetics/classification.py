@@ -51,9 +51,10 @@ class Latch:
     """Prefix length at which the latch engaged. Row ``n_points - 1`` of the
     time-sorted trajectory is the first latched row. ``None``: never latched."""
     result: dict[str, Any]
-    """The classifier's output at the first fire of the latching streak, so
-    ``growth_onset_s`` is the time of the first of the ``required_consecutive``
-    fires, not of the prefix where the latch engaged."""
+    """The classifier's output at the first ``discontinuous`` fire of the
+    sweep, even one in a streak that broke before latching. ``growth_onset_s``
+    is therefore the first fire's time, not the prefix where the latch
+    engaged. Empty if the latch never engaged."""
 
 
 def latch_sweep(
@@ -79,7 +80,7 @@ def latch_sweep(
         result = classify_fn(time_s[:k], intensity[:k])
         if result.get("classification") == "discontinuous":
             consecutive += 1
-            if consecutive == 1:
+            if not first_fire:
                 first_fire = result
             if consecutive >= required_consecutive:
                 return Latch(n_points=k, result=first_fire)
@@ -240,8 +241,8 @@ def classify_nucleation(
     """``discontinuous`` while rise, monomer and amplitude all hold (module doc).
 
     ``payload`` is ``nucleation_trajectory``'s. ``growth_onset_s`` is the
-    newest time of the prefix; ``latch_sweep`` reports the one from the first
-    fire of the latching streak.
+    newest time of the prefix; ``latch_sweep`` reports the one from the
+    sweep's first fire.
     """
     continuous = {"classification": "continuous"}
     if (

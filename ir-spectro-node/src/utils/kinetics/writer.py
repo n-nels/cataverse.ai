@@ -203,8 +203,8 @@ class KineticWriter:
         latch has engaged at or before its last row (rows sharing a time, one
         per Delta_Group, take the state after the last of them), ``continuous``
         before that, and NaN while fewer than ``min_points`` points exist.
-        Latched times also carry ``growth_onset_s``: the time of the first of
-        the consecutive fires that engaged the latch.
+        Latched times also carry ``growth_onset_s``: the time of the sweep's
+        first fire, which may precede the streak that engaged the latch.
         """
         time_s, payload = nucleation_trajectory(df)
         if time_s.size == 0:
