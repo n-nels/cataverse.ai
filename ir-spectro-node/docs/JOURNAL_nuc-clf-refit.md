@@ -140,3 +140,34 @@ it. The legacy cluster_sum detectors and `baseline_departure.py` were removed.
 `--validate --input-subfolder _reprocess` = 286/288 (003-077 FP, 003-102 miss).
 `run_kinetics_classification.py --folder <ds>` writes `classification` +
 `growth_onset_s` (latch time) to `_reprocess\_test_classification\`.
+
+## Round 5 — 2026-10-01
+
+User asked: flatten Delta_Group (mean per time) to fix latch timing. Added
+`classification.flat_trajectory` (one group, so `classify_nucleation` runs as-is).
+Flat at yaml defaults = 274/288 (14 FPs, 0 misses). Best grid = rise 0.0045, amp
+0.010 → **283/288**: 4 33→31 (FP 013/030), pre 104, 003 116 (077), 004 32 (FP
+010/013). Latch−monomer max is 5.0 h median (IQR 1.3–10.5), vs 7.5 h per-group.
+A per-time median scored the same, and smooth_n 2/5 did no better.
+Next: root-cause nn1120-4 013/030.
+
+## Round 6 — 2026-10-01
+
+Why round 5 FPs: groups come in rotation, usually 1 per time, so a per-time mean
+jumps between group offsets. Fix: `flat_trajectory` now carries each group
+forward and averages. Yaml defaults 281/288; best rise 0.0035, amp 0.006 →
+**283**: 004-010/013 fixed, but new FPs 003-079 and 004-023.
+- 4-030: all 6 groups rise 0.013→0.044 after monomer max (~7 h). Per-group needs 3
+  points per group, so it lags. Label question for the user.
+- 4-013: monomer is just > 0 (0.004).
+Latch−mmax = 4.5 h median.
+
+## Round 7 — 2026-10-01
+
+User asked to drop the flatten (rounds 5–6) and go back to per-group medians.
+Restored `classification.py` from main HEAD (`git checkout`); the only diff was
+the uncalled `flat_trajectory`, now gone. Yaml was untouched. Check:
+`run_kinetics_classification.py --validate --input-subfolder _reprocess` =
+**286/288** (003-077 FP, 003-102 miss), matching Promoted. Flatten's lead was
+latch timing (4.5 h vs 7.5 h latch−mmax), not score. Next: improve latch timing
+inside the per-group detector, or the user's call.
