@@ -11,9 +11,9 @@ python scripts\run_server.py     # OPUS ZMQ instrument server (production entry 
 python scripts\run_norhoff.py    # Norhof LN2 pump control loop (separate process)
 python scripts\run_analysis.py   # batch/offline analysis — see note below
 python scripts\run_kinetics_fit.py             # offline kinetics reprocessing CLI — see note below
-python scripts\run_kinetics_classification.py  # classifier ground-truth scoring CLI — see note below
-python scripts\run_baseline_experiment.py      # baseline experiment CLI — see note below
-python scripts\run_refit.py                    # offline 24-peak refit CLI — see note below
+python scripts\run_kinetics_classification.py  # nucleation classification + ground-truth scoring CLI — see note below
+python scripts\run_baseline_fit.py             # baseline experiment CLI — see note below
+python scripts\run_spectral_fit.py             # offline 24-peak refit CLI — see note below
 
 uvx ruff check .                 # lint (ruff is not a declared dependency; run via uvx)
 uvx ruff format .
@@ -39,13 +39,15 @@ adding argparse.
   `cluster_sum` classification. `--classify-only` skips the (slow) fits. It runs at
   below-normal priority by default. `--workers N` runs N measurements at once, one
   process each.
-- `scripts/run_kinetics_classification.py` (wrapping `classify_cli.py`) only scores a
-  detector against `ground_truth.json` (`--validate`, `--classifier`,
-  `--input-subfolder`, `--folders`). The classifier is under active iteration
-  (`docs/spec_nuc-clf.md`); `--classifier` defaults to `combined` (285/288 on live
-  data, 257/288 on the refit 15-peak `cluster_sum`).
+- `scripts/run_kinetics_classification.py` (wrapping `classify_cli.py`) writes the
+  nucleation classification only (no fits): `--folder <dataset>` (or `--path`,
+  `--measurements`) reads `_reprocess\` area CSVs and writes them to
+  `_reprocess\_test_classification\` with the causal `classification` and
+  `growth_onset_s` (the latch time) on `cluster_sum` rows. `--validate`
+  (`--input-subfolder`, `--folders`) scores the detector against
+  `ground_truth.json`: 286/288 on `_reprocess` (`docs/JOURNAL_nuc-clf-refit.md`).
 
-The third is **baseline runs**: `scripts/run_baseline_experiment.py`
+The third is **baseline runs**: `scripts/run_baseline_fit.py`
 (wrapping `src/utils/ir_fitting/baseline_cli.py` → `api.run_baseline`), for the
 same reason — the baseline recipe needs flags to vary it without editing source.
 It runs one recipe and writes one figure per file; nothing else. With no
@@ -56,7 +58,7 @@ lower anchors `1955 1800 1820`, cut at 1955) on the eight default files, under
 comparison and diagnostic machinery (twin checks, seam/band metrics,
 `baseline_comparison.csv`) was removed — see `context/2026-09-20-baseline-cleanup-and-cli.md`.
 
-The fourth is **offline refits**: `scripts/run_refit.py` (wrapping
+The fourth is **offline refits**: `scripts/run_spectral_fit.py` (wrapping
 `src/utils/ir_fitting/refit_cli.py` → `api.fit_files`). It refits every peak in
 `ir_fitting.fit` (`config/analysis.yaml`) on selected subIFG files, using
 `least_squares` and seeding from the saved params CSV. It writes refit-only
@@ -115,18 +117,21 @@ column set.
 **Two kinetics implementations exist — check which one you are editing.**
 `src/analysis/kinetics_fitting.py` is the live/real-time implementation used by
 the server pipeline. `src/utils/kinetics/` is a parallel class-based implementation
-used for offline reprocessing (`MODELS` / `CLASSIFIER` / `WRITER`, wired together at
+used for offline reprocessing (`MODELS` / `WRITER`, wired together at
 the bottom of `writer.py`):
 - `models.py`: PFO/secondary-PFO.
-- `classification.py`: detectors plus the causal `latch_sweep`.
+- `classification.py`: the `classify_nucleation` detector plus the causal `latch_sweep`.
 - `writer.py`: `REGIME_MODELS` and the per-measurement classify/fit/write.
 - `timeline.py` / `areas.py`: params → area CSVs.
 
 The offline models duplicate live's, and are verified bit-identical against
-`append_fit_results(latest_only=False)` (see `src/utils/kinetics/spec.md`). Both
-sides read the classification thresholds from the yaml `kinetics_classification`
-block. The offline side differs by design in three ways: groups come from
-`ir_fitting.fit`, the label is causal, and time comes from the subIFG log. A change
+`append_fit_results(latest_only=False)` (see `src/utils/kinetics/spec.md`). The
+offline side differs by design in four ways:
+- groups come from `ir_fitting.fit`;
+- the label is causal;
+- time comes from the subIFG log;
+- the classifier is the Peak_1988 detector (yaml
+  `kinetics_reprocess_classification`), while live reads `kinetics_classification`. A change
 to model behavior usually has to land in both, or the two paths silently disagree.
 Porting a validated offline classifier into the live path is separate, future,
 out-of-scope work (`docs/spec_nuc-clf.md` §8). Do not do it as a side effect of
@@ -140,14 +145,17 @@ Both apply the isotope shift. `monomer_sum` / `cluster_sum` rows are summed per
 `(Time, Delta_Group, File)`. Trajectories are then fitted per `Peak_Name`, with all
 `Delta_Group` rows interleaved in time.
 
-**Classification** (`classify_trajectory`) labels a trajectory `continuous` or
-`discontinuous` by finding a flat window followed by a sustained rise; a
-discontinuous trajectory also gets `pre_`/`post_` breakpoint PFO fits around
-`growth_onset_s`. The offline `KineticClassification` (`src/utils/kinetics/classification.py`)
-adds `classify_trajectory_drawdown` and `classify_trajectory_combined` (the default).
-It labels causally: `latch_sweep` sweeps growing prefixes and latches `discontinuous`
-after 3 consecutive fires. Select a detector via
-`scripts\run_kinetics_classification.py --classifier {default,drawdown,combined}`.
+**Classification.** Live `classify_trajectory` labels the `cluster_sum` trajectory
+`continuous` or `discontinuous` by finding a flat window followed by a sustained
+rise; a discontinuous trajectory also gets `pre_`/`post_` breakpoint PFO fits around
+`growth_onset_s`. Offline uses a different detector, `classify_nucleation`
+(`src/utils/kinetics/classification.py`), built for the refit areas. It watches
+Peak_1988 per `Delta_Group`, and fires on a windowed rise above a zero-clamped floor,
+gated on `monomer_sum > 0` and a minimum prefix amplitude. Its parameters are in the
+yaml `kinetics_reprocess_classification` block. It labels causally: `latch_sweep`
+sweeps growing prefixes and latches `discontinuous` after 3 consecutive fires. The
+label is written on `cluster_sum` rows, `growth_onset_s` is the latch time, and there
+are no `pre_`/`post_` columns.
 
 ### Configuration
 

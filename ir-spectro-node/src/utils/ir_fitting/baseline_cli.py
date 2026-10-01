@@ -5,9 +5,9 @@ Wraps :func:`~src.utils.ir_fitting.api.run_baseline`: builds one
 and writes one figure per file.
 
 Usage:
-    python scripts\\run_baseline_experiment.py
-    python scripts\\run_baseline_experiment.py --anchors 2240 2006 1955 --run-name probe
-    python scripts\\run_baseline_experiment.py --folder nn1120-3_pd_ceo2_004 \\
+    python scripts\\run_baseline_fit.py
+    python scripts\\run_baseline_fit.py --anchors 2240 2006 1955 --run-name probe
+    python scripts\\run_baseline_fit.py --folder nn1120-3_pd_ceo2_004 \\
         --measurements "*-000" --delta-groups delta10 --run-name probe
 """
 
@@ -137,7 +137,7 @@ def add_recipe_arguments(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="run_baseline_experiment",
+        prog="run_baseline_fit",
         description=(
             "Run one baseline recipe over chosen subIFG files and write one "
             "figure per file. Fits nothing and touches no params CSV."

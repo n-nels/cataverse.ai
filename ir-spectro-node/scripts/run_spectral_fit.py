@@ -2,10 +2,10 @@
 """Entry point for the offline refit CLI.
 
 Examples:
-    python scripts\run_refit.py --dry-run
-    python scripts\run_refit.py --plot
-    python scripts\run_refit.py --plot --output-folder _test-1 --no-lower-split
-    python scripts\run_refit.py --folder nn1120-4_pd_ceo2_000 \
+    python scripts\run_spectral_fit.py --dry-run
+    python scripts\run_spectral_fit.py --plot
+    python scripts\run_spectral_fit.py --plot --output-folder _test-1 --no-lower-split
+    python scripts\run_spectral_fit.py --folder nn1120-4_pd_ceo2_000 \
         --measurements "*-021" --delta-groups delta10 --plot
 """
 

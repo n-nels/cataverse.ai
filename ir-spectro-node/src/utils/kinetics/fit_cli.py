@@ -5,7 +5,8 @@ One run per dataset folder (or file) produces the live-equivalent
 
 - monomer peaks + ``monomer_sum`` get secondary_pfo;
 - cluster peaks + ``cluster_sum`` get pfo (``writer.REGIME_MODELS``);
-- ``cluster_sum`` gets the causal per-row ``classification`` (``classification.latch_sweep``).
+- ``cluster_sum`` gets the causal per-row nucleation ``classification``
+  (``classification.classify_nucleation`` under ``latch_sweep``).
 
 Inputs are the area CSVs in ``<dataset>/<input-subfolder>/`` (default
 ``_reprocess``, the refit output), and ``--build-areas`` first (re)builds them
@@ -31,7 +32,6 @@ from pathlib import Path
 
 from src.utils.ir_fitting.refit_cli import _lower_priority, _worker_count
 from src.utils.kinetics import api
-from src.utils.kinetics.classify_cli import CLASSIFIER_CHOICES
 from src.utils.kinetics.result_types import FitRunResult
 
 
@@ -67,12 +67,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-folder",
         default="_test",
         help="Output subfolder next to the input CSVs (default: %(default)s).",
-    )
-    parser.add_argument(
-        "--classifier",
-        choices=sorted(CLASSIFIER_CHOICES),
-        default="combined",
-        help="cluster_sum detector (default: %(default)s).",
     )
     parser.add_argument(
         "--classify-only",
@@ -130,7 +124,6 @@ def main(argv: list[str] | None = None) -> None:
 
     kwargs = {
         "output_folder": args.output_folder,
-        "classifier": args.classifier,
         "fit": not args.classify_only,
         "min_points": args.min_points,
         "carry_forward_p0": args.use_prior_p0,

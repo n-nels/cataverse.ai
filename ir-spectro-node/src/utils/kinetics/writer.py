@@ -1,7 +1,7 @@
 """Classify and kinetics-fit one measurement's area CSV (live-equivalent).
 
-Also holds the module-level singletons (``UTILS``, ``MODELS``, ``CLASSIFIER``,
-``WRITER``) the rest of the package uses.
+Also holds the module-level singletons (``UTILS``, ``MODELS``, ``WRITER``)
+the rest of the package uses.
 """
 
 from __future__ import annotations
@@ -16,7 +16,12 @@ from numpy.typing import NDArray
 
 from src.core import config
 
-from .classification import KineticClassification, latch_sweep, sorted_trajectory
+from .classification import (
+    classify_nucleation,
+    latch_sweep,
+    nucleation_trajectory,
+    sorted_trajectory,
+)
 from .models import KineticModels, _ModelRowSpec
 from .utils import _KineticUtilities
 
@@ -24,7 +29,7 @@ SEARCH_ROOT = Path(config.get_path("data.peak_fit"))
 AREA_SUFFIX = config.get_setting("filenames.carbonyl_fit.area_suffix")
 
 # Kinetic model per (peak group, regime). The regime of a time point is the
-# causal cluster_sum latch state at that time. The discontinuous entries are
+# causal nucleation latch state at that time (classification.classify_nucleation). The discontinuous entries are
 # placeholders (the continuous model on the expanding window) until the
 # before/after-detection models exist -- that work only fills in this table.
 REGIME_MODELS: dict[tuple[str, str], str] = {
@@ -54,11 +59,9 @@ class KineticWriter:
         self,
         utils: _KineticUtilities,
         models: KineticModels,
-        classifier: KineticClassification,
     ) -> None:
         self.utils = utils
         self.models = models
-        self.classifier = classifier
         self.model_specs: dict[str, _ModelRowSpec] = {
             "pfo": _ModelRowSpec(
                 r2_col="pfo_r^2",
@@ -190,41 +193,27 @@ class KineticWriter:
         self,
         df: pd.DataFrame,
         *,
-        classify_fn: Callable[..., dict[str, Any]] | None = None,
         min_points: int = 4,
     ) -> dict[float, dict[str, Any]]:
-        """Causal per-time classification of ``cluster_sum``.
+        """Causal per-time nucleation classification (written on ``cluster_sum``).
 
-        Runs ``classification.latch_sweep`` once over the time-sorted
-        trajectory (the same sweep the ground-truth harness scores). A time
-        is ``discontinuous`` once the latch has engaged at or before its last
-        row (rows sharing a time, one per Delta_Group, take the state after the
-        last of them), ``continuous`` before that, and NaN while fewer than
-        ``min_points`` points exist. Latched times also carry
-        ``growth_onset_s`` and the ``pre_*``/``post_*`` summary from the
-        latching prefix.
+        Runs ``classification.latch_sweep`` of ``classify_nucleation`` once over
+        the time-sorted ``nucleation_trajectory`` (the same sweep the
+        ground-truth harness scores). A time is ``discontinuous`` once the
+        latch has engaged at or before its last row (rows sharing a time, one
+        per Delta_Group, take the state after the last of them), ``continuous``
+        before that, and NaN while fewer than ``min_points`` points exist.
+        Latched times also carry ``growth_onset_s``: the latch time.
         """
-        time_s, intensity = sorted_trajectory(df, "cluster_sum")
+        time_s, payload = nucleation_trajectory(df)
         if time_s.size == 0:
             return {}
-        classify = (
-            classify_fn
-            if classify_fn is not None
-            else self.classifier.classify_trajectory_combined
-        )
-        latch = latch_sweep(classify, time_s, intensity, min_points=min_points)
+        latch = latch_sweep(classify_nucleation, time_s, payload, min_points=min_points)
         latched_extra: dict[str, Any] = {}
         if latch.n_points is not None:
             onset = latch.result.get("growth_onset_s")
             latched_extra["growth_onset_s"] = (
                 float(onset) if onset is not None else np.nan
-            )
-            latched_extra.update(
-                {
-                    key: value
-                    for key, value in latch.result.items()
-                    if key.startswith(("pre_", "post_"))
-                }
             )
 
         by_time: dict[float, dict[str, Any]] = {}
@@ -307,7 +296,6 @@ class KineticWriter:
         self,
         df_area: pd.DataFrame,
         *,
-        classify_fn: Callable[..., dict[str, Any]] | None = None,
         fit: bool = True,
         min_points: int = 4,
         carry_forward_p0: bool = False,
@@ -318,8 +306,6 @@ class KineticWriter:
 
         Args:
             df_area: The measurement's area frame (sums already baked in).
-            classify_fn: ``classify_trajectory``-shaped detector for cluster_sum.
-                ``None`` = ``classify_trajectory_combined``.
             fit: False writes classification only (no kinetic fits).
             min_points: Minimum points before classifying or fitting.
             carry_forward_p0: Seed each time point's secondary_pfo p0 search
@@ -334,9 +320,7 @@ class KineticWriter:
         df["Cumulative_Peak_Area"] = pd.to_numeric(
             df["Cumulative_Peak_Area"], errors="coerce"
         )
-        by_time = self.classify_by_time(
-            df, classify_fn=classify_fn, min_points=min_points
-        )
+        by_time = self.classify_by_time(df, min_points=min_points)
         records: dict[tuple[str, float], dict[str, Any]] = {
             ("cluster_sum", t): {"Peak_Name": "cluster_sum", "Time (s)": t, **payload}
             for t, payload in by_time.items()
@@ -370,13 +354,10 @@ class KineticWriter:
         if not records:
             return pd.DataFrame(columns=["Peak_Name", "Time (s)", *self.kinetic_columns()])
         rows = pd.DataFrame(list(records.values()))
-        # Every kinetic column is always present (stable schema); pre_/post_
-        # classification summaries follow.
-        ordered = self.kinetic_columns()
-        tail = sorted(
-            c for c in rows.columns if c not in {"Peak_Name", "Time (s)", *ordered}
+        # Every kinetic column is always present (stable schema).
+        return rows.reindex(
+            columns=["Peak_Name", "Time (s)", *self.kinetic_columns()]
         )
-        return rows.reindex(columns=["Peak_Name", "Time (s)", *ordered, *tail])
 
     def write_measurement(
         self,
@@ -408,12 +389,4 @@ class KineticWriter:
 # --- Instances ---
 UTILS = _KineticUtilities()
 MODELS = KineticModels(UTILS)
-CLASSIFIER = KineticClassification(MODELS, UTILS)
-WRITER = KineticWriter(UTILS, MODELS, CLASSIFIER)
-
-# Detectors selectable by name (CLI --classifier; picklable into workers).
-CLASSIFIERS: dict[str, Callable[..., dict[str, Any]]] = {
-    "combined": CLASSIFIER.classify_trajectory_combined,
-    "default": CLASSIFIER.classify_trajectory,
-    "drawdown": CLASSIFIER.classify_trajectory_drawdown,
-}
+WRITER = KineticWriter(UTILS, MODELS)

@@ -21,11 +21,11 @@ refit, with its full validation tables, is at `ab4ca27:src/utils/ir_fitting/spec
 
 ```bash
 # Refit (argparse CLI). No arguments means the 8 default files -> _test.
-uv run python scripts\run_refit.py --help
-uv run python scripts\run_refit.py --measurements "*-021" --plot --output-folder _test-1
+uv run python scripts\run_spectral_fit.py --help
+uv run python scripts\run_spectral_fit.py --measurements "*-021" --plot --output-folder _test-1
 
 # Baseline runs: one recipe, one figure per file, nothing else.
-uv run python scripts\run_baseline_experiment.py --help
+uv run python scripts\run_baseline_fit.py --help
 
 # Whole-measurement / whole-folder refit: edit-constants in api.py's __main__.
 uv run python src\utils\ir_fitting\api.py
@@ -207,7 +207,7 @@ lower anchors without a cut.
 
 ### Runtime on the lab machine
 
-`run_refit` drops to below-normal priority by default (`--normal-priority`
+`run_spectral_fit` drops to below-normal priority by default (`--normal-priority`
 turns this off). `--workers N` fits N measurements in parallel, one process
 each. Large batches still belong on another machine, because this one hosts
 OPUS, the ZMQ server and the LN2 loop.

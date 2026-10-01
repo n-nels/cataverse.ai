@@ -130,3 +130,13 @@ go to the user only if a pre-20250722 file fires, and none did. Against Y as
 written, the only gap is part 3: 003 is 115/117 (077 FP, 102 miss). Both are
 excused only in the user's round-2 commentary, not in the prompt or
 `ground_truth.json`. The user decides whether to amend the prompt or relabel.
+
+## Promoted — 2026-10-01
+
+The detector is now `classification.classify_nucleation` (+ `nucleation_trajectory`).
+Its parameters live in yaml `kinetics_reprocess_classification`, with `zero_floor:
+false` (the round-3 gate, user's choice). The writer, the harness and both CLIs use
+it. The legacy cluster_sum detectors and `baseline_departure.py` were removed.
+`--validate --input-subfolder _reprocess` = 286/288 (003-077 FP, 003-102 miss).
+`run_kinetics_classification.py --folder <ds>` writes `classification` +
+`growth_onset_s` (latch time) to `_reprocess\_test_classification\`.
