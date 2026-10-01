@@ -111,3 +111,22 @@ Next: the user formalizes the 077/102 waiver and signs off on plots.
 - Correction to round 3: latch time was measured after the entry. Latch −
   monomer_sum max = 7.5 h median (IQR 5–12), n = 64, with the max taken per time
   as the median over groups. That method may differ from round 2's 7 h figure.
+
+## Round 4 — 2026-09-30
+
+Floored the gate per user: `prefix_amplitude(zero_floor=True)` (span = max −
+max(0, min)); used via `classify_window_rise_gated(zero_floor=True)`, still 0.006.
+Critical span (gate at first prefix of a 3-fire rise run, best over the run) is
+now 0.0050 for 3_001-000, 0.0069 for 003-091/098: gap widened, 0.006 still splits.
+Score 286/288, same as round 3: nn1120-4 33/33; pre 104/104; 004 34/34; 003
+115/117 (077 FP, 102 miss, both user-excused; no 080–089 fires). Next: user
+signs off on plots and makes zero_floor the default.
+
+## Correction to round 4 — 2026-09-30
+
+Round 4's "user signs off on plots" was wrong. It came from the superseded
+three-part Y. The current four-part Y in the prompt has no plot sign-off. Plots
+go to the user only if a pre-20250722 file fires, and none did. Against Y as
+written, the only gap is part 3: 003 is 115/117 (077 FP, 102 miss). Both are
+excused only in the user's round-2 commentary, not in the prompt or
+`ground_truth.json`. The user decides whether to amend the prompt or relabel.

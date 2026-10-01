@@ -229,9 +229,16 @@ AMPLITUDE_MIN = 0.006
 
 
 def prefix_amplitude(
-    payload: NDArray[np.float64], *, smooth_n: int = SMOOTH_N
+    payload: NDArray[np.float64],
+    *,
+    smooth_n: int = SMOOTH_N,
+    zero_floor: bool = False,
 ) -> float:
-    """Median-over-groups peak-to-trough of the smoothed Peak_1988 prefix."""
+    """Median-over-groups peak-to-trough of the smoothed Peak_1988 prefix.
+
+    ``zero_floor`` (round 4, user): trough is ``max(0, min)``, as in
+    ``window_rise``, so recovery from a negative start does not count.
+    """
     spans: list[float] = []
     for code in np.unique(payload[:, 1]):
         values = payload[payload[:, 1] == code, 0]
@@ -243,7 +250,10 @@ def prefix_amplitude(
                 for j in range(smooth_n - 1, values.size)
             ]
         )
-        spans.append(float(smoothed.max() - smoothed.min()))
+        trough = float(smoothed.min())
+        if zero_floor:
+            trough = max(0.0, trough)
+        spans.append(float(smoothed.max()) - trough)
     return float(np.median(spans)) if spans else 0.0
 
 
@@ -252,12 +262,17 @@ def classify_window_rise_gated(
     payload: NDArray[np.float64],
     *,
     amplitude_min: float = AMPLITUDE_MIN,
+    zero_floor: bool = False,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """``classify_window_rise`` that also needs ``prefix_amplitude`` >= ``amplitude_min``."""
     result = classify_window_rise(time_s, payload, **kwargs)
     if result["classification"] == "discontinuous" and (
-        prefix_amplitude(payload, smooth_n=kwargs.get("smooth_n", SMOOTH_N))
+        prefix_amplitude(
+            payload,
+            smooth_n=kwargs.get("smooth_n", SMOOTH_N),
+            zero_floor=zero_floor,
+        )
         < amplitude_min
     ):
         return {"classification": "continuous"}
