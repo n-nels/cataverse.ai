@@ -4,7 +4,7 @@ Two modes:
 
 - **reprocess** (``--folder`` / ``--path``): write each area CSV, unchanged,
   with the causal per-row ``classification`` and, once latched,
-  ``growth_onset_s`` (the nucleation onset, ``classification.nucleation_onset``)
+  ``growth_onset_s`` (the growth onset, ``classification.growth_onset``)
   and ``latch_time_s`` (the latch time) on the ``cluster_sum`` rows. No kinetic
   fits; for those use ``scripts\\run_kinetics_fit.py``. Inputs are
   ``<dataset>/<input-subfolder>/`` (default ``_reprocess``), output goes to

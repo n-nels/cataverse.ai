@@ -6,7 +6,7 @@ Origin: the monomer-kinetics loop (docs/JOURNAL_monomer-kinetics.md, rounds
 Input: ``<data.peak_fit>/<folder>/_reprocess/_test_classification/`` area
 CSVs, written by ``scripts\\run_kinetics_classification.py``. They carry
 ``monomer_sum`` / ``cluster_sum`` and, once the nucleation detector latches,
-``growth_onset_s`` (the latch time) on the ``cluster_sum`` rows. No kinetic fit
+``latch_time_s`` (the latch time) on the ``cluster_sum`` rows. No kinetic fit
 columns are used. The detector's peak (``PEAK_NAME``, Peak_1988) is drawn on
 its own axis for reference; it does not enter the domains or the catalog.
 
@@ -96,11 +96,11 @@ def collapse_delta_groups(df: pd.DataFrame, peak_name: str) -> pd.DataFrame:
 
 
 def latch_time(df: pd.DataFrame) -> float:
-    """The nucleation latch time (``growth_onset_s`` on cluster_sum); NaN if none."""
-    onset = pd.to_numeric(
-        df.loc[df["Peak_Name"] == "cluster_sum", "growth_onset_s"], errors="coerce"
+    """The nucleation latch time (``latch_time_s`` on cluster_sum); NaN if none."""
+    latch = pd.to_numeric(
+        df.loc[df["Peak_Name"] == "cluster_sum", "latch_time_s"], errors="coerce"
     ).dropna()
-    return float(onset.iloc[0]) if not onset.empty else np.nan
+    return float(latch.iloc[0]) if not latch.empty else np.nan
 
 
 def _peak(curve: pd.DataFrame, prefix: str) -> dict[str, float]:

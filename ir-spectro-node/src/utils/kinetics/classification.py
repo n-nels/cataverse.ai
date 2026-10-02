@@ -20,11 +20,13 @@ config/analysis.yaml. ``latch_sweep`` turns the detector into the causal,
 monotonic-once-triggered label used both by the ground-truth harness and the
 written column.
 
-``nucleation_onset`` times the event once the latch has engaged. The latch's
+``growth_onset`` times the event once the latch has engaged. The latch's
 own fires lag the visible departure (each group is sampled every ~1 h and
 smoothed over 3 of its points), so the onset is the first row of the pooled,
 unsmoothed Peak_1988 prefix -- all Delta_Groups as one series against time,
-as plotted -- that passes the same three gates, with ``onset_amplitude_min``.
+as plotted -- that passes the same three gates, with
+``growth_onset_amplitude_min``. Its time is written as ``growth_onset_s``; the
+latch's own time is ``latch_time_s``.
 """
 
 from __future__ import annotations
@@ -47,7 +49,7 @@ RISE_THRESHOLD = float(_SETTINGS["rise_threshold"])
 AMPLITUDE_MIN = float(_SETTINGS["amplitude_min"])
 ZERO_FLOOR = bool(_SETTINGS["zero_floor"])
 REQUIRED_CONSECUTIVE_FIRES = int(_SETTINGS["required_consecutive"])
-ONSET_AMPLITUDE_MIN = float(_SETTINGS["onset_amplitude_min"])
+GROWTH_ONSET_AMPLITUDE_MIN = float(_SETTINGS["growth_onset_amplitude_min"])
 
 
 @dataclass
@@ -59,7 +61,7 @@ class Latch:
     time-sorted trajectory is the first latched row. ``None``: never latched."""
     result: dict[str, Any]
     """The classifier's output at the first ``discontinuous`` fire of the
-    sweep, even one in a streak that broke before latching. ``growth_onset_s``
+    sweep, even one in a streak that broke before latching. ``fire_time_s``
     is therefore the first fire's time, not the prefix where the latch
     engaged. Empty if the latch never engaged."""
 
@@ -247,7 +249,7 @@ def classify_nucleation(
 ) -> dict[str, Any]:
     """``discontinuous`` while rise, monomer and amplitude all hold (module doc).
 
-    ``payload`` is ``nucleation_trajectory``'s. ``growth_onset_s`` is the
+    ``payload`` is ``nucleation_trajectory``'s. ``fire_time_s`` is the
     newest time of the prefix; ``latch_sweep`` reports the one from the
     sweep's first fire.
     """
@@ -264,16 +266,16 @@ def classify_nucleation(
         < amplitude_min
     ):
         return continuous
-    return {"classification": "discontinuous", "growth_onset_s": float(time_s[-1])}
+    return {"classification": "discontinuous", "fire_time_s": float(time_s[-1])}
 
 
-def nucleation_onset(
+def growth_onset(
     time_s: NDArray[np.float64],
     payload: NDArray[np.float64],
     *,
     window_s: float = WINDOW_S,
     rise_threshold: float = RISE_THRESHOLD,
-    amplitude_min: float = ONSET_AMPLITUDE_MIN,
+    amplitude_min: float = GROWTH_ONSET_AMPLITUDE_MIN,
     zero_floor: bool = ZERO_FLOOR,
 ) -> float:
     """Time of the first row whose pooled, unsmoothed prefix passes the gates.

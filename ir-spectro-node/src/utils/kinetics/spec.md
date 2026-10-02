@@ -60,9 +60,9 @@ and `--normal-priority` turns off the below-normal default. Importable as
   `cluster_sum` (§2a). The label is not a hindsight label, and it is the same sweep the
   ground-truth harness scores. Duplicate times take the state after their last row.
   Latched rows carry `latch_time_s` (the time of the first latched row) and
-  `growth_onset_s` (`classification.nucleation_onset`: the first row of pooled,
+  `growth_onset_s` (`classification.growth_onset`: the first row of pooled,
   unsmoothed Peak_1988 up to the latch that passes the gates with
-  `onset_amplitude_min`; the sweep's first fire if none does). Unlike live, there
+  `growth_onset_amplitude_min`; the sweep's first fire if none does). Unlike live, there
   are no `pre_*`/`post_*` columns.
 - **Sort order is part of parity.** `sorted_trajectory` sorts exactly as live does.
   A stable sort changes floating-point sums enough to move ill-conditioned

@@ -97,7 +97,7 @@ def process_file(
     ``cluster_sum`` get pfo (``writer.REGIME_MODELS``), and ``cluster_sum``
     gets the causal per-row nucleation ``classification``
     (``classification.classify_nucleation``) and, once latched,
-    ``growth_onset_s`` (the nucleation onset) and ``latch_time_s`` (the latch
+    ``growth_onset_s`` (the growth onset) and ``latch_time_s`` (the latch
     time). ``fit=False`` writes the
     classification only.
     The result's ``warnings`` report ODE timeouts, if any.
