@@ -19,6 +19,12 @@ Parameters come from the ``kinetics_reprocess_classification`` block of
 config/analysis.yaml. ``latch_sweep`` turns the detector into the causal,
 monotonic-once-triggered label used both by the ground-truth harness and the
 written column.
+
+``nucleation_onset`` times the event once the latch has engaged. The latch's
+own fires lag the visible departure (each group is sampled every ~1 h and
+smoothed over 3 of its points), so the onset is the first row of the pooled,
+unsmoothed Peak_1988 prefix -- all Delta_Groups as one series against time,
+as plotted -- that passes the same three gates, with ``onset_amplitude_min``.
 """
 
 from __future__ import annotations
@@ -41,6 +47,7 @@ RISE_THRESHOLD = float(_SETTINGS["rise_threshold"])
 AMPLITUDE_MIN = float(_SETTINGS["amplitude_min"])
 ZERO_FLOOR = bool(_SETTINGS["zero_floor"])
 REQUIRED_CONSECUTIVE_FIRES = int(_SETTINGS["required_consecutive"])
+ONSET_AMPLITUDE_MIN = float(_SETTINGS["onset_amplitude_min"])
 
 
 @dataclass
@@ -258,3 +265,39 @@ def classify_nucleation(
     ):
         return continuous
     return {"classification": "discontinuous", "growth_onset_s": float(time_s[-1])}
+
+
+def nucleation_onset(
+    time_s: NDArray[np.float64],
+    payload: NDArray[np.float64],
+    *,
+    window_s: float = WINDOW_S,
+    rise_threshold: float = RISE_THRESHOLD,
+    amplitude_min: float = ONSET_AMPLITUDE_MIN,
+    zero_floor: bool = ZERO_FLOOR,
+) -> float:
+    """Time of the first row whose pooled, unsmoothed prefix passes the gates.
+
+    ``payload`` is ``nucleation_trajectory``'s; the Delta_Group column is
+    ignored, so every row is one point of a single Peak_1988 series. A row
+    passes when the rise (its value minus ``max(0, min)`` over the last
+    ``window_s``) exceeds ``rise_threshold``, the prefix peak-to-trough is at
+    least ``amplitude_min``, and that row's ``monomer_sum`` is > 0. Pass the
+    prefix up to the latch so the result stays causal. NaN if no row passes.
+    """
+    values = payload[:, 0]
+    monomer = payload[:, 2]
+    for k in range(1, values.size):
+        prefix = values[: k + 1]
+        recent = prefix[time_s[: k + 1] >= time_s[k] - window_s]
+        rise = prefix[-1] - max(0.0, float(recent.min()))
+        trough = float(prefix.min())
+        if zero_floor:
+            trough = max(0.0, trough)
+        if (
+            rise > rise_threshold
+            and float(prefix.max()) - trough >= amplitude_min
+            and monomer[k] > 0
+        ):
+            return float(time_s[k])
+    return np.nan

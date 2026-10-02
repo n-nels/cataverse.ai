@@ -214,12 +214,12 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     process_all_area_vs_time(
         folder="nn1120-4_pd_ceo2_000",
-        subfolder="_reprocess",
+        subfolder=None,
         include_unknown=False,
         time_unit="s",
         constituents={
-            "monomer": {"peaks": None, "sum": None},
-            "cluster": {"peaks": [1988], "sum": None}, # 1928, 1988, 2030
+            "monomer": {"peaks": "all", "sum": True},
+            "cluster": {"peaks": [1988], "sum": True}, # 1928, 1988, 2030
         },
         groups="ir_fitting",
     )

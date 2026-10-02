@@ -171,3 +171,12 @@ the uncalled `flat_trajectory`, now gone. Yaml was untouched. Check:
 **286/288** (003-077 FP, 003-102 miss), matching Promoted. Flatten's lead was
 latch timing (4.5 h vs 7.5 h latch−mmax), not score. Next: improve latch timing
 inside the per-group detector, or the user's call.
+
+## Round 8 — 2026-10-01
+
+Onset only, latch unchanged: `growth_onset_s` = `classification.nucleation_onset`, the
+first row of pooled, unsmoothed Peak_1988 (all Delta_Groups as one series), searched
+up to the latch. The same gates apply, with amplitude ≥ yaml `onset_amplitude_min` 0.010.
+Root cause of the lag: per-group smoothing needs 3 points per group, and each group is
+sampled about once an hour. nn1120-4 onset−mmax: 1.0 h median, 19/28 within 2 h (first fire: 4.3 h, 6/28).
+Outliers: 037 −5.2 h, 040 −3.9 h, 034/035 +4 h. Labels still 286/288.
