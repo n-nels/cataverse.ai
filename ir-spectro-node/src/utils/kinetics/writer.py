@@ -18,6 +18,7 @@ from src.core import config
 
 from .classification import (
     classify_nucleation,
+    growth_onset,
     latch_sweep,
     nucleation_trajectory,
     sorted_trajectory,
@@ -49,7 +50,7 @@ AREA_COLUMNS = [
     "Cumulative_Peak_Area",
     "Cumulative_Integral",
 ]
-CLASSIFICATION_COLUMNS = ["classification", "growth_onset_s"]
+CLASSIFICATION_COLUMNS = ["classification", "growth_onset_s", "latch_time_s"]
 
 
 class KineticWriter:
@@ -203,8 +204,10 @@ class KineticWriter:
         latch has engaged at or before its last row (rows sharing a time, one
         per Delta_Group, take the state after the last of them), ``continuous``
         before that, and NaN while fewer than ``min_points`` points exist.
-        Latched times also carry ``growth_onset_s``: the time of the sweep's
-        first fire, which may precede the streak that engaged the latch.
+        Latched times also carry ``growth_onset_s``:
+        ``classification.growth_onset`` over the prefix up to the latch,
+        or the sweep's first fire if no pooled row passes by then; and
+        ``latch_time_s``: the time of the first latched row.
         """
         time_s, payload = nucleation_trajectory(df)
         if time_s.size == 0:
@@ -212,10 +215,15 @@ class KineticWriter:
         latch = latch_sweep(classify_nucleation, time_s, payload, min_points=min_points)
         latched_extra: dict[str, Any] = {}
         if latch.n_points is not None:
-            onset = latch.result.get("growth_onset_s")
+            onset = growth_onset(
+                time_s[: latch.n_points], payload[: latch.n_points]
+            )
+            if np.isnan(onset):
+                onset = latch.result.get("fire_time_s")
             latched_extra["growth_onset_s"] = (
                 float(onset) if onset is not None else np.nan
             )
+            latched_extra["latch_time_s"] = float(time_s[latch.n_points - 1])
 
         by_time: dict[float, dict[str, Any]] = {}
         for unique_time in np.unique(time_s):

@@ -477,6 +477,7 @@ kinetics_reprocess_classification:
   amplitude_min: 0.006          # au; median-over-groups prefix peak-to-trough
   zero_floor: false             # amplitude trough is max(0, min) when true
   required_consecutive: 3       # latch after this many consecutive fires
+  growth_onset_amplitude_min: 0.010  # au; growth_onset_s gate on the pooled, unsmoothed prefix
 
 # -------------------
 # ir_fitting (offline refit)

@@ -4,7 +4,8 @@ Two modes:
 
 - **reprocess** (``--folder`` / ``--path``): write each area CSV, unchanged,
   with the causal per-row ``classification`` and, once latched,
-  ``growth_onset_s`` (the latch time) on the ``cluster_sum`` rows. No kinetic
+  ``growth_onset_s`` (the growth onset, ``classification.growth_onset``)
+  and ``latch_time_s`` (the latch time) on the ``cluster_sum`` rows. No kinetic
   fits; for those use ``scripts\\run_kinetics_fit.py``. Inputs are
   ``<dataset>/<input-subfolder>/`` (default ``_reprocess``), output goes to
   ``<dataset>/<input-subfolder>/<output-folder>/``.
@@ -120,21 +121,24 @@ def _resolve_folders(patterns: list[str], input_subfolder: str) -> list[str]:
     return names
 
 
-def _latch_hours(rows: pd.DataFrame) -> float | None:
-    """Latch time in hours, from the written ``growth_onset_s``; None if never latched."""
-    if rows.empty or "growth_onset_s" not in rows.columns:
+def _hours(rows: pd.DataFrame, column: str) -> float | None:
+    """First written ``column`` value (seconds) in hours; None if absent or never latched."""
+    if rows.empty or column not in rows.columns:
         return None
-    onset = pd.to_numeric(rows["growth_onset_s"], errors="coerce").dropna()
-    return float(onset.iloc[0]) / 3600.0 if not onset.empty else None
+    values = pd.to_numeric(rows[column], errors="coerce").dropna()
+    return float(values.iloc[0]) / 3600.0 if not values.empty else None
 
 
 def _report(result: FitRunResult) -> None:
-    hours = _latch_hours(result.fit_params)
-    verdict = (
-        "continuous"
-        if hours is None or not math.isfinite(hours)
-        else f"discontinuous, latched at {hours:.2f} h"
-    )
+    latch = _hours(result.fit_params, "latch_time_s")
+    if latch is None or not math.isfinite(latch):
+        verdict = "continuous"
+    else:
+        onset = _hours(result.fit_params, "growth_onset_s")
+        onset_text = (
+            f"{onset:.2f} h" if onset is not None and math.isfinite(onset) else "n/a"
+        )
+        verdict = f"discontinuous, onset at {onset_text}, latched at {latch:.2f} h"
     print(f"{result.path.name}: {verdict}", flush=True)
 
 
