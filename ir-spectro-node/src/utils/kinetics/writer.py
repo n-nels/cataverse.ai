@@ -50,7 +50,7 @@ AREA_COLUMNS = [
     "Cumulative_Peak_Area",
     "Cumulative_Integral",
 ]
-CLASSIFICATION_COLUMNS = ["classification", "growth_onset_s"]
+CLASSIFICATION_COLUMNS = ["classification", "growth_onset_s", "latch_time_s"]
 
 
 class KineticWriter:
@@ -206,7 +206,8 @@ class KineticWriter:
         before that, and NaN while fewer than ``min_points`` points exist.
         Latched times also carry ``growth_onset_s``:
         ``classification.nucleation_onset`` over the prefix up to the latch,
-        or the sweep's first fire if no pooled row passes by then.
+        or the sweep's first fire if no pooled row passes by then; and
+        ``latch_time_s``: the time of the first latched row.
         """
         time_s, payload = nucleation_trajectory(df)
         if time_s.size == 0:
@@ -222,6 +223,7 @@ class KineticWriter:
             latched_extra["growth_onset_s"] = (
                 float(onset) if onset is not None else np.nan
             )
+            latched_extra["latch_time_s"] = float(time_s[latch.n_points - 1])
 
         by_time: dict[float, dict[str, Any]] = {}
         for unique_time in np.unique(time_s):

@@ -510,7 +510,7 @@ def run_folder(folder_name: str) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    FOLDER_NAME = "nn1120-3_pd_ceo2_004"
+    FOLDER_NAME = "nn1120-3_pd_ceo2_003"
     result = run_folder(FOLDER_NAME)
     print(f"Wrote {len(result)} files' domains to {output_dir(FOLDER_NAME)}")
     with pd.option_context("display.max_rows", None, "display.width", 240):

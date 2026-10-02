@@ -42,8 +42,8 @@ adding argparse.
 - `scripts/run_kinetics_classification.py` (wrapping `classify_cli.py`) writes the
   nucleation classification only (no fits): `--folder <dataset>` (or `--path`,
   `--measurements`) reads `_reprocess\` area CSVs and writes them to
-  `_reprocess\_test_classification\` with the causal `classification` and
-  `growth_onset_s` (the latch time) on `cluster_sum` rows. `--validate`
+  `_reprocess\_test_classification\` with the causal `classification`,
+  `growth_onset_s` (the nucleation onset) and `latch_time_s` on `cluster_sum` rows. `--validate`
   (`--input-subfolder`, `--folders`) scores the detector against
   `ground_truth.json`: 286/288 on `_reprocess` (`docs/JOURNAL_nuc-clf-refit.md`).
 
@@ -154,7 +154,8 @@ Peak_1988 per `Delta_Group`, and fires on a windowed rise above a zero-clamped f
 gated on `monomer_sum > 0` and a minimum prefix amplitude. Its parameters are in the
 yaml `kinetics_reprocess_classification` block. It labels causally: `latch_sweep`
 sweeps growing prefixes and latches `discontinuous` after 3 consecutive fires. The
-label is written on `cluster_sum` rows, `growth_onset_s` is the latch time, and there
+label is written on `cluster_sum` rows with `latch_time_s` (the latch time) and
+`growth_onset_s` (`nucleation_onset`, the earlier pooled-Peak_1988 onset), and there
 are no `pre_`/`post_` columns.
 
 ### Configuration
