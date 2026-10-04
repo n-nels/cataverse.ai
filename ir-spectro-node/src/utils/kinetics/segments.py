@@ -7,11 +7,12 @@ regime. Segment boundaries come from the pooled sum trajectories, smoothed by
 a centered running median of ``smooth_n`` points (hindsight, so centered):
 
 - monomer_sum + constituents. Continuous: ``adsorption`` (secondary_pfo).
-  Discontinuous: ``supersaturation`` (secondary_pfo) up to the monomer_sum
-  max, then ``depletion`` (exp_decay).
+  Discontinuous: ``supersaturation`` (secondary_pfo) up to the later of the
+  monomer_sum max and the growth onset, then ``depletion`` (exp_decay).
 - cluster_sum + constituents. Continuous: ``adsorption`` (pfo).
-  Discontinuous: ``ripening`` (pfo), or, when a spike is detected,
-  ``pre_nucleation`` (pfo) up to the spike base, ``burst_nucleation`` up to
+  Discontinuous without a spike: ``pre_nucleation`` (pfo) up to the growth
+  onset, then ``ripening`` (pfo, its clock starting at the onset). With a
+  spike: ``pre_nucleation`` (pfo) up to the spike base, ``burst_nucleation`` up to
   the cluster_sum max, and ``diffusion_growth`` after it. The last two have
   no model yet: their rows are written with NaN parameters.
 
@@ -73,6 +74,7 @@ ID_COLUMNS = [
     "model",
     "t_start_s",
     "t_end_s",
+    "t_ref_s",
     "n_points",
     "r^2",
     "rmse",
@@ -85,6 +87,7 @@ FEATURE_COLUMNS = [
     "latch_time_s",
     "monomer_max_s",
     "monomer_max_au",
+    "depletion_start_s",
     "spike_detected",
     "spike_base_s",
     "cluster_max_s",
@@ -189,6 +192,25 @@ def detect_spike(
     return out
 
 
+def _finite_or_none(value: Any) -> float | None:
+    """``value`` as a float, or ``None`` if missing or NaN."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value if np.isfinite(value) else None
+
+
+def depletion_start(features: dict[str, Any]) -> float:
+    """Where ``depletion`` starts in a discontinuous file; NaN otherwise."""
+    if features.get("classification") != "discontinuous":
+        return np.nan
+    t_start = next(
+        s.t_start for s in plan_segments(features)["monomer"] if s.name == "depletion"
+    )
+    return t_start if t_start is not None else np.nan
+
+
 def plan_segments(features: dict[str, Any]) -> dict[str, list[Segment]]:
     """Segments per peak group, from the measurement's features."""
     if features.get("classification") != "discontinuous":
@@ -196,15 +218,25 @@ def plan_segments(features: dict[str, Any]) -> dict[str, list[Segment]]:
             "monomer": [Segment("adsorption", "secondary_pfo", None, None)],
             "cluster": [Segment("adsorption", "pfo", None, None)],
         }
-    monomer_max_s = features.get("monomer_max_s", np.nan)
-    monomer_max_s = monomer_max_s if np.isfinite(monomer_max_s) else None
+    monomer_max_s = _finite_or_none(features.get("monomer_max_s"))
+    growth_onset_s = _finite_or_none(features.get("growth_onset_s"))
+    # Depletion starts once the monomer has peaked and growth has begun.
+    ends = [t for t in (monomer_max_s, growth_onset_s) if t is not None]
+    depletion_start_s = max(ends) if ends else None
     monomer = [
-        Segment("supersaturation", "secondary_pfo", None, monomer_max_s),
-        Segment("depletion", "exp_decay", monomer_max_s, None),
+        Segment("supersaturation", "secondary_pfo", None, depletion_start_s),
+        Segment("depletion", "exp_decay", depletion_start_s, None),
     ]
     # `in`, not truthiness: a features row read back from CSV may hold NaN.
     if features.get("spike_detected") not in (True, 1):
-        return {"monomer": monomer, "cluster": [Segment("ripening", "pfo", None, None)]}
+        if growth_onset_s is None:
+            cluster = [Segment("ripening", "pfo", None, None)]
+        else:
+            cluster = [
+                Segment("pre_nucleation", "pfo", None, growth_onset_s),
+                Segment("ripening", "pfo", growth_onset_s, None),
+            ]
+        return {"monomer": monomer, "cluster": cluster}
     base_s, max_s = features["spike_base_s"], features["cluster_max_s"]
     return {
         "monomer": monomer,
@@ -221,19 +253,25 @@ def segment_curve(
 ) -> NDArray[np.float64]:
     """A params-file row's fitted model evaluated at ``time_s`` (for plotting).
 
-    Uses each model's own clock: pfo and secondary_pfo absolute time with
-    ``q0`` at the segment's first time, exp_decay ``t - t_start_s``. NaN for a
-    blank or failed segment.
+    Uses each model's own clock, ``t - t_ref_s``: 0 (absolute time) for
+    secondary_pfo and for a pfo segment that starts the trajectory, the
+    segment's first time for exp_decay and for a pfo segment that starts at a
+    boundary. Rows written before ``t_ref_s`` existed fall back to absolute
+    pfo and ``t_start_s`` for exp_decay. NaN for a blank or failed segment.
     """
     time_s = np.asarray(time_s, dtype=float)
     nan = np.full(time_s.shape, np.nan)
+    t_ref = record.get("t_ref_s", np.nan)
     if record["model"] == "pfo" and np.isfinite(record["pfo_k_s-1"]):
         return MODELS.pfo_model.pfo(
-            time_s, record["pfo_k_s-1"], record["pfo_q_e_au"], record["pfo_q0_au"]
+            time_s - (t_ref if np.isfinite(t_ref) else 0.0),
+            record["pfo_k_s-1"],
+            record["pfo_q_e_au"],
+            record["pfo_q0_au"],
         )
     if record["model"] == "exp_decay" and np.isfinite(record["exp_k_s-1"]):
         return MODELS.exp_decay_model.exp_decay(
-            time_s - record["t_start_s"],
+            time_s - (t_ref if np.isfinite(t_ref) else record["t_start_s"]),
             record["exp_k_s-1"],
             record["exp_y_inf_au"],
             record["exp_y_b_au"],
@@ -298,6 +336,7 @@ class SegmentWriter:
         features["monomer_max_s"], features["monomer_max_au"] = smoothed_max(
             time_m, monomer
         )
+        features["depletion_start_s"] = depletion_start(features)
         time_c, cluster = sorted_trajectory(df, "cluster_sum")
         features["n_points"] = int(time_c.size)
         if features["classification"] == "discontinuous":
@@ -319,7 +358,13 @@ class SegmentWriter:
         *,
         min_points: int,
     ) -> dict[str, Any]:
-        """Fit one segment (both ends inclusive); NaN parameters if unfitted."""
+        """Fit one segment (both ends inclusive); NaN parameters if unfitted.
+
+        pfo's clock starts at 0 for a segment that starts the trajectory, and
+        at the segment's first time for one that starts at a boundary, so
+        ``q0`` (the first point) sits on the curve. exp_decay's model always
+        counts from the first time. ``t_ref_s`` records the zero.
+        """
         t_start = segment.t_start if segment.t_start is not None else float(time_s[0])
         t_end = segment.t_end if segment.t_end is not None else float(time_s[-1])
         mask = (time_s >= t_start) & (time_s <= t_end)
@@ -333,6 +378,12 @@ class SegmentWriter:
         if segment.model is None or record["n_points"] < min_points:
             return record
         t_slice, y_slice = time_s[mask], intensity[mask]
+        t_ref = 0.0
+        if segment.model == "exp_decay" or (
+            segment.model == "pfo" and segment.t_start is not None
+        ):
+            t_ref = float(t_slice[0])
+        record["t_ref_s"] = t_ref
         p0 = None
         if segment.model == "secondary_pfo":
             p0 = self.writer._select_secondary_p0(
@@ -344,7 +395,9 @@ class SegmentWriter:
             start = int(np.flatnonzero(mask)[0])
             p0 = [np.nan, np.nan, float(smoothed(intensity)[start])]
         fit_fn = self.writer.models.registry[segment.model]
-        popt, std_errors, r_squared, rmse = fit_fn(t_slice, y_slice, p0)
+        # exp_decay shifts its own clock; t_ref is already its first time.
+        t_fit = t_slice if segment.model == "exp_decay" else t_slice - t_ref
+        popt, std_errors, r_squared, rmse = fit_fn(t_fit, y_slice, p0)
         record["r^2"], record["rmse"] = r_squared, rmse
         for idx, (value_key, stderr_key) in enumerate(self.param_maps[segment.model]):
             value = popt[idx] if idx < len(popt) else np.nan
