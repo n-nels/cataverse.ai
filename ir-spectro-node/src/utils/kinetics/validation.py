@@ -209,6 +209,79 @@ def run_validation(
     return report
 
 
+@dataclass
+class SpikeResult:
+    file: str
+    folder: str
+    label: bool
+    predicted: bool
+    correct: bool
+    error: str | None = None
+
+
+def run_spike_validation(
+    ground_truth_path: Path = GROUND_TRUTH_PATH,
+    *,
+    search_root: Path = SEARCH_ROOT,
+    input_subfolder: str | None = "_reprocess",
+    folders: list[str] | None = None,
+) -> list[SpikeResult]:
+    """Score the cluster_sum spike detector (``segments.detect_spike``).
+
+    Only entries carrying a boolean ``spike`` are scored. The prediction is
+    the ``spike_detected`` feature of ``segments.SEGMENT_WRITER.features``,
+    so a file the nucleation detector calls continuous predicts no spike. A
+    file that errors is scored wrong.
+    """
+    from src.utils.kinetics.segments import SEGMENT_WRITER
+
+    results: list[SpikeResult] = []
+    for entry in json.loads(Path(ground_truth_path).read_text()):
+        if "spike" not in entry:
+            continue
+        if folders is not None and entry["folder"] not in folders:
+            continue
+        folder_path = search_root / entry["folder"]
+        if input_subfolder:
+            folder_path = folder_path / input_subfolder
+        try:
+            features = SEGMENT_WRITER.features(
+                pd.read_csv(folder_path / entry["file"]),
+                entry["base_name"],
+                min_points=MIN_POINTS,
+            )
+            predicted = features.get("spike_detected") in (True, 1)
+            error = None
+        except Exception as exc:  # noqa: BLE001 - record and keep going
+            predicted, error = False, str(exc)
+        label = bool(entry["spike"])
+        results.append(
+            SpikeResult(
+                file=entry["file"],
+                folder=entry["folder"],
+                label=label,
+                predicted=predicted,
+                correct=error is None and predicted == label,
+                error=error,
+            )
+        )
+    return results
+
+
+def print_spike_summary(results: list[SpikeResult]) -> None:
+    n_correct = sum(r.correct for r in results)
+    n_spikes = sum(r.label for r in results)
+    print(
+        f"Spike: {n_correct}/{len(results)} labeled files correct "
+        f"({n_spikes} labeled spike)"
+    )
+    for r in results:
+        if not r.correct:
+            tag = "MISSED" if r.label else "FALSE_POSITIVE"
+            err = f" (error: {r.error})" if r.error else ""
+            print(f"  [{tag}] {r.folder}/{r.file}{err}")
+
+
 if __name__ == "__main__":
     report = run_validation()
     report.print_summary()

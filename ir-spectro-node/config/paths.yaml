@@ -38,6 +38,7 @@ data:
   plot_monomer_max: "plot_monomer_max"
   plot_monomer_max_all: "plot_monomer_max_all"
   plot_lamer_domains: "plot_lamer_domains"
+  plot_kinetic_segments: "plot_kinetic_segments"
 
   # Visualization subfolders for src/utils/ir_fitting (offline EDA).
   plot_individual_fit: "plot_individual_fit"
@@ -56,6 +57,8 @@ filenames:
     baseline_suffix: "_CarbonylFitBaseline.csv"
     residual_suffix: "_CarbonylFitResidual.csv"
     area_suffix: "_CarbonylPeakArea.csv"
+    kinetic_params_suffix: "_CarbonylKineticParams.csv"
+    kinetic_features_suffix: "_CarbonylKineticFeatures.csv"
 
 
 

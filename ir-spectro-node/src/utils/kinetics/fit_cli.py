@@ -1,7 +1,13 @@
 """Command-line entry point for offline kinetics reprocessing.
 
-One run per dataset folder (or file) produces the live-equivalent
-``*_CarbonylPeakArea.csv``:
+``--mode segments`` (default) fits once per (peak, segment) over the whole
+trajectory, with segments chosen by the measurement's final nucleation label
+(``segments.py``, ``spec-working.md``). It writes
+``*_CarbonylKineticParams.csv`` (one row per peak and segment) and
+``*_CarbonylKineticFeatures.csv`` (classification, boundaries, spike).
+
+``--mode rolling`` is the live-equivalent path: one fit at every time point,
+written into ``*_CarbonylPeakArea.csv``:
 
 - monomer peaks + ``monomer_sum`` get secondary_pfo;
 - cluster peaks + ``cluster_sum`` get pfo (``writer.REGIME_MODELS``);
@@ -20,6 +26,7 @@ Usage:
     python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --build-areas
     python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --measurements 20260506_052154_pd_ceo2_004-019
     python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --classify-only
+    python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --mode rolling
 """
 
 from __future__ import annotations
@@ -69,9 +76,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output subfolder next to the input CSVs (default: %(default)s).",
     )
     parser.add_argument(
+        "--mode",
+        choices=api.MODES,
+        default="segments",
+        help="'segments': one fit per peak and segment over the whole trajectory, "
+        "written to *_CarbonylKineticParams.csv / *_CarbonylKineticFeatures.csv. "
+        "'rolling': live-equivalent fit at every time point, written to "
+        "*_CarbonylPeakArea.csv (default: %(default)s).",
+    )
+    parser.add_argument(
         "--classify-only",
         action="store_true",
-        help="Write classification only; no kinetic fits (fast).",
+        help="No kinetic fits (fast): the classification (rolling) or the "
+        "features file (segments) only.",
     )
     parser.add_argument(
         "--peak-names",
@@ -110,10 +127,9 @@ def _report(result: FitRunResult, label: str) -> None:
         f"{k}={v:.3g}" for k, v in result.metrics_summary.items() if math.isfinite(v)
     )
     notes = " ".join(result.warnings)
-    print(
-        f"{label} {result.path.name}: {result.n_rows_fit} rows {metrics} {notes}".rstrip(),
-        flush=True,
-    )
+    name = result.output_path.name if result.output_path else result.path.name
+    rows = f"{result.n_rows_fit} rows" if result.n_rows_fit else "no fits"
+    print(f"{label} {name}: {rows} {metrics} {notes}".rstrip(), flush=True)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -123,6 +139,7 @@ def main(argv: list[str] | None = None) -> None:
         _lower_priority()
 
     kwargs = {
+        "mode": args.mode,
         "output_folder": args.output_folder,
         "fit": not args.classify_only,
         "min_points": args.min_points,

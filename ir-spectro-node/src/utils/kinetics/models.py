@@ -1,4 +1,4 @@
-"""Kinetic model equations and fitting strategies: PFO and secondary (coupled-ODE) PFO."""
+"""Kinetic model equations and fitting strategies: PFO, secondary (coupled-ODE) PFO, exponential decay."""
 
 from __future__ import annotations
 
@@ -166,6 +166,90 @@ class _PFOModel:
         for name, value in zip(PFO_PARAMS, popt):
             result[name] = value
         return result
+
+
+EXP_DECAY_PARAMS = ["exp_k_s-1", "exp_y_inf_au", "exp_y_b_au"]
+
+
+class _ExpDecayModel:
+    """Exponential relaxation to an offset, on the segment's own clock.
+
+    ``y = y_inf + (y_b - y_inf) * exp(-k * (t - t_b))``: ``t_b`` is the
+    segment's first time, and ``y_b`` is fixed: ``p0[2]`` when given (the
+    segments path passes the smoothed value there), else the first observed
+    value. Only ``k`` and ``y_inf`` are fitted; a NaN ``p0[0]``/``p0[1]``
+    takes the default guess.
+    """
+
+    def __init__(self, utils: _KineticUtilities) -> None:
+        self.utils = utils
+
+    @staticmethod
+    def exp_decay(
+        tau_s: NDArray[np.float64], k: float, y_inf: float, y_b: float
+    ) -> NDArray[np.float64]:
+        return y_inf + (y_b - y_inf) * np.exp(-k * tau_s)
+
+    def fit_with_errors(
+        self,
+        time_s: NDArray[np.float64],
+        intensity: NDArray[np.float64],
+        p0: list[float] | None = None,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64], float, float]:
+        nan_result = (
+            np.full(len(EXP_DECAY_PARAMS), np.nan),
+            np.full(len(EXP_DECAY_PARAMS), np.nan),
+            np.nan,
+            np.nan,
+        )
+        if intensity.size < 3:
+            return nan_result
+        tau_s = time_s - time_s[0]
+        y_b = float(intensity[0])
+        if p0 is not None and len(p0) > 2 and np.isfinite(p0[2]):
+            y_b = float(p0[2])
+        span = float(np.ptp(intensity)) or 1.0
+        bounds = (
+            [0.0, float(np.min(intensity)) - span],
+            [0.01, float(np.max(intensity)) + span],
+        )
+        duration = float(tau_s[-1]) or 1.0
+        guess = [3.0 / duration, float(intensity[-1])]
+        if p0 is not None:
+            guess = [
+                float(value) if np.isfinite(value) else default
+                for value, default in zip(p0[:2], guess, strict=True)
+            ]
+        p0_fit = [
+            float(np.clip(value, low, high))
+            for value, low, high in zip(guess, bounds[0], bounds[1], strict=True)
+        ]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", OptimizeWarning)
+            try:
+                with np.errstate(
+                    divide="ignore", invalid="ignore", over="ignore", under="ignore"
+                ):
+                    popt, pcov = curve_fit(
+                        lambda t, k, y_inf: self.exp_decay(t, k, y_inf, y_b),
+                        tau_s,
+                        intensity,
+                        p0=p0_fit,
+                        bounds=bounds,
+                        maxfev=2000,
+                    )
+                    y_pred = self.exp_decay(tau_s, popt[0], popt[1], y_b)
+                    r_squared, rmse, _ = self.utils.calculate_metrics(intensity, y_pred)
+                    std_errors = np.sqrt(np.diag(pcov))
+                    return (
+                        np.array([popt[0], popt[1], y_b], dtype=float),
+                        np.array([std_errors[0], std_errors[1], np.nan], dtype=float),
+                        r_squared,
+                        rmse,
+                    )
+            except Exception as exc:
+                LOGGER.warning("exp_decay fit failed: %s", exc)
+        return nan_result
 
 
 class _SecondaryPFOModel:
@@ -378,6 +462,7 @@ class KineticModels:
         self.ode_helper = _ODESolverHelper()
         self.pfo_model = _PFOModel(utils)
         self.secondary_pfo_model = _SecondaryPFOModel(utils, self.ode_helper)
+        self.exp_decay_model = _ExpDecayModel(utils)
 
         self.registry: dict[
             str,
@@ -388,6 +473,7 @@ class KineticModels:
         ] = {
             "pfo": self.pfo_model.fit_with_errors,
             "secondary_pfo": self.secondary_pfo_model.fit_with_errors,
+            "exp_decay": self.exp_decay_model.fit_with_errors,
         }
 
     def summarize_pfo_fit(

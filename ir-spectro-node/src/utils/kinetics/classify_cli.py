@@ -11,6 +11,8 @@ Two modes:
   ``<dataset>/<input-subfolder>/<output-folder>/``.
 - **validate** (``--validate``): score the detector against
   ``ground_truth.json`` (``validation.py``), e.g. after retuning it.
+  ``--validate-spikes`` scores the cluster_sum spike detector
+  (``segments.detect_spike``) against the entries' optional ``spike`` labels.
 
 The detector is ``classification.classify_nucleation`` (Peak_1988 rise +
 monomer_sum + amplitude gates) under the 3-consecutive-fire latch. Its
@@ -22,6 +24,7 @@ Usage:
     python scripts\\run_kinetics_classification.py --folder "*"
     python scripts\\run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004 --measurements 20260506_052154_pd_ceo2_004-019
     python scripts\\run_kinetics_classification.py --validate --input-subfolder _reprocess
+    python scripts\\run_kinetics_classification.py --validate-spikes
 """
 
 from __future__ import annotations
@@ -62,6 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--validate",
         action="store_true",
         help="Score the detector against ground_truth.json instead.",
+    )
+    target.add_argument(
+        "--validate-spikes",
+        action="store_true",
+        help="Score the cluster_sum spike detector (segments.detect_spike) against "
+        "the 'spike' labels in ground_truth.json; unlabeled entries are skipped. "
+        "Reads <folder>/_reprocess/ unless --input-subfolder is given.",
     )
     parser.add_argument(
         "--measurements",
@@ -153,6 +163,15 @@ def main(argv: list[str] | None = None) -> None:
             folders=args.folders,
         )
         report.print_summary()
+        return
+
+    if args.validate_spikes:
+        validation.print_spike_summary(
+            validation.run_spike_validation(
+                input_subfolder=args.input_subfolder or "_reprocess",
+                folders=args.folders,
+            )
+        )
         return
 
     if not args.normal_priority:
