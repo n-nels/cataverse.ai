@@ -97,7 +97,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Only fit these Peak_Name rows, e.g. monomer_sum cluster_sum. "
         "Default: every monomer/cluster group peak and both sums.",
     )
-    parser.add_argument("--min-points", type=int, default=4)
+    parser.add_argument(
+        "--min-points",
+        type=int,
+        default=4,
+        help="Minimum time points before classifying or fitting: per time point "
+        "(rolling) or per segment (segments) (default: %(default)s).",
+    )
     parser.add_argument(
         "--use-prior-p0",
         action=argparse.BooleanOptionalAction,

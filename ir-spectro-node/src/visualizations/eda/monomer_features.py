@@ -267,7 +267,7 @@ def run_folder(folder_name: str) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    FOLDER_NAME = "nn1120-4_pd_ceo2_000"
+    FOLDER_NAME = "nn1120-3_pd_ceo2_002"
     result = run_folder(FOLDER_NAME)
     print(f"Wrote {len(result)} figures to {output_dir(FOLDER_NAME)}")
     columns = [
