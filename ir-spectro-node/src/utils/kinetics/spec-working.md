@@ -254,12 +254,15 @@ are in `config/paths.yaml`.
     the spike cutoff, §4). A monotone pfo (`q_e ≥ 0`) cannot follow the fall. This
     bears on the open model choice for post-onset segments.
 - **Spikes:** `--validate-spikes` = 66/66 labeled files correct (6 spike).
-- **Nucleation score:** `--validate` = 286/289. The misses are 003-098, 003-102 and
-  004-016, with no false positives. The new 000-041 entry scores correct. These
-  three misses predate iteration 2: their labels are unchanged since `9ce4dfb`,
-  so HEAD scores 285/288. The 286/288 in `docs/JOURNAL_nuc-clf-refit.md` and
-  `CLAUDE.md` (misses 003-077 FP, 003-102) is stale, presumably since the
-  latch/onset commits (`b12e18a`..`034102f`). Not investigated.
+- **Nucleation score:** `--validate --input-subfolder _reprocess` = **287/289**: the
+  journal's 286/288 (003-077 FP, 003-102 miss), plus 000-041, which scores correct.
+  Every commit from `654f3bb` to `9ce4dfb`, run in a scratch worktree, scores
+  286/288 on `_reprocess`, so the detector has not drifted.
+  - Pitfall: plain `--validate` (no `--input-subfolder`) scores the **live** area
+    CSVs, not the refit areas the detector was tuned on. It gives 286/289 with
+    other misses (003-098, 003-102, 004-016). An earlier draft of this section
+    misread that as drift.
+  - `--validate-spikes` already defaults to `_reprocess`.
 
 ## 7. Open questions (surfaced during the build)
 
