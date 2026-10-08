@@ -11,12 +11,13 @@ a centered running median of ``smooth_n`` points (hindsight, so centered):
   monomer_sum max and the growth onset, then ``depletion`` (exp_decay).
 - cluster_sum + constituents. Continuous: ``adsorption`` (pfo).
   Discontinuous without a spike: ``pre_nucleation`` (pfo) up to the growth
-  onset, then ``ripening`` (pfo, its clock starting at the onset). With a
+  onset, then ``ripening`` (pfo). With a
   spike: ``pre_nucleation`` (pfo) up to the spike base, ``burst_nucleation`` up to
   the cluster_sum max, and ``diffusion_growth`` after it. The last two have
   no model yet: their rows are written with NaN parameters.
 
-A boundary row belongs to both adjacent segments. The spike base is
+A boundary row belongs to both adjacent segments. Each segment's model
+clock starts at its first row (``t_ref_s``). The spike base is
 ``growth_onset_s``. The spike is detected when the smoothed cluster_sum max
 near the monomer_sum max stands out from the later plateau and from its
 base, both in units of the trajectory's noise (yaml
@@ -253,11 +254,11 @@ def segment_curve(
 ) -> NDArray[np.float64]:
     """A params-file row's fitted model evaluated at ``time_s`` (for plotting).
 
-    Uses each model's own clock, ``t - t_ref_s``: 0 (absolute time) for
-    secondary_pfo and for a pfo segment that starts the trajectory, the
-    segment's first time for exp_decay and for a pfo segment that starts at a
-    boundary. Rows written before ``t_ref_s`` existed fall back to absolute
-    pfo and ``t_start_s`` for exp_decay. NaN for a blank or failed segment.
+    pfo and exp_decay run on ``t - t_ref_s`` (the segment's first time).
+    secondary_pfo integrates from ``time_s[0]``, so pass a grid that starts at
+    the segment's first time. Rows without ``t_ref_s`` (written before it
+    existed) fall back to absolute pfo and ``t_start_s`` for exp_decay. NaN for
+    a blank or failed segment.
     """
     time_s = np.asarray(time_s, dtype=float)
     nan = np.full(time_s.shape, np.nan)
@@ -360,10 +361,10 @@ class SegmentWriter:
     ) -> dict[str, Any]:
         """Fit one segment (both ends inclusive); NaN parameters if unfitted.
 
-        pfo's clock starts at 0 for a segment that starts the trajectory, and
-        at the segment's first time for one that starts at a boundary, so
-        ``q0`` (the first point) sits on the curve. exp_decay's model always
-        counts from the first time. ``t_ref_s`` records the zero.
+        Every model's clock starts at the segment's first point, ``t_ref_s``,
+        where ``q0`` (or exp_decay's ``y_b``) is set: time before the first
+        row, including the ~420 s before a trajectory's first row, is ignored.
+        Only the slow kinetics are modelled (spec-working.md D24).
         """
         t_start = segment.t_start if segment.t_start is not None else float(time_s[0])
         t_end = segment.t_end if segment.t_end is not None else float(time_s[-1])
@@ -378,11 +379,7 @@ class SegmentWriter:
         if segment.model is None or record["n_points"] < min_points:
             return record
         t_slice, y_slice = time_s[mask], intensity[mask]
-        t_ref = 0.0
-        if segment.model == "exp_decay" or (
-            segment.model == "pfo" and segment.t_start is not None
-        ):
-            t_ref = float(t_slice[0])
+        t_ref = float(t_slice[0])
         record["t_ref_s"] = t_ref
         p0 = None
         if segment.model == "secondary_pfo":
@@ -395,8 +392,9 @@ class SegmentWriter:
             start = int(np.flatnonzero(mask)[0])
             p0 = [np.nan, np.nan, float(smoothed(intensity)[start])]
         fit_fn = self.writer.models.registry[segment.model]
-        # exp_decay shifts its own clock; t_ref is already its first time.
-        t_fit = t_slice if segment.model == "exp_decay" else t_slice - t_ref
+        # pfo is the one model on absolute time: shift it. exp_decay counts
+        # from the first time itself, and secondary_pfo's ODE starts there.
+        t_fit = t_slice - t_ref if segment.model == "pfo" else t_slice
         popt, std_errors, r_squared, rmse = fit_fn(t_fit, y_slice, p0)
         record["r^2"], record["rmse"] = r_squared, rmse
         for idx, (value_key, stderr_key) in enumerate(self.param_maps[segment.model]):

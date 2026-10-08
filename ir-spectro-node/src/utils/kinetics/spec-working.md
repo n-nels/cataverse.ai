@@ -26,7 +26,7 @@ back if that happens.
 **Iteration 2 (done 2026-10-03):** D17 + D20 (contiguous monomer segments at
 `t_b = max(monomer max, growth onset)`, written as `depletion_start_s`), D18 + D23
 (spike labels, 000-041 entry; `--validate-spikes` = 66/66), D21 (no-spike
-cluster split at the growth onset), D22 (`t_ref_s`, the pfo clock). Results: �6.
+cluster split at the growth onset), D22 (`t_ref_s`, the pfo clock). Results: §6.
 
 **Next steps, in order:**
 1. **The user looks at the redrawn figures** of the 8 test files
@@ -43,11 +43,11 @@ cluster split at the growth onset), D22 (`t_ref_s`, the pfo clock). Results: �
 The 8 test measurements, for re-runs (lab machine: one process, the default
 below-normal priority):
 - nn1120-4_pd_ceo2_000: 000-000, -002, -014, -026, -028
-  (`20260630_141811_�-000`, `20260704_141909_�-002`, `20260801_054310_�-014`,
-  `20260822_193302_�-026`, `20260827_172623_�-028`);
-- nn1120-3_pd_ceo2_003: 003-097 (`20260115_215548_�-097`);
-- nn1120-3_pd_ceo2_004: 004-008, 004-013 (`20260315_214542_�-008`,
-  `20260411_100444_�-013`).
+  (`20260630_141811_…-000`, `20260704_141909_…-002`, `20260801_054310_…-014`,
+  `20260822_193302_…-026`, `20260827_172623_…-028`);
+- nn1120-3_pd_ceo2_003: 003-097 (`20260115_215548_…-097`);
+- nn1120-3_pd_ceo2_004: 004-008, 004-013 (`20260315_214542_…-008`,
+  `20260411_100444_…-013`).
 
 Scratch scripts from the first session (survey, spike scoring, ad-hoc plots) were
 in that session's temp scratchpad and are gone. Everything that matters is in §4
@@ -78,8 +78,9 @@ and §6.
 | D19 | Continuous files keep one secondary_pfo over the whole run for monomer_sum, even when it peaks and decays (Q6 → no). | 2026-10-03 |
 | D20 | Q11 → (a): the monomer segments stay contiguous. `supersaturation` ends where `depletion` starts, at `t_b = max(monomer max, growth onset)`. `t_b` is written to the features file as `depletion_start_s`. | 2026-10-03 |
 | D21 | In discontinuous files with no spike, cluster_sum (and, by D13, its constituents) gets two pfo segments: `pre_nucleation` from t0 to the growth onset, then `ripening` from the onset to the end. If the onset is NaN, the fallback is one `ripening` over the whole run; no file hits this today (0/70). | 2026-10-03 |
-| D22 | A pfo segment that starts at a boundary (today only the D21 `ripening`) runs on its own clock, `t − t_ref`, where `t_ref` is its first point, so `q0` (fixed to that point) sits on the curve. Segments that start the trajectory keep absolute time, because the area CSVs start at ~420 s, not 0, and shifting them would change existing fits. `t_ref_s` is written per params row: 0 for absolute clocks, the first time for exp_decay and boundary-start pfo. `q0` stays the raw first point (D12 is not extended). | 2026-10-03 |
+| D22 | **(Superseded by D24 for segments that start the trajectory.)** A pfo segment that starts at a boundary (today only the D21 `ripening`) runs on its own clock, `t − t_ref`, where `t_ref` is its first point, so `q0` (fixed to that point) sits on the curve. Segments that start the trajectory keep absolute time, because the area CSVs start at ~420 s, not 0, and shifting them would change existing fits. `t_ref_s` is written per params row: 0 for absolute clocks, the first time for exp_decay and boundary-start pfo. `q0` stays the raw first point (D12 is not extended). | 2026-10-03 |
 | D23 | Spike labels for continuous entries: left unlabeled. The scorer only evaluates discontinuous files, so they score the same either way. 000-041 got a ground-truth entry: `label: discontinuous`, `spike: true`, `basis: user_declared_2026-10-03`. | 2026-10-03 |
+| D24 | **Every segment's model clock starts at its own first row, `t_ref_s`, and `q0` (exp_decay: `y_b`) is set there (Q12 resolved).** The experiment starts at t=0 (`.0000` flat), but the first row is at ~420 s, and that row is treated as (0, y₁): time before it is ignored and its value kept. Justification (user): the analysis targets the **slow** kinetics. The fast admission phase (0–420 s, seen only in the two seed spectra) is out of scope; if it becomes of interest, interrogate the first ~400 s directly. Done in code by shifting pfo to `t − t_ref_s`, so pfo now matches secondary_pfo (its ODE already starts at the first row) and exp_decay. Free `q0` (Q12 option B) is rejected: on monomer it lifts the curve 0.03–0.20 au above the early data. Offline segments mode only: rolling and live keep absolute-time pfo (D2, live parity). | 2026-10-08 |
 
 History: a one-shot mode existed before. `f87abfc` had
 `fit_cli --mode {rolling, full_series}`; `8462e2b` removed it for live parity. D1
@@ -95,7 +96,7 @@ come from the **sum** trajectory. Its constituents use the same boundaries (D13)
 | monomer_sum + 3 constituents | continuous | — | `adsorption` (secondary_pfo) |
 | | discontinuous | — | `supersaturation`: t0 → `t_b` (secondary_pfo); `depletion`: `t_b` → end (exp_decay), with `t_b = max(monomer max, growth onset)` (D17, D20) |
 | cluster_sum + 15 constituents | continuous | — | `adsorption` (pfo) |
-| | discontinuous | no | `pre_nucleation`: t0 → growth onset (pfo); `ripening`: growth onset → end (pfo, own clock, D22). One `ripening` if the onset is NaN (D21) |
+| | discontinuous | no | `pre_nucleation`: t0 → growth onset (pfo); `ripening`: growth onset → end (pfo). One `ripening` if the onset is NaN (D21) |
 | | discontinuous | yes | `pre_nucleation`: t0 → spike base (pfo); `burst_nucleation`: base → cluster max (none); `diffusion_growth`: cluster max → end (none) |
 
 If the classification is NaN (too few points), the continuous segments are used and
@@ -109,9 +110,9 @@ If the classification is NaN (too few points), the continuous segments are used 
 - Fitted: `k ∈ [0, 0.01]` and `y_inf ∈ [min − span, max + span]`.
 - Solved with `curve_fit`.
 
-pfo and secondary_pfo are unchanged. The segment layer shifts pfo's clock for
-a segment that starts at a boundary (D22), so `pfo(t − t_ref_s)`; `segment_curve`
-applies the same shift from the params row. A segment with fewer than `--min-points` rows
+pfo and secondary_pfo are unchanged in `models.py`. The segment layer runs every
+pfo on `t − t_ref_s`, where `t_ref_s` is the segment's first row (D24);
+`segment_curve` applies the same shift from the params row. A segment with fewer than `--min-points` rows
 (default 4) gets NaN parameters, and its row is still written.
 
 ## 3. Outputs
@@ -122,7 +123,9 @@ are in `config/paths.yaml`.
 **`<base>_CarbonylKineticParams.csv`** has one row per `(Peak_Name, segment)`:
 - Identifier and summary columns: `Measurement, Peak_Name, group, regime, segment,
   model, t_start_s, t_end_s, t_ref_s, n_points, r^2, rmse`. `t_ref_s` is the
-  model clock's zero (D22).
+  model clock's zero: the segment's first row (D24). Rows written 2026-10-03 →
+  10-08 hold `t_ref_s = 0` for segments that start the trajectory; that meant
+  absolute-time pfo then.
 - Then the parameter columns:
   - `pfo_*` (as in the live schema);
   - `pfo-sec_*` (as in the live schema);
@@ -264,10 +267,34 @@ are in `config/paths.yaml`.
     misread that as drift.
   - `--validate-spikes` already defaults to `_reprocess`.
 
+### D24 (2026-10-08)
+
+- **Re-run:** the 8 test files, all peaks. Diffed against the sums in the
+  user's iteration-2 sums-only run of nn1120-4_000 (the 003/004 `_test` folders
+  had been cleared).
+- **Only pfo segments that start the trajectory changed.** cluster_sum
+  `pre_nucleation`/`adsorption` R² (and k):
+  - 000-000: 0.808 → 0.937 (8.8e-5 → 1.25e-4);
+  - 000-002: 0.760 → 0.796 (4.4e-5 → 9.0e-4; q_e 1.51 → 0.17);
+  - 000-014: 0.168 → 0.171;
+  - 000-026: 0.963 → 0.948;
+  - 000-028: 0.962 → 0.953.
+
+  These match the Q12 A′ scratch fits exactly. Post-onset `ripening`, exp_decay
+  and secondary_pfo are unchanged; 000-000's monomer moved only by ODE-timeout
+  noise.
+- **Curves start on the data:** in all 176 pfo rows, `segment_curve` at the first
+  row equals `q0`, which equals the first row. In 44 rows the first time is shared
+  by two Delta_Groups, and `q0` is the first of them.
+- **Caveat, 000-002:** `pre_nucleation` is 8 rows ending at the 0.5 h onset. On
+  the new clock its k (9.0e-4) is the tail of the admission rise, not slow
+  kinetics. Short first segments are where D24's "ignore the fast phase" holds
+  least.
+
 ## 7. Open questions (surfaced during the build)
 
 Resolved: Q1–Q3 → D9–D11, Q4 → D12, Q9 → D13, Q5 → D14, Q10 → D15, Q7 → D16,
-Q5a → D18, Q6 → D19, the depletion start → D17, Q11 → D20.
+Q5a → D18, Q6 → D19, the depletion start → D17, Q11 → D20, Q12 → D24.
 
 Context for D19 (Q6, answered "no"): 61/226 continuous files have a monomer_sum that
 peaks and then decays: the smoothed max falls before 80% of the run, and the signal
@@ -277,6 +304,88 @@ by about 0.08 au and sits under the data from 40–70 h. That file's cluster_sum
 Delta_Groups also diverge after ~50 h.
 
 - **Q8. One file vs. two.** Revisit after the user has looked at the output (D7).
+- **Q12. The start of the trajectory (resolved → D24, A′, 2026-10-08).** The
+  evidence below is kept for the record.
+  - *Timeline (user):* `.0000` is a flat reference, so the true area at t=0 is 0.
+    The difference spectra `delta1.0001` (60 s) and `.0002` (120 s) seed every
+    delta group and are baked into each group's first row. Only delta5–10 emit
+    rows, so the first row is delta5 `.0007` at ~420 s. Baking in the seeds keeps
+    the variance between delta groups low through the large spectral changes at
+    admission.
+  - *Seeds, cluster_sum:* often a jump within 60 s: 000-014 0.40 (then flat at
+    ~0.42), 000-002/026 0.31. In 004-008/013 the seeds are 0.003 → 0.05, so
+    admission there came after 60 s: t=0 is not admission to within ±60 s.
+  - *Seeds, monomer_sum:* a smooth rise from zero (60 s ≈ half of 120 s).
+  - *Test:* the first cluster pfo segment on the 8 test files, fitted four ways
+    (R² on the area rows; scratch `q0_variants.py`, not kept):
+
+    | | 000-000 | 000-002 | 000-014 | 000-026 | 000-028 | 003-097 | 004-008 | 004-013 |
+    |---|---|---|---|---|---|---|---|---|
+    | A: q0 = first row (current) | 0.808 | 0.760 | 0.168 | 0.963 | 0.962 | 0.906 | 0.886 | 0.146 |
+    | A′: q0 = first row, clock from the first row | 0.937 | 0.796 | 0.171 | 0.948 | 0.953 | 0.908 | 0.882 | 0.146 |
+    | B: q0 free | 0.938 | 0.819 | 0.174 | 0.966 | 0.962 | 0.908 | 0.910 | 0.146 |
+    | C: q0 free + seed rows | 0.937 | 0.700 | 0.174 | 0.948 | 0.934 | 0.908 | 0.907 | 0.139 |
+    | D: (0,0) + seeds, q0 = 0 | 0.686 | 0.144 | 0.009 | 0.573 | 0.673 | 0.695 | 0.721 | 0.113 |
+
+  - *Reading:*
+    - D fails on every file, with k pushed toward its 0.01 bound. One pfo cannot
+      do the fast admission step and the slow rise together. This is likely why
+      `q0` was fixed in the first place.
+    - B ≥ A everywhere and helps most on short segments: 000-000 k 8.8e-5 →
+      1.4e-4; 000-002 q_e 1.51 → 0.54, where A sat near the 2·max bound. B reads
+      as "an unresolved fast component of size q0, plus the slow pfo."
+    - C is worse where the seeds are still on the fast rise (000-002/026/028).
+  - *The clock:* A pairs a `q0` measured at ~420 s with a clock that starts at
+    t=0, so the curve misses the first row by `q_e·(1 − e^(−k·t₁))`. There are two
+    consistent fixes:
+    - A′ moves the clock to the first row. The process then starts at 420 s,
+      which is physically wrong: on 000-002 k becomes 9.0e-4 vs B's 1.9e-4.
+    - B keeps t=0 as the start, and `q0` becomes the curve's value there (the
+      admission step).
+
+    The rule, shared with D22: the clock starts where the process starts, and
+    `q0` is fixed only when a point was measured there (true for `ripening` at
+    the onset, false for the first segment).
+  - *Options:*
+    - (a) keep A;
+    - (b) B: free q0, pfo only, offline segments mode only. This diverges from
+      live, and from the foundations rule for secondary_pfo, if extended to
+      monomer;
+    - (c) a fast + slow (biexponential) model. Only ~3 points (0, 60, 120 s) lie
+      inside the fast part, so k_fast is barely constrained.
+  - *Early residuals, cluster (2026-10-08):*
+    - A's curve sits above the first rows on all 8 files (residual −0.002 to
+      −0.028). That is the clock mismatch.
+    - B removes it on 000-000/002/014 and 003-097, but makes it worse on 000-026
+      and 004-008 (−0.02 to −0.03). There, q0 acts as a free offset, not an
+      admission step.
+  - *Monomer test (2026-10-08; scratch `q0_monomer.py`).* secondary_pfo already
+    integrates from the first row (q = y₁, p = 0 there). Its ODE is autonomous, so
+    A has no clock mismatch; the open assumption is p = 0 at 420 s. Variants as
+    for cluster, with the ODE started at t=0 for B–D:
+
+    | | 000-000 | 000-002 | 000-014 | 000-026 | 000-028 | 003-097 | 004-008 | 004-013 |
+    |---|---|---|---|---|---|---|---|---|
+    | A: from first row (current) | 0.999 | 0.997 | 0.947 | 0.962 | 0.977 | 0.994 | 0.979 | 0.976 |
+    | B: from t=0, q0 free | 0.999 | 0.997 | 0.947 | 0.978 | 0.984 | 0.995 | 0.989 | 0.988 |
+    | C: B + seed rows | 0.996 | 0.977 | 0.944 | 0.942 | 0.961 | 0.995 | 0.988 | 0.987 |
+    | D: from (0,0) + seeds | 0.975 | 0.900 | −0.22 | 0.665 | 0.803 | 0.971 | 0.963 | 0.887 |
+
+    - B's R² gain is not real: q0 lands *above* the early data, at 0.236 vs a
+      first row of 0.135 on 004-008, and 0.387 vs 0.202 on 004-013. The early
+      residuals are −0.03 (003-097), −0.11 (000-026), −0.13 (004-008) and −0.20
+      (004-013). The fit gives up the start to fit the many later rows.
+    - A pins the first row, and then its residuals turn positive (+0.03 to +0.07
+      on 000-026 and 004-008/013). The data rise faster in the first ~10 min than
+      one secondary_pfo can follow.
+    - D fails as for cluster. 000-026's seeds (0.26 → 0.50 → 0.80 at 60/120/420 s)
+      put the early rate at ~20× the late `k_a·q_e`. That is a real fast phase, and
+      there it is resolved by the seeds plus the first rows.
+    - Conclusion: B is not adopted for monomer. Open alternatives:
+      - bound `q0 ∈ [0, y₁]` (the admission step cannot exceed the first
+        measurement);
+      - an explicit fast component from (0,0) with the seeds;
+      - keep A.
 - **Q11 (resolved → D20, option (a)). The gap D17 creates.** When
   `growth_onset_s > monomer_max_s`, `monomer_max_s → growth_onset_s` belongs to no
   segment if supersaturation still ends at the monomer max. On 000-026 that is
