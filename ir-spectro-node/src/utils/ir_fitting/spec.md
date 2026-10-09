@@ -108,8 +108,16 @@ A peak that matches no `range_cm1` falls through to the `default: true` rule
    - `"recompute"` (default) runs `BaselineVariant()` (§5).
    - `"saved"` reads `*_CarbonylFitBaseline.csv`. It exists for the parity gate
      and for inspecting the old fit, and falls back to the recipe with a warning.
-3. Build `Parameters` for all peaks. Bounds come from the rule around the
-   **nominal** wavenumber. Initial values are seeded from the saved
+3. **Skip detector** (`voigt.has_peaks`, a copy of live's, added 2026-10-09).
+   It runs `find_peaks` on `raw − baseline` and on its negative, with
+   `ir_fitting.fit.find_peaks.subifg`. If neither finds a peak, nothing is fitted:
+   every peak gets live's skip row (shape params NaN, `Peak_Area` 0) and the
+   residual is 0. Reason (user): runs are long, and fitted noise would build up a
+   false cumulative area. `api.apply_peak_detector` applies it to an existing
+   refit without refitting (`docs/spec-live-migration.md` §2).
+4. Build `Parameters` for all peaks. Bounds come from the rule around the
+   **nominal** wavenumber (with `--fsd-snap`, around the snapped FSD peak, below).
+   Initial values are seeded from the saved
    `*_CarbonylPeakFitParams.csv`:
    - Lookup is by `(File, Peak_Name)`, and all shape columns must be finite.
    - A seed outside its bounds is clipped, and the clip is counted.
@@ -119,11 +127,19 @@ A peak that matches no `range_cm1` falls through to the `default: true` rule
    - Fixed params (`y0`) always take the rule value.
    - A missing row, a NaN, or a new peak falls back to the rule `value`.
    - Saved rows for peaks not in the list are ignored.
-4. `peak_fit` with **`least_squares`**. `method="leastsq"` reproduces live, for
+5. `peak_fit` with **`least_squares`**. `method="leastsq"` reproduces live, for
    the parity check. `_warn_on_pinned_params` flags parameters left on a bound.
-5. One row per peak in the live `PARAM_COLUMNS`:
+6. One row per peak in the live `PARAM_COLUMNS`:
    - `Peak_Value` is the nominal wavenumber. Live FSD snapping is a no-op
-     because of an index-vs-wavenumber bug, and it is not reproduced here.
+     because of an index-vs-wavenumber bug, and by default it is not reproduced
+     here. **`--fsd-snap`** (`fsd_snap=True`, opt-in, untested) does what live
+     intends:
+     - load the paired FSD (`<fsd_output>\<dataset>\<base name>.<index>`);
+     - find its peaks in wavenumbers (`voigt.find_fsd_peaks`, `find_peaks.fsd`);
+     - center each window on an FSD peak within 5 cm⁻¹ (`voigt.snap_peaks`, live's
+       loop: the last unused match wins);
+     - write that center as `Peak_Value`.
+     The rule is still chosen by the nominal wavenumber.
    - `Peak_Area` = `−trapezoid`.
    - `Data_Integral` and `Time_Delta (s)` are copied from the saved rows.
    - `PdCO_mol` is left empty.
@@ -240,6 +256,12 @@ first. The test script may call live code, but the package must not.
   - The 1877/1849/1838 centers often end on their bounds.
   - The hand edits in §4 need a validation run.
 - **Existing width cap** (6.37 / 2.8) pins on 1975, 2000, 2015, 2156 and others.
+- **FSD snapping** (`--fsd-snap`): exposed, not yet tested. Open item O1 in
+  `docs/spec-live-migration.md`.
+- **Reproducibility depends on BLAS threads.** With `OMP/OPENBLAS/MKL_NUM_THREADS=1`
+  (what `--workers` sets) a refit reproduces `_reprocess` to 1e-16. Serial and
+  unpinned, areas move by ≤ 1e-3 au and some shape params by up to 0.5 (checked on
+  000-007 delta10.0042/delta5.0047, 2026-10-09). Pin the threads for parity checks.
 - **Offline kinetics** (`src/utils/kinetics`) still reads the
   `voigt_fit.*_peaks_base` groups, not the ones in `ir_fitting.fit`.
 

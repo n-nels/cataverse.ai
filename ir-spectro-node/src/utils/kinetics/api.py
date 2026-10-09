@@ -52,16 +52,21 @@ def _discover_area_csvs(
 
     With ``input_subfolder`` (e.g. ``"_reprocess"``): exactly the files in
     ``<dataset>/<input_subfolder>/``, non-recursive. Without it: the live files
-    under the dataset folder, excluding output/reference subfolders (``_test``,
-    ``_reprocess``, ``arxiv``, ``CalibrationData``).
+    under the dataset folder, excluding output/reference subfolders (``_test*``,
+    ``_reprocess*`` -- e.g. ``_test_classification``, ``_reprocess-v2`` --
+    ``arxiv``, ``CalibrationData``).
     """
     if input_subfolder:
         return sorted((dataset_path / input_subfolder).glob(f"*{AREA_SUFFIX}"))
-    excluded = {"_test", "_reprocess", "arxiv", "CalibrationData"}
+    excluded = {"arxiv", "CalibrationData"}
+    excluded_prefixes = ("_test", "_reprocess")
     return [
         path
         for path in sorted(dataset_path.rglob(f"*{AREA_SUFFIX}"))
-        if not excluded.intersection(path.parts)
+        if not any(
+            part in excluded or part.startswith(excluded_prefixes)
+            for part in path.relative_to(dataset_path).parts[:-1]
+        )
     ]
 
 

@@ -17,6 +17,7 @@ import numpy as np
 import pybaselines
 from lmfit import Minimizer, Parameters
 from lmfit.minimizer import MinimizerResult
+from scipy.signal import find_peaks
 from scipy.special import voigt_profile
 
 LOGGER = logging.getLogger(__name__)
@@ -171,11 +172,75 @@ def select_param_rule(peak: float, parameter_rules: list[dict]) -> dict | None:
     return default_rule
 
 
+def has_peaks(corrected: np.ndarray, subifg_settings: dict) -> bool:
+    """Live's skip detector: True if ``corrected`` has any positive or negative peak.
+
+    Copy of the check in ``spectral_fitting.peak_analysis``: ``find_peaks`` on
+    the baseline-corrected ROI and on its negative, with ``prominence`` and a
+    height of ``height_multiplier`` times the mean absolute signal. When it
+    finds nothing the spectrum is not fitted and every peak gets area 0, so
+    fitted noise cannot build up a false cumulative area over a long run.
+    """
+    prominence = subifg_settings.get("prominence", 0.0003)
+    height = subifg_settings.get("height_multiplier", 3) * np.mean(np.abs(corrected))
+    peaks_pos, _ = find_peaks(corrected, prominence=prominence, height=height)
+    peaks_neg, _ = find_peaks(-corrected, prominence=prominence, height=height)
+    return len(peaks_pos) > 0 or len(peaks_neg) > 0
+
+
+def find_fsd_peaks(
+    arr_fsd_roi: np.ndarray,
+    baseline_settings: dict,
+    fsd_settings: dict,
+) -> np.ndarray:
+    """Wavenumbers of the peaks in an FSD spectrum.
+
+    Copy of ``spectral_fitting.find_fsd_peaks`` with one fix: live returns the
+    ``find_peaks`` *indices*, which its callers then compare to wavenumbers,
+    so live snapping never matches. This returns wavenumbers.
+    """
+    x = arr_fsd_roi[:, 0]
+    _, fsd_baseline = create_baseline(arr_fsd_roi[:, 1], baseline_settings)
+    peaks, _ = find_peaks(
+        arr_fsd_roi[:, 1] - fsd_baseline,
+        prominence=fsd_settings.get("prominence", 0.0001),
+        height=fsd_settings.get("height", 0.003),
+    )
+    return x[peaks]
+
+
+FSD_SNAP_TOLERANCE_CM1 = 5.0
+"""Live ``resolve_peak_lists`` tolerance."""
+
+
+def snap_peaks(peaks: list[int], fsd_wavenumbers: np.ndarray) -> list[float]:
+    """Center each peak on an FSD peak within :data:`FSD_SNAP_TOLERANCE_CM1`.
+
+    Same loop as live ``resolve_peak_lists``: the *last* unused FSD peak in
+    tolerance wins (not the closest), and an FSD peak is used at most once.
+    Peaks with no FSD peak in range keep their nominal wavenumber.
+    """
+    used: set[float] = set()
+    snapped: list[float] = []
+    for peak in peaks:
+        closest = float(peak)
+        for found in fsd_wavenumbers:
+            if (
+                np.isclose(float(found), float(peak), atol=FSD_SNAP_TOLERANCE_CM1)
+                and float(found) not in used
+            ):
+                closest = float(found)
+        snapped.append(closest)
+        used.add(closest)
+    return snapped
+
+
 def add_params(
     fit_params: Parameters,
     peak: int,
     rule: dict,
     seed: dict[str, float] | None = None,
+    center_cm1: float | None = None,
 ) -> tuple[int, int]:
     """Add one peak's lmfit parameters; return ``(n_clipped, n_nudged)`` seeds.
 
@@ -186,6 +251,10 @@ def add_params(
 
     ``seed`` maps ``center/amplitude/sigma/gamma/y0`` to starting values, the
     saved fit's result. Missing names fall back to the rule's ``value``.
+
+    ``center_cm1`` (FSD snapping, opt-in) moves the center's start and window
+    from ``peak`` to that wavenumber. Parameter names and the rule still
+    follow ``peak``.
 
     - A seed outside its bounds is clipped to the bound and counted
       (``n_clipped``), rather than left to lmfit's silent clamp.
@@ -220,12 +289,13 @@ def add_params(
             return high - step
         return clipped
 
+    center = float(peak) if center_cm1 is None else float(center_cm1)
     center_rule = rule.get("center", {})
-    center_min = peak + center_rule.get("min_offset", -1)
-    center_max = peak + center_rule.get("max_offset", 1)
+    center_min = center + center_rule.get("min_offset", -1)
+    center_max = center + center_rule.get("max_offset", 1)
     fit_params.add(
         f"center_{peak}",
-        value=start("center", float(peak), center_min, center_max),
+        value=start("center", center, center_min, center_max),
         min=center_min,
         max=center_max,
     )

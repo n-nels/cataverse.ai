@@ -564,6 +564,16 @@ ir_fitting:
       - 2196
       - 2186
       - 2175
+    # Copy of voigt_fit.find_peaks. subifg: the skip detector (voigt.has_peaks) --
+    # a spectrum with no peak in raw - baseline is not fitted, area 0.
+    # fsd: FSD peak finding for the opt-in --fsd-snap (voigt.find_fsd_peaks).
+    find_peaks:
+      subifg:
+        prominence: 0.0003
+        height_multiplier: 3
+      fsd:
+        prominence: 0.0001
+        height: 0.003
     # std_distribution settings for each baseline segment. The anchors and the
     # cut are constants in src/utils/ir_fitting/baseline.py (BaselineVariant() defaults).
     baseline:

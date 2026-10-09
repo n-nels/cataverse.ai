@@ -25,7 +25,11 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from fnmatch import fnmatchcase
+from functools import partial
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 path = Path(__file__).resolve().parents[3]
 if str(path) not in sys.path:
@@ -48,7 +52,7 @@ from src.utils.ir_fitting.result_types import (
     matches_file_key,
 )
 from src.utils.ir_fitting.runner import fit_subifg_file, load_subifg_file
-from src.utils.ir_fitting.voigt import FIT_METHOD, SEED_NUDGE_FRAC
+from src.utils.ir_fitting.voigt import FIT_METHOD, SEED_NUDGE_FRAC, has_peaks
 
 PACKAGE_LOGGER = "src.utils.ir_fitting"
 # Named explicitly, not __name__: run as a script this module is "__main__",
@@ -229,6 +233,7 @@ def fit_file(
     log_file: bool = True,
     file_keys: Sequence[str] | None = None,
     on_file: FileCallback | None = None,
+    fsd_snap: bool = False,
 ) -> MeasurementFitResult:
     """Refit every configured peak for one measurement.
 
@@ -260,6 +265,9 @@ def fit_file(
         on_file: Called after each file is fitted, before the next one starts,
             e.g. to write its figure while the run is still going. An exception
             it raises is logged and does not stop the fit.
+        fsd_snap: Center each peak's window on an FSD peak within 5 cm-1
+            (``voigt.snap_peaks``). Off by default; untested
+            (docs/spec-live-migration.md O1).
 
     Returns:
         MeasurementFitResult with per-file curves, rows and output paths.
@@ -270,9 +278,11 @@ def fit_file(
     folder_name, file_name, source_dir = _resolve_measurement(measurement)
     with _run_log(folder_name, output_folder, enabled=save and log_file) as log_path:
         if log_path is not None:
-            _log_run_header(folder_name, [file_name], baseline, variant, output_folder)
+            _log_run_header(
+                folder_name, [file_name], baseline, variant, output_folder, fsd_snap
+            )
         result = _run_measurement(
-            fit_subifg_file,
+            partial(fit_subifg_file, fsd_snap=fsd_snap),
             folder_name,
             file_name,
             source_dir,
@@ -363,7 +373,14 @@ def _run_measurement(
             continue
         result.files.append(file_result)
         result.warnings.extend(file_result.warnings)
-        if file_result.rows:
+        if file_result.skipped:
+            LOGGER.info(
+                "%s %s: no peaks found, not fitted (area 0) %.1fs",
+                file_name,
+                file_result.file_key,
+                time.perf_counter() - started,
+            )
+        elif file_result.rows:
             LOGGER.info(
                 "%s %s: %s nfev=%d seeded=%d nudged=%d clipped=%d %.1fs",
                 file_name,
@@ -583,6 +600,7 @@ def _log_run_header(
     baseline: str,
     variant: BaselineVariant | None,
     output_folder: str,
+    fsd_snap: bool = False,
 ) -> None:
     """Record what this run was, so a log read the next morning stands alone."""
     fit_settings = ir_config.get_fit_settings()
@@ -598,6 +616,11 @@ def _log_run_header(
         LOGGER.info("baseline: saved *_CarbonylFitBaseline.csv")
     LOGGER.info("optimizer: %s, seed nudge %.2g of range", FIT_METHOD, SEED_NUDGE_FRAC)
     LOGGER.info("peaks (%d): %s", len(peaks), " ".join(str(peak) for peak in peaks))
+    LOGGER.info(
+        "skip detector: %s; FSD snapping: %s",
+        fit_settings.get("find_peaks", {}).get("subifg", {}),
+        "on" if fsd_snap else "off",
+    )
 
 
 def _log_warning_summary(result: MeasurementFitResult) -> None:
@@ -624,6 +647,7 @@ def fit_folder(
     save: bool = True,
     measurements: Sequence[str] | None = None,
     file_keys: Sequence[str] | None = None,
+    fsd_snap: bool = False,
 ) -> BatchFitResult:
     """Refit the measurements of a subIFG dataset folder.
 
@@ -651,7 +675,9 @@ def fit_folder(
     with _run_log(folder_path.name, output_folder, enabled=save) as log_path:
         batch.log_path = log_path
         if save:
-            _log_run_header(folder_path.name, names, baseline, variant, output_folder)
+            _log_run_header(
+                folder_path.name, names, baseline, variant, output_folder, fsd_snap
+            )
         for index, base_name in enumerate(names, start=1):
             LOGGER.info("measurement %d/%d: %s", index, len(names), base_name)
             try:
@@ -664,6 +690,7 @@ def fit_folder(
                         save=save,
                         log_file=False,
                         file_keys=file_keys,
+                        fsd_snap=fsd_snap,
                     )
                 )
             except Exception:  # one bad measurement must not stop the batch
@@ -703,6 +730,7 @@ def fit_files(
     save: bool = True,
     on_file: FileCallback | None = None,
     workers: int = 1,
+    fsd_snap: bool = False,
 ) -> BatchFitResult:
     """Refit an explicit list of subIFG files from one dataset folder.
 
@@ -736,11 +764,14 @@ def fit_files(
         save=save,
         log_file=False,
         on_file=on_file,
+        fsd_snap=fsd_snap,
     )
     with _run_log(folder_path.name, output_folder, enabled=save) as log_path:
         batch.log_path = log_path
         if save:
-            _log_run_header(folder_path.name, names, baseline, variant, output_folder)
+            _log_run_header(
+                folder_path.name, names, baseline, variant, output_folder, fsd_snap
+            )
             LOGGER.info("files (%d): %s", len(files), " ".join(sorted(map(str, files))))
         if n_workers == 1:
             for index, base_name in enumerate(names, start=1):
@@ -813,6 +844,81 @@ def _fit_parallel(
     finally:
         listener.stop()
     return sorted(results, key=lambda item: item.file_name)
+
+SHAPE_COLUMNS = ["Center", "Amplitude", "Sigma", "Gamma", "Y0", "fwhm"]
+
+
+def apply_peak_detector(
+    folder: str,
+    *,
+    input_subfolder: str = "_reprocess",
+    output_folder: str = "_reprocess-v2",
+    measurements: Sequence[str] | None = None,
+    variant: BaselineVariant | None = None,
+) -> pd.DataFrame:
+    """Apply the skip detector to an existing refit's params, without refitting.
+
+    For every spectrum in ``<peak_fit>\\<folder>\\<input_subfolder>\\*_CarbonylPeakFitParams.csv``,
+    recompute the baseline (``variant``, default recipe) and run
+    ``voigt.has_peaks`` on ``raw - baseline``, as :func:`fit_file` now does
+    before fitting. Where it finds no peak, that spectrum's rows get live's
+    skip values (shape columns NaN, ``Peak_Area`` 0). Every other row is copied
+    unchanged. Writes the params CSVs, plus ``peak_detector.csv`` (one row per
+    spectrum checked), into ``<peak_fit>\\<folder>\\<output_folder>``. Baseline and
+    residual CSVs are not written.
+
+    Returns the per-spectrum table: ``Measurement, File, has_peaks, note``.
+    """
+    fit_settings = ir_config.get_fit_settings()
+    subifg_settings = fit_settings.get("find_peaks", {}).get("subifg", {})
+    source = writer.peak_fit_dir(folder)
+    input_dir = source / input_subfolder
+    output_dir = writer.resolve_output_dir(source, output_folder)
+    if output_dir == input_dir.resolve():
+        raise ValueError("output_folder must differ from input_subfolder")
+    suffix = writer.params_suffix()
+    names = sorted(p.name.removesuffix(suffix) for p in input_dir.glob(f"*{suffix}"))
+    if measurements is not None:
+        names = [
+            n for n in names if any(n == m or fnmatchcase(n, m) for m in measurements)
+        ]
+    spectra_dir = subifg_dir(folder)
+
+    report: list[dict] = []
+    for name in names:
+        params = pd.read_csv(input_dir / f"{name}{suffix}")
+        zeroed: list[str] = []
+        for file_key in params["File"].astype(str).unique():
+            path = spectra_dir / f"{name}_{file_key}"
+            entry = {"Measurement": name, "File": file_key, "has_peaks": np.nan, "note": ""}
+            if not path.exists():
+                entry["note"] = "subIFG file missing; rows copied unchanged"
+                LOGGER.warning("%s %s: subIFG file missing; rows unchanged", name, file_key)
+                report.append(entry)
+                continue
+            arr_roi = runner.load_subifg_roi(path)
+            warnings: list[str] = []
+            baseline_values, _ = runner.resolve_baseline(
+                arr_roi[:, 0], arr_roi[:, 1], file_key, None, "recompute",
+                fit_settings, warnings, variant=variant,
+            )
+            found = has_peaks(arr_roi[:, 1] - baseline_values, subifg_settings)
+            entry["has_peaks"] = found
+            entry["note"] = "; ".join(warnings)
+            if not found:
+                zeroed.append(file_key)
+            report.append(entry)
+        mask = params["File"].astype(str).isin(zeroed)
+        params.loc[mask, SHAPE_COLUMNS] = np.nan
+        params.loc[mask, "Peak_Area"] = 0.0
+        params.to_csv(output_dir / f"{name}{suffix}", index=False)
+        LOGGER.info("%s: %d spectra, %d zeroed: %s", name,
+                    params["File"].nunique(), len(zeroed), " ".join(zeroed))
+
+    table = pd.DataFrame(report, columns=["Measurement", "File", "has_peaks", "note"])
+    table.to_csv(output_dir / "peak_detector.csv", index=False)
+    return table
+
 
 if __name__ == "__main__":
     # Edit the constants below, then run:

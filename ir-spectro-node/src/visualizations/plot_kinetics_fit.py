@@ -302,8 +302,8 @@ def run_folder(folder_name: str, extra_peaks: tuple[str, ...] = ()) -> pd.DataFr
 
 
 if __name__ == "__main__":
-    FOLDER_NAME = "nn1120-4_pd_ceo2_000"
-    EXTRA_PEAKS: tuple[str, ...] = ("Peak_1988",)  # e.g. ("Peak_1988",)
+    FOLDER_NAME = "nn1120-2_pd_ceo2_000"
+    EXTRA_PEAKS: tuple[str, ...] = ()  # e.g. ("Peak_1988",)
     result = run_folder(FOLDER_NAME, EXTRA_PEAKS)
     print(f"Wrote {len(result)} figures to {output_dir(FOLDER_NAME)}")
     columns = [
