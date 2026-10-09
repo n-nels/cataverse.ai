@@ -36,7 +36,7 @@ every segment's clock starts at its first row. Results: §6.
    required, and `--measurements` takes **exact base names, not globs** (unlike
    `run_spectral_fit.py`). If a dataset's refit params changed, run
    `--build-areas` first.
-2. **The user reviews the figures** after the re-run (`monomer_features.py` or the
+2. **The user reviews the figures** after the re-run (`plot_kinetics_fit.py` or the
    `eda/` fork, §5): the D21 split, D17 on 000-026, the D24 curves.
 3. Deferred, not blocking: the post-onset hump (003-097, §6) and short first
    segments (000-002, D27).
@@ -72,7 +72,7 @@ and §6.
 | D12 | exp_decay's `y_b` is the smoothed value at the segment start, not the raw first point. pfo/secondary_pfo `q0` is unchanged. | 2026-10-03 |
 | D13 | Confirmed: constituents use their sum's boundaries; unclassified files get the continuous segments. | 2026-10-03 |
 | D14 | Spike labels go in `ground_truth.json`: an optional boolean `spike` per entry, scored by `run_kinetics_classification.py --validate-spikes`. The **user** labels, from the plots (D15). | 2026-10-03 |
-| D15 | There is no `--plot` flag. Visualization is `src/visualizations/monomer_features.py`, rebuilt around the segments outputs. | 2026-10-03 |
+| D15 | There is no `--plot` flag. Visualization is `src/visualizations/plot_kinetics_fit.py`, rebuilt around the segments outputs (2026-10-09: was `monomer_features.py`). | 2026-10-03 |
 | D16 | Whole-folder fit runs are started by the user. | 2026-10-03 |
 | D17 | **(Implemented 2026-10-03.)** For monomer_sum and its constituents in discontinuous files, `depletion` (exp_decay) starts at `t_b = max(monomer_max_s, growth_onset_s)`. Supersaturation ends at the same `t_b` (D20). | 2026-10-03 |
 | D18 | **(Implemented 2026-10-03.)** Spike labels: the detector is right on every file. True spikes: 000-000, 000-026, 000-029, 000-032, 000-034, 000-041 (all nn1120-4_pd_ceo2_000). Every other discontinuous file has no spike. 000-041 now has an entry (D23). | 2026-10-03 |
@@ -191,8 +191,7 @@ are in `config/paths.yaml`.
 | `ground_truth.json` | Iteration 2: `spike` on the 66 discontinuous entries, plus the new 000-041 entry (D18, D23) |
 | `models.py` | `_ExpDecayModel`, registered as `exp_decay`; `p0 = [k, y_inf, y_b]`, where a NaN `k`/`y_inf` takes the default guess and `y_b` is fixed |
 | `validation.py` / `classify_cli.py` | `run_spike_validation`, `print_spike_summary`; `--validate-spikes` |
-| `src/visualizations/monomer_features.py` | Rewritten. Per measurement it draws two panels (monomer_sum; cluster_sum + Peak_1988): raw points, smoothed curve, shaded segments and fitted curves, plus onset/latch lines. Output goes to `C:\Figures\<folder>\plot_kinetic_segments\` with a `kinetic_segments.csv` catalog. The old LaMer I/II/III domain catalog is in git (`fdd8a71`) |
-| `src/visualizations/eda/monomer_features.py` (`a8583a5`) | A sparser EDA fork of the above (no smoothed curve, markers, onset/latch lines or Peak_1988 axis). Writes `*_kinetic_segments_eda.png` and `kinetic_segments_eda.csv` next to the original's |
+| `src/visualizations/plot_kinetics_fit.py` | Replaced `monomer_features.py` and its EDA fork (2026-10-09) with the sparse EDA version. Per measurement it draws monomer_sum and cluster_sum panels (raw points, shaded segments, fitted curves), plus one panel per optional `extra_peaks` entry (e.g. Peak_1988). Output goes to `C:\Figures\<folder>\plot_kinetics_fit\` as `*_kinetics_fit.png` with a `kinetics_fit.csv` catalog. The old modules and the LaMer I/II/III domain catalog (`fdd8a71`) are in git history |
 | `api.py` | `process_file(mode=...)`, `MODES`. The default stays `rolling`, so `classify_cli` is unchanged |
 | `fit_cli.py` | `--mode {segments, rolling}`, default `segments` |
 | `config/analysis.yaml` | `kinetics_reprocess_segments` block |

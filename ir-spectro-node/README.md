@@ -79,7 +79,6 @@ src/
     output.py                  DataFrame computation and CSV I/O
     io.py                      Data loading and validation
     peak_heights.py            Peak height extraction
-    monomer_max.py             Monomer max computation
     integrate_ir_iso_xchg.py   Isotopic exchange utilities
   utils/
     kinetic_fit_writer.py      Standalone kinetics batch processor
@@ -91,10 +90,9 @@ src/
     rename_files.py            File renaming utilities
   visualizations/
     plot_spectrum_fit.py       Spectrum fit plots
-    plot_monomer_cluster_fit.py  Kinetics fit plots
+    plot_kinetics_fit.py       Kinetic segment fit plots
     plot_area_vs_time.py       Peak area vs time plots
     plot_params.py             Parameter trend plots
-    plot_monomer_max.py        Monomer max plots
 
 config/
   analysis.yaml                Voigt fit, peak lists, isotope settings

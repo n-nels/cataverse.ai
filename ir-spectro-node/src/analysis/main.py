@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,12 +21,10 @@ from .output import (
     compute_peak_parameters_df,
     compute_residual_df,
     save_baseline_df,
-    save_monomer_max_df,
     save_peak_area_versus_time_df,
     save_peak_parameters_df,
     save_residual_df,
 )
-from .monomer_max import compute_monomer_max_row
 from .spectral_fitting import (
     add_params,
     create_baseline,
@@ -302,24 +299,6 @@ class DataAnalysisRunner:
             paths.file_name,
             paths.save_dir,
         )
-
-        lg_refl_path = Path(
-            self.config.get_path(
-                "utility.subtract_ifg.lg_refl_output",
-                paths.folder_name,
-                f"{paths.file_name}.{paths.file_index}",
-            )
-        )
-        if lg_refl_path.exists():
-            # Compute ALL rows for the folder to get correct whole-run
-            # time_total_fraction values, then overwrite the CSV
-            df_monomer_max = compute_monomer_max_row(file_path=lg_refl_path)
-            if not df_monomer_max.empty:
-                save_monomer_max_df(
-                    df_monomer_max,
-                    paths.folder_name,
-                    paths.save_dir,
-                )
 
         return peak_area_path
 

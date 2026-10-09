@@ -35,8 +35,6 @@ data:
   plot_spectrum_fit: "plot_spectrum_fit"
   plot_params: "plot_params"
   plot_params_all: "plot_params_all"
-  plot_monomer_max: "plot_monomer_max"
-  plot_monomer_max_all: "plot_monomer_max_all"
   plot_lamer_domains: "plot_lamer_domains"
   plot_kinetic_segments: "plot_kinetic_segments"
 
