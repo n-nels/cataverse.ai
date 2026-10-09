@@ -2,7 +2,8 @@
 
 - ``build_areas``: refit params -> ``*_CarbonylPeakArea.csv`` (``areas.py``).
 - ``process_file`` / ``process_folder``: causal classification plus the
-  live-equivalent rolling kinetic fits (``writer.py``).
+  live-equivalent rolling kinetic fits (``writer.py``, ``mode="rolling"``),
+  or one fit per segment (``segments.py``, ``mode="segments"``).
 """
 
 from __future__ import annotations
@@ -19,10 +20,13 @@ import pandas as pd
 
 from src.utils.kinetics.areas import AreaBuildReport, build_folder_areas
 from src.utils.kinetics.result_types import BatchFitResult, FitRunResult
+from src.utils.kinetics.segments import SEGMENT_WRITER
+from src.utils.kinetics.utils import select_measurements
 from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT, WRITER
 
 LOGGER = logging.getLogger(__name__)
 MODELS_LOGGER = "src.utils.kinetics.models"
+MODES = ("rolling", "segments")
 
 
 class _TimeoutCounter(logging.Handler):
@@ -85,23 +89,32 @@ def build_areas(
 def process_file(
     path: str | Path,
     *,
+    mode: str = "rolling",
     output_folder: str = "_test",
     fit: bool = True,
     min_points: int = 4,
     carry_forward_p0: bool = False,
     peak_names: list[str] | None = None,
 ) -> FitRunResult:
-    """Classify and fit one area CSV, live-equivalently, into ``output_folder``.
+    """Classify and fit one area CSV into ``output_folder``.
 
-    Monomer peaks + ``monomer_sum`` get secondary_pfo, cluster peaks +
-    ``cluster_sum`` get pfo (``writer.REGIME_MODELS``), and ``cluster_sum``
-    gets the causal per-row nucleation ``classification``
+    ``mode="rolling"``: live-equivalent. Monomer peaks + ``monomer_sum`` get
+    secondary_pfo, cluster peaks + ``cluster_sum`` get pfo
+    (``writer.REGIME_MODELS``), fitted at every time point, and
+    ``cluster_sum`` gets the causal per-row nucleation ``classification``
     (``classification.classify_nucleation``) and, once latched,
     ``growth_onset_s`` (the growth onset) and ``latch_time_s`` (the latch
-    time). ``fit=False`` writes the
-    classification only.
-    The result's ``warnings`` report ODE timeouts, if any.
+    time). Writes ``*_CarbonylPeakArea.csv``.
+
+    ``mode="segments"``: one fit per (peak, segment) over the whole
+    trajectory (``segments.py``). Writes ``*_CarbonylKineticParams.csv`` and
+    ``*_CarbonylKineticFeatures.csv``; ``carry_forward_p0`` does not apply.
+
+    ``fit=False`` writes the classification (rolling) or the features
+    (segments) only. The result's ``warnings`` report ODE timeouts, if any.
     """
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {MODES}; got {mode!r}")
     file_path = Path(path)
     if not file_path.exists():
         raise FileNotFoundError(file_path)
@@ -109,24 +122,40 @@ def process_file(
     models_logger = logging.getLogger(MODELS_LOGGER)
     models_logger.addHandler(counter)
     try:
-        output_path, rows = WRITER.write_measurement(
-            file_path,
-            output_folder_name=output_folder,
-            fit=fit,
-            min_points=min_points,
-            carry_forward_p0=carry_forward_p0,
-            peak_names=peak_names,
-        )
+        if mode == "segments":
+            params_path, features_path, rows = SEGMENT_WRITER.write_measurement(
+                file_path,
+                output_folder_name=output_folder,
+                fit=fit,
+                min_points=min_points,
+                peak_names=peak_names,
+            )
+            output_path = params_path or features_path
+        else:
+            output_path, rows = WRITER.write_measurement(
+                file_path,
+                output_folder_name=output_folder,
+                fit=fit,
+                min_points=min_points,
+                carry_forward_p0=carry_forward_p0,
+                peak_names=peak_names,
+            )
     finally:
         models_logger.removeHandler(counter)
     summary: dict[str, float] = {}
-    for model in ("secondary_pfo", "pfo"):
-        for key, value in _metrics_summary(rows, model).items():
-            summary[f"{model}_{key}"] = value
+    if mode == "segments":
+        for model in ("secondary_pfo", "pfo", "exp_decay"):
+            r2 = pd.to_numeric(rows.loc[rows["model"] == model, "r^2"], errors="coerce")
+            if r2.notna().any():
+                summary[f"{model}_median_r2"] = float(r2.median())
+    else:
+        for model in ("secondary_pfo", "pfo"):
+            for key, value in _metrics_summary(rows, model).items():
+                summary[f"{model}_{key}"] = value
     return FitRunResult(
         path=file_path,
         model=None,
-        mode="rolling",
+        mode=mode,
         n_rows_input=int(rows["Peak_Name"].nunique()) if not rows.empty else 0,
         n_rows_fit=len(rows),
         output_path=output_path,
@@ -157,7 +186,8 @@ def process_folder(
 ) -> BatchFitResult:
     """``process_file`` over every area CSV of one dataset folder.
 
-    ``measurements`` restricts to these measurement base names. ``on_file`` is
+    ``measurements`` restricts to these measurement base names, exact or glob
+    (``["*-043"]``); a ``ValueError`` if none match. ``on_file`` is
     called after each file (progress reporting). ``workers`` > 1 processes that
     many files at once, one process each, as the ``ir_fitting`` refit does.
     Workers inherit this process's priority class.
@@ -165,10 +195,9 @@ def process_folder(
     dataset_path = _dataset_path(dataset_folder)
     csv_files = _discover_area_csvs(dataset_path, input_subfolder)
     if measurements is not None:
-        wanted = set(measurements)
-        csv_files = [
-            p for p in csv_files if p.name.removesuffix(str(AREA_SUFFIX)) in wanted
-        ]
+        by_name = {p.name.removesuffix(str(AREA_SUFFIX)): p for p in csv_files}
+        wanted = select_measurements(list(by_name), measurements, dataset_path)
+        csv_files = [by_name[name] for name in wanted]
     outputs: list[Path] = []
     failures: dict[str, str] = {}
 

@@ -5,7 +5,9 @@ server never calls it, and it never writes into source data. Refit areas are bui
 all 7 datasets. Full kinetic fits beyond the verification files are limited by
 secondary_pfo cost (§5). Folders are run one at a time.
 
-This file describes what the package does now. How it got here (what was tried,
+This file describes the rolling (live-equivalent) path. `fit_cli` now defaults to
+`--mode segments`, one fit per peak and segment, which is documented in
+`spec-working.md` until it settles. This file describes what the package does now. How it got here (what was tried,
 measured and rejected) is in `context/2026-09-29-kinetics-reprocessing-on-refit.md`.
 Classifier history: `docs/spec_nuc-clf.md` (the old cluster_sum rules) and
 `docs/JOURNAL_nuc-clf-refit.md` (the current Peak_1988 detector).
@@ -20,11 +22,12 @@ also holds the ground-truth harness for the nucleation classifier.
 ## 0. Read first
 
 ```bash
-# 1. refit params -> area CSVs, then 2. classify + kinetic fits (live-equivalent)
-uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --build-areas
-uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --classify-only   # fast
-uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --measurements <base name>
-uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --workers 8   # one process per measurement
+# 1. refit params -> area CSVs, then 2. classify + kinetic fits (live-equivalent).
+# --mode rolling is required here: the CLI default is now --mode segments (spec-working.md).
+uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --build-areas --mode rolling
+uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --classify-only --mode rolling   # fast
+uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --measurements <base name> --mode rolling
+uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --workers 8 --mode rolling   # one process per measurement
 
 # Classification only (no fits) -> _reprocess\_test_classification\
 uv run python scripts\run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004

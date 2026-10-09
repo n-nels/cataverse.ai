@@ -1,7 +1,13 @@
 """Command-line entry point for offline kinetics reprocessing.
 
-One run per dataset folder (or file) produces the live-equivalent
-``*_CarbonylPeakArea.csv``:
+``--mode segments`` (default) fits once per (peak, segment) over the whole
+trajectory, with segments chosen by the measurement's final nucleation label
+(``segments.py``, ``spec-working.md``). It writes
+``*_CarbonylKineticParams.csv`` (one row per peak and segment) and
+``*_CarbonylKineticFeatures.csv`` (classification, boundaries, spike).
+
+``--mode rolling`` is the live-equivalent path: one fit at every time point,
+written into ``*_CarbonylPeakArea.csv``:
 
 - monomer peaks + ``monomer_sum`` get secondary_pfo;
 - cluster peaks + ``cluster_sum`` get pfo (``writer.REGIME_MODELS``);
@@ -20,6 +26,7 @@ Usage:
     python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --build-areas
     python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --measurements 20260506_052154_pd_ceo2_004-019
     python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --classify-only
+    python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --mode rolling
 """
 
 from __future__ import annotations
@@ -49,7 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--measurements",
         nargs="+",
         default=None,
-        help="With --folder: only these measurement base names.",
+        help="With --folder: only these measurement base names, exact or glob "
+        '(e.g. "*-043").',
     )
     parser.add_argument(
         "--input-subfolder",
@@ -69,9 +77,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output subfolder next to the input CSVs (default: %(default)s).",
     )
     parser.add_argument(
+        "--mode",
+        choices=api.MODES,
+        default="segments",
+        help="'segments': one fit per peak and segment over the whole trajectory, "
+        "written to *_CarbonylKineticParams.csv / *_CarbonylKineticFeatures.csv. "
+        "'rolling': live-equivalent fit at every time point, written to "
+        "*_CarbonylPeakArea.csv (default: %(default)s).",
+    )
+    parser.add_argument(
         "--classify-only",
         action="store_true",
-        help="Write classification only; no kinetic fits (fast).",
+        help="No kinetic fits (fast): the classification (rolling) or the "
+        "features file (segments) only.",
     )
     parser.add_argument(
         "--peak-names",
@@ -80,7 +98,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Only fit these Peak_Name rows, e.g. monomer_sum cluster_sum. "
         "Default: every monomer/cluster group peak and both sums.",
     )
-    parser.add_argument("--min-points", type=int, default=4)
+    parser.add_argument(
+        "--min-points",
+        type=int,
+        default=4,
+        help="Minimum time points before classifying or fitting: per time point "
+        "(rolling) or per segment (segments) (default: %(default)s).",
+    )
     parser.add_argument(
         "--use-prior-p0",
         action=argparse.BooleanOptionalAction,
@@ -110,19 +134,20 @@ def _report(result: FitRunResult, label: str) -> None:
         f"{k}={v:.3g}" for k, v in result.metrics_summary.items() if math.isfinite(v)
     )
     notes = " ".join(result.warnings)
-    print(
-        f"{label} {result.path.name}: {result.n_rows_fit} rows {metrics} {notes}".rstrip(),
-        flush=True,
-    )
+    name = result.output_path.name if result.output_path else result.path.name
+    rows = f"{result.n_rows_fit} rows" if result.n_rows_fit else "no fits"
+    print(f"{label} {name}: {rows} {metrics} {notes}".rstrip(), flush=True)
 
 
 def main(argv: list[str] | None = None) -> None:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
     if not args.normal_priority:
         _lower_priority()
 
     kwargs = {
+        "mode": args.mode,
         "output_folder": args.output_folder,
         "fit": not args.classify_only,
         "min_points": args.min_points,
@@ -138,11 +163,14 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.build_areas:
-        reports = api.build_areas(
-            args.folder,
-            input_subfolder=args.input_subfolder,
-            measurements=args.measurements,
-        )
+        try:
+            reports = api.build_areas(
+                args.folder,
+                input_subfolder=args.input_subfolder,
+                measurements=args.measurements,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
         print(
             f"Built {len(reports)} area CSVs; "
             f"{sum(r.n_missing for r in reports)} spectra without a fit"
@@ -155,14 +183,17 @@ def main(argv: list[str] | None = None) -> None:
         done["n"] += 1
         _report(result, f"[{done['n']} done, {time.perf_counter() - start:.0f}s]")
 
-    batch = api.process_folder(
-        args.folder,
-        input_subfolder=args.input_subfolder,
-        measurements=args.measurements,
-        on_file=on_file,
-        workers=args.workers,
-        **kwargs,
-    )
+    try:
+        batch = api.process_folder(
+            args.folder,
+            input_subfolder=args.input_subfolder,
+            measurements=args.measurements,
+            on_file=on_file,
+            workers=args.workers,
+            **kwargs,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     print(
         f"{batch.n_files_success}/{batch.n_files_found} files processed under "
         f"{batch.dataset_folder}"

@@ -479,6 +479,18 @@ kinetics_reprocess_classification:
   required_consecutive: 3       # latch after this many consecutive fires
   growth_onset_amplitude_min: 0.010  # au; growth_onset_s gate on the pooled, unsmoothed prefix
 
+# Offline segment-wise kinetics (src/utils/kinetics/segments.py, fit_cli
+# --mode segments). Boundaries come from the pooled sum trajectories, smoothed
+# by a centered running median. Design: src/utils/kinetics/spec-working.md.
+kinetics_reprocess_segments:
+  smooth_n: 5                   # points; centered running median of the pooled sum trajectory
+  spike_window_before_s: 7200.0 # cluster_sum max is searched from monomer max - 2 h ...
+  spike_window_after_s: 28800.0 # ... to monomer max + 8 h
+  spike_plateau_gap_s: 14400.0  # plateau = median smoothed cluster_sum from 4 h after the max
+  spike_min_plateau_points: 3
+  spike_min_prominence: 5.0     # (max - plateau) / noise; noise = 1.4826 * MAD(raw - smoothed)
+  spike_min_rise: 5.0           # (max - smoothed value at the spike base) / noise
+
 # -------------------
 # ir_fitting (offline refit)
 # -------------------

@@ -11,9 +11,7 @@ import zmq
 
 from ..core import config
 from ..visualizations.plot_spectrum_fit import plot_spectrum_fit
-from ..visualizations.plot_monomer_cluster_fit import plot_kinetic_fit
 from ..visualizations.plot_params import plot_params_all, plot_params_folder
-from ..visualizations.plot_monomer_max import plot_monomer_max
 
 from .acquisition import opus_acquire
 from .client import do_background_measurement, unload_file, do_sample_measurement
@@ -61,11 +59,9 @@ def handle_end_experiment() -> str:
                 Path(config.get_path("data.peak_fit", folder_name))
                 / f"{base_name}_CarbonylPeakArea.csv"
             )
-            plot_kinetic_fit(str(csv))
             plot_params_folder(csv)
             if folder_name:
                 plot_params_all()
-                plot_monomer_max(folder_name=folder_name)
         except Exception as exc:
             print(
                 "Plot spectrum fit failed for "

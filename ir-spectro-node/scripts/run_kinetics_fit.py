@@ -2,8 +2,8 @@
 """Entry point for the offline kinetics model-fitting CLI.
 
 Examples:
-    python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --model pfo --peak-names cluster_sum
-    python scripts\\run_kinetics_fit.py --path <file>.csv --model secondary_pfo --peak-names monomer_sum
+    python scripts\\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --peak-names cluster_sum
+    python scripts\\run_kinetics_fit.py --path <file>.csv --mode rolling --peak-names monomer_sum
 """
 
 import sys

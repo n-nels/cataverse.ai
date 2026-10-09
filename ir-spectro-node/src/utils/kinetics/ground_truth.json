@@ -536,7 +536,8 @@
     "folder": "nn1120-3_pd_ceo2_001",
     "base_name": "20250525_215755_pd_ceo2_001-034",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20250527_072929_pd_ceo2_001-035_CarbonylPeakArea.csv",
@@ -1348,112 +1349,128 @@
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260103_215421_pd_ceo2_003-090",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260105_110501_pd_ceo2_003-091_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260105_110501_pd_ceo2_003-091",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260107_072224_pd_ceo2_003-092_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260107_072224_pd_ceo2_003-092",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260108_220047_pd_ceo2_003-093_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260108_220047_pd_ceo2_003-093",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260110_153337_pd_ceo2_003-094_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260110_153337_pd_ceo2_003-094",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260112_113929_pd_ceo2_003-095_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260112_113929_pd_ceo2_003-095",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260114_070501_pd_ceo2_003-096_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260114_070501_pd_ceo2_003-096",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260115_215548_pd_ceo2_003-097_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260115_215548_pd_ceo2_003-097",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260117_095433_pd_ceo2_003-098_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260117_095433_pd_ceo2_003-098",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260119_102100_pd_ceo2_003-100_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260119_102100_pd_ceo2_003-100",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260121_010845_pd_ceo2_003-101_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260121_010845_pd_ceo2_003-101",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260122_153703_pd_ceo2_003-102_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260122_153703_pd_ceo2_003-102",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260124_062414_pd_ceo2_003-103_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260124_062414_pd_ceo2_003-103",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260125_210727_pd_ceo2_003-104_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260125_210727_pd_ceo2_003-104",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260127_115408_pd_ceo2_003-105_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260127_115408_pd_ceo2_003-105",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260129_070735_pd_ceo2_003-106_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260129_070735_pd_ceo2_003-106",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260130_215303_pd_ceo2_003-107_CarbonylPeakArea.csv",
@@ -1474,49 +1491,56 @@
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260203_102014_pd_ceo2_003-109",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260205_013030_pd_ceo2_003-110_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260205_013030_pd_ceo2_003-110",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260206_175233_pd_ceo2_003-111_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260206_175233_pd_ceo2_003-111",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260209_160544_pd_ceo2_003-113_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260209_160544_pd_ceo2_003-113",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260211_070853_pd_ceo2_003-114_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260211_070853_pd_ceo2_003-114",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260212_225142_pd_ceo2_003-115_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260212_225142_pd_ceo2_003-115",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260214_170244_pd_ceo2_003-116_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260214_170244_pd_ceo2_003-116",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260217_122912_pd_ceo2_003-117_CarbonylPeakArea.csv",
@@ -1530,21 +1554,24 @@
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260220_165102_pd_ceo2_003-118",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260223_215629_pd_ceo2_003-119_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260223_215629_pd_ceo2_003-119",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260227_044757_pd_ceo2_003-120_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_003",
     "base_name": "20260227_044757_pd_ceo2_003-120",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260304_145524_pd_ceo2_004-000_CarbonylPeakArea.csv",
@@ -1600,7 +1627,8 @@
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260315_214542_pd_ceo2_004-008",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30_borderline"
+    "basis": "user_declared_2026-09-30_borderline",
+    "spike": false
   },
   {
     "file": "20260322_125032_pd_ceo2_004-009_CarbonylPeakArea.csv",
@@ -1635,7 +1663,8 @@
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260418_042056_pd_ceo2_004-014",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30_borderline"
+    "basis": "user_declared_2026-09-30_borderline",
+    "spike": false
   },
   {
     "file": "20260420_071324_pd_ceo2_004-015_CarbonylPeakArea.csv",
@@ -1649,7 +1678,8 @@
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260423_055558_pd_ceo2_004-016",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30_borderline"
+    "basis": "user_declared_2026-09-30_borderline",
+    "spike": false
   },
   {
     "file": "20260428_071207_pd_ceo2_004-017_CarbonylPeakArea.csv",
@@ -1677,21 +1707,24 @@
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260507_124225_pd_ceo2_004-020",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260511_130755_pd_ceo2_004-021_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260511_130755_pd_ceo2_004-021",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30_borderline"
+    "basis": "user_declared_2026-09-30_borderline",
+    "spike": false
   },
   {
     "file": "20260515_195430_pd_ceo2_004-022_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260515_195430_pd_ceo2_004-022",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260519_101843_pd_ceo2_004-023_CarbonylPeakArea.csv",
@@ -1705,7 +1738,8 @@
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260522_210041_pd_ceo2_004-024",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260526_091836_pd_ceo2_004-025_CarbonylPeakArea.csv",
@@ -1719,7 +1753,8 @@
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260527_083948_pd_ceo2_004-026",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260531_051339_pd_ceo2_004-027_CarbonylPeakArea.csv",
@@ -1733,49 +1768,56 @@
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260603_171511_pd_ceo2_004-028",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260607_045815_pd_ceo2_004-029_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260607_045815_pd_ceo2_004-029",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260610_154611_pd_ceo2_004-030_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260610_154611_pd_ceo2_004-030",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260614_043209_pd_ceo2_004-031_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260614_043209_pd_ceo2_004-031",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30_borderline"
+    "basis": "user_declared_2026-09-30_borderline",
+    "spike": false
   },
   {
     "file": "20260618_034450_pd_ceo2_004-032_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260618_034450_pd_ceo2_004-032",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260621_142245_pd_ceo2_004-033_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260621_142245_pd_ceo2_004-033",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260625_054839_pd_ceo2_004-034_CarbonylPeakArea.csv",
     "folder": "nn1120-3_pd_ceo2_004",
     "base_name": "20260625_054839_pd_ceo2_004-034",
     "label": "discontinuous",
-    "basis": "user_declared_2026-09-30"
+    "basis": "user_declared_2026-09-30",
+    "spike": false
   },
   {
     "file": "20260628_173952_pd_ceo2_004-035_CarbonylPeakArea.csv",
@@ -1789,35 +1831,40 @@
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260630_141811_pd_ceo2_000-000",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": true
   },
   {
     "file": "20260704_141909_pd_ceo2_000-002_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260704_141909_pd_ceo2_000-002",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260707_010634_pd_ceo2_000-003_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260707_010634_pd_ceo2_000-003",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260709_120550_pd_ceo2_000-004_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260709_120550_pd_ceo2_000-004",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260711_225312_pd_ceo2_000-005_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260711_225312_pd_ceo2_000-005",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260714_095336_pd_ceo2_000-006_CarbonylPeakArea.csv",
@@ -1831,28 +1878,32 @@
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260715_094622_pd_ceo2_000-007",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260717_203829_pd_ceo2_000-008_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260717_203829_pd_ceo2_000-008",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260720_090349_pd_ceo2_000-009_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260720_090349_pd_ceo2_000-009",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260722_214215_pd_ceo2_000-010_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260722_214215_pd_ceo2_000-010",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260725_143255_pd_ceo2_000-011_CarbonylPeakArea.csv",
@@ -1866,7 +1917,8 @@
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260728_032548_pd_ceo2_000-012",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260730_145135_pd_ceo2_000-013_CarbonylPeakArea.csv",
@@ -1887,7 +1939,8 @@
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260802_120146_pd_ceo2_000-015",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260804_234155_pd_ceo2_000-016_CarbonylPeakArea.csv",
@@ -1901,7 +1954,8 @@
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260806_105210_pd_ceo2_000-017",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260809_062247_pd_ceo2_000-018_CarbonylPeakArea.csv",
@@ -1929,7 +1983,8 @@
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260811_072450_pd_ceo2_000-021",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260813_195617_pd_ceo2_000-022_CarbonylPeakArea.csv",
@@ -1943,49 +1998,56 @@
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260814_201350_pd_ceo2_000-023",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260817_153300_pd_ceo2_000-024_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260817_153300_pd_ceo2_000-024",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260820_074812_pd_ceo2_000-025_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260820_074812_pd_ceo2_000-025",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260822_193302_pd_ceo2_000-026_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260822_193302_pd_ceo2_000-026",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": true
   },
   {
     "file": "20260825_052349_pd_ceo2_000-027_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260825_052349_pd_ceo2_000-027",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260827_172623_pd_ceo2_000-028_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260827_172623_pd_ceo2_000-028",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260830_041410_pd_ceo2_000-029_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260830_041410_pd_ceo2_000-029",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": true
   },
   {
     "file": "20260901_133912_pd_ceo2_000-030_CarbonylPeakArea.csv",
@@ -1999,20 +2061,31 @@
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260903_072112_pd_ceo2_000-032",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": true
   },
   {
     "file": "20260905_175003_pd_ceo2_000-033_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260905_175003_pd_ceo2_000-033",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": false
   },
   {
     "file": "20260908_063922_pd_ceo2_000-034_CarbonylPeakArea.csv",
     "folder": "nn1120-4_pd_ceo2_000",
     "base_name": "20260908_063922_pd_ceo2_000-034",
     "label": "discontinuous",
-    "basis": "user_declared_duration_split"
+    "basis": "user_declared_duration_split",
+    "spike": true
+  },
+  {
+    "file": "20260925_085945_pd_ceo2_000-041_CarbonylPeakArea.csv",
+    "folder": "nn1120-4_pd_ceo2_000",
+    "base_name": "20260925_085945_pd_ceo2_000-041",
+    "label": "discontinuous",
+    "basis": "user_declared_2026-10-03",
+    "spike": true
   }
 ]

@@ -325,15 +325,3 @@ def save_baseline_df(
     path = os.path.join(save_dir, filename)
     save_data(new_data=df_baseline, file_path=path, axis=1)
     return path
-
-
-def save_monomer_max_df(
-    df_monomer_max: pd.DataFrame,
-    file_name: str,
-    save_dir: str,
-) -> str:
-    """Save monomer max results to CSV (overwrites existing file)."""
-    filename = f"{file_name}_monomerMax.csv"
-    path = os.path.join(save_dir, filename)
-    df_monomer_max.to_csv(path, index=False)
-    return path

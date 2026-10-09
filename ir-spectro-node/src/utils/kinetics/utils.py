@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,6 +15,28 @@ from numpy.typing import NDArray
 from src.utils.ir_fitting import config as ir_config
 
 LOGGER = logging.getLogger(__name__)
+
+
+def select_measurements(
+    names: Sequence[str], patterns: Sequence[str] | None, where: Path | str
+) -> list[str]:
+    """``names`` matching any of ``patterns`` (exact or glob, e.g. ``"*-043"``).
+
+    Matches as ``ir_fitting.api.fit_folder`` does. ``None`` keeps every name.
+    Raises ``ValueError`` when patterns are given and nothing matches.
+    """
+    if patterns is None:
+        return list(names)
+    if isinstance(patterns, str):
+        raise TypeError("measurements must be a list of patterns, not a string")
+    selected = [
+        name
+        for name in names
+        if any(name == pattern or fnmatchcase(name, pattern) for pattern in patterns)
+    ]
+    if not selected:
+        raise ValueError(f"no measurements in {where} matched {list(patterns)}")
+    return selected
 
 
 class _KineticUtilities:

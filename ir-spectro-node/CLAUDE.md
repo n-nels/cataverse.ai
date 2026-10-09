@@ -34,9 +34,13 @@ adding argparse.
   `api.build_areas` / `api.process_folder`) reprocesses a dataset's refit output.
   `--build-areas` turns `<dataset>\_reprocess\*_CarbonylPeakFitParams.csv` into area
   CSVs, with time from the subIFG log, never from params rows, and sums from the
-  `ir_fitting.fit` groups. It then writes live-schema, live-equivalent kinetics into
-  `_reprocess\_test\`: monomer → secondary_pfo, cluster → pfo, and a causal per-row
-  `cluster_sum` classification. `--classify-only` skips the (slow) fits. It runs at
+  `ir_fitting.fit` groups. The default `--mode segments` fits once per (peak,
+  segment) on the whole trajectory, with segments chosen by the final nucleation
+  label. It writes `*_CarbonylKineticParams.csv` and `*_CarbonylKineticFeatures.csv`
+  into `_reprocess\_test\` (`segments.py`; design in `spec-working.md`).
+  `--mode rolling` writes live-schema, live-equivalent kinetics instead: monomer →
+  secondary_pfo, cluster → pfo, and a causal per-row `cluster_sum` classification.
+  `--classify-only` skips the (slow) fits. It runs at
   below-normal priority by default. `--workers N` runs N measurements at once, one
   process each.
 - `scripts/run_kinetics_classification.py` (wrapping `classify_cli.py`) writes the
