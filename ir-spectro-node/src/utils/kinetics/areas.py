@@ -27,7 +27,7 @@ import pandas as pd
 from src.analysis.output import compute_cumulative_peak_area_df
 from src.core import config
 from src.utils.kinetics.timeline import build_timeline
-from src.utils.kinetics.utils import _KineticUtilities
+from src.utils.kinetics.utils import _KineticUtilities, select_measurements
 
 LOGGER = logging.getLogger(__name__)
 
@@ -197,8 +197,7 @@ def build_folder_areas(
     names = sorted(
         p.name.removesuffix(PARAMS_SUFFIX) for p in params_dir.glob(f"*{PARAMS_SUFFIX}")
     )
-    if measurements is not None:
-        names = [n for n in names if n in set(measurements)]
+    names = select_measurements(names, measurements, params_dir)
     reports = []
     for name in names:
         try:

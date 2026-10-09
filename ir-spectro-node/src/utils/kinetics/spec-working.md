@@ -1,9 +1,9 @@
 # spec-working — segment-wise kinetics for the new classifier
 
-**Status: iteration 2 BUILT (2026-10-03): D17/D20 (depletion start), D18/D23 (spike
-labels), D21 (no-spike cluster split), D22 (pfo clock). Fits re-run on the 8 test
-measurements; the features files of the other 288 predate iteration 2 (no
-`depletion_start_s`). See §0.**
+**Status (2026-10-08): iteration 2 + D24 BUILT and committed (`46152d2`,
+`bb8a6b7`). Fits re-run on the 8 test measurements only; every other kinetics
+output predates D24 (and most predate iteration 2), so all kinetics are to be
+redone. See §0.**
 
 `spec.md` describes the package as it was before this work. This file holds the
 segment-mode design, the decisions (§1), what was built and checked (§5–§6), and the
@@ -17,28 +17,29 @@ is not touched.
 
 ## 0. Handoff (start here in a new session)
 
-**Working tree:** iteration 1 is committed by the user as `9ce4dfb` ("kinetic segment
-dev start"). Iteration 2 is uncommitted: `segments.py`, `ground_truth.json` and this
-file. The user makes all commits; never commit. Files are CRLF (`ground_truth.json`
-too): a shell `sed -i` or a Python text-mode write turns them to LF, so normalize
-back if that happens.
+**Working tree:** everything is committed by the user: iteration 1 `9ce4dfb`,
+iteration 2 `46152d2`, plots `a8583a5`/`085a131`, D24 `bb8a6b7` ("change
+cluster_sum t0,y0"). The user makes all commits; never commit. Files are CRLF
+(`ground_truth.json` too): a shell `sed -i` or a Python text-mode write turns them
+to LF, so normalize back if that happens.
 
 **Iteration 2 (done 2026-10-03):** D17 + D20 (contiguous monomer segments at
 `t_b = max(monomer max, growth onset)`, written as `depletion_start_s`), D18 + D23
 (spike labels, 000-041 entry; `--validate-spikes` = 66/66), D21 (no-spike
-cluster split at the growth onset), D22 (`t_ref_s`, the pfo clock). Results: §6.
+cluster split at the growth onset), D22 (`t_ref_s`). **D24 (done 2026-10-08):**
+every segment's clock starts at its first row. Results: §6.
 
 **Next steps, in order:**
-1. **The user looks at the redrawn figures** of the 8 test files
-   (`C:\Figures\<folder>\plot_kinetic_segments\`), above all the D21 split
-   (003-097, 004-008, 000-002, 000-028) and D17 on 000-026.
-2. **Refresh the features on all data** (`--classify-only`, fast). This adds
-   `depletion_start_s` to the 288 files not re-run.
-3. Whole-folder fit runs are the user's to start (D16). The existing
-   nn1120-4_000 `_test` params, apart from the 5 test files, are a sums-only
-   pre-iteration-2 run: no D17/D21 segments and no `t_ref_s`.
-   `segment_curve` falls back to the old clocks for them.
-4. Q8 (one file vs. two) is still open.
+1. **Redo all kinetics** (the user starts whole-folder runs, D16):
+   `run_kinetics_fit.py --folder <dataset>` per dataset (segments mode, fits +
+   features; writes `depletion_start_s` and D24 `t_ref_s`). `--folder` is
+   required, and `--measurements` takes **exact base names, not globs** (unlike
+   `run_spectral_fit.py`). If a dataset's refit params changed, run
+   `--build-areas` first.
+2. **The user reviews the figures** after the re-run (`monomer_features.py` or the
+   `eda/` fork, §5): the D21 split, D17 on 000-026, the D24 curves.
+3. Deferred, not blocking: the post-onset hump (003-097, §6) and short first
+   segments (000-002, D27).
 
 The 8 test measurements, for re-runs (lab machine: one process, the default
 below-normal priority):
@@ -81,6 +82,9 @@ and §6.
 | D22 | **(Superseded by D24 for segments that start the trajectory.)** A pfo segment that starts at a boundary (today only the D21 `ripening`) runs on its own clock, `t − t_ref`, where `t_ref` is its first point, so `q0` (fixed to that point) sits on the curve. Segments that start the trajectory keep absolute time, because the area CSVs start at ~420 s, not 0, and shifting them would change existing fits. `t_ref_s` is written per params row: 0 for absolute clocks, the first time for exp_decay and boundary-start pfo. `q0` stays the raw first point (D12 is not extended). | 2026-10-03 |
 | D23 | Spike labels for continuous entries: left unlabeled. The scorer only evaluates discontinuous files, so they score the same either way. 000-041 got a ground-truth entry: `label: discontinuous`, `spike: true`, `basis: user_declared_2026-10-03`. | 2026-10-03 |
 | D24 | **Every segment's model clock starts at its own first row, `t_ref_s`, and `q0` (exp_decay: `y_b`) is set there (Q12 resolved).** The experiment starts at t=0 (`.0000` flat), but the first row is at ~420 s, and that row is treated as (0, y₁): time before it is ignored and its value kept. Justification (user): the analysis targets the **slow** kinetics. The fast admission phase (0–420 s, seen only in the two seed spectra) is out of scope; if it becomes of interest, interrogate the first ~400 s directly. Done in code by shifting pfo to `t − t_ref_s`, so pfo now matches secondary_pfo (its ODE already starts at the first row) and exp_decay. Free `q0` (Q12 option B) is rejected: on monomer it lifts the curve 0.03–0.20 au above the early data. Offline segments mode only: rolling and live keep absolute-time pfo (D2, live parity). | 2026-10-08 |
+| D25 | Q8 → **two files**: params and features stay separate. | 2026-10-08 |
+| D26 | Monomer `q0`: closed. secondary_pfo keeps `q0` = the first row (option A); no `[0, y₁]` bound, no fast component. | 2026-10-08 |
+| D27 | Accepted caveat: when the growth onset is early (000-002: 0.5 h, 8 rows), `pre_nucleation` holds only the tail of the admission rise, so its k is not slow kinetics and is not comparable across files. Left as is; deal with it if it matters for an analysis. The post-onset hump (003-097, §6) is likewise left unfit for now. | 2026-10-08 |
 
 History: a one-shot mode existed before. `f87abfc` had
 `fit_cli --mode {rolling, full_series}`; `8462e2b` removed it for live parity. D1
@@ -188,6 +192,7 @@ are in `config/paths.yaml`.
 | `models.py` | `_ExpDecayModel`, registered as `exp_decay`; `p0 = [k, y_inf, y_b]`, where a NaN `k`/`y_inf` takes the default guess and `y_b` is fixed |
 | `validation.py` / `classify_cli.py` | `run_spike_validation`, `print_spike_summary`; `--validate-spikes` |
 | `src/visualizations/monomer_features.py` | Rewritten. Per measurement it draws two panels (monomer_sum; cluster_sum + Peak_1988): raw points, smoothed curve, shaded segments and fitted curves, plus onset/latch lines. Output goes to `C:\Figures\<folder>\plot_kinetic_segments\` with a `kinetic_segments.csv` catalog. The old LaMer I/II/III domain catalog is in git (`fdd8a71`) |
+| `src/visualizations/eda/monomer_features.py` (`a8583a5`) | A sparser EDA fork of the above (no smoothed curve, markers, onset/latch lines or Peak_1988 axis). Writes `*_kinetic_segments_eda.png` and `kinetic_segments_eda.csv` next to the original's |
 | `api.py` | `process_file(mode=...)`, `MODES`. The default stays `rolling`, so `classify_cli` is unchanged |
 | `fit_cli.py` | `--mode {segments, rolling}`, default `segments` |
 | `config/analysis.yaml` | `kinetics_reprocess_segments` block |
@@ -294,7 +299,8 @@ are in `config/paths.yaml`.
 ## 7. Open questions (surfaced during the build)
 
 Resolved: Q1–Q3 → D9–D11, Q4 → D12, Q9 → D13, Q5 → D14, Q10 → D15, Q7 → D16,
-Q5a → D18, Q6 → D19, the depletion start → D17, Q11 → D20, Q12 → D24.
+Q5a → D18, Q6 → D19, the depletion start → D17, Q11 → D20, Q12 → D24, Q8 → D25,
+monomer `q0` → D26. Nothing is open; deferred items are in D27.
 
 Context for D19 (Q6, answered "no"): 61/226 continuous files have a monomer_sum that
 peaks and then decays: the smoothed max falls before 80% of the run, and the signal
@@ -303,7 +309,7 @@ single secondary_pfo gets R² 0.976, with systematic residuals: it overshoots th
 by about 0.08 au and sits under the data from 40–70 h. That file's cluster_sum
 Delta_Groups also diverge after ~50 h.
 
-- **Q8. One file vs. two.** Revisit after the user has looked at the output (D7).
+- **Q8. One file vs. two** (resolved → D25: two).
 - **Q12. The start of the trajectory (resolved → D24, A′, 2026-10-08).** The
   evidence below is kept for the record.
   - *Timeline (user):* `.0000` is a flat reference, so the true area at t=0 is 0.
@@ -381,11 +387,9 @@ Delta_Groups also diverge after ~50 h.
     - D fails as for cluster. 000-026's seeds (0.26 → 0.50 → 0.80 at 60/120/420 s)
       put the early rate at ~20× the late `k_a·q_e`. That is a real fast phase, and
       there it is resolved by the seeds plus the first rows.
-    - Conclusion: B is not adopted for monomer. Open alternatives:
-      - bound `q0 ∈ [0, y₁]` (the admission step cannot exceed the first
-        measurement);
-      - an explicit fast component from (0,0) with the seeds;
-      - keep A.
+    - Conclusion: B is not adopted for monomer. A is kept (D26); the
+      alternatives (bound `q0 ∈ [0, y₁]`, an explicit fast component) were
+      closed without being built.
 - **Q11 (resolved → D20, option (a)). The gap D17 creates.** When
   `growth_onset_s > monomer_max_s`, `monomer_max_s → growth_onset_s` belongs to no
   segment if supersaturation still ends at the monomer max. On 000-026 that is

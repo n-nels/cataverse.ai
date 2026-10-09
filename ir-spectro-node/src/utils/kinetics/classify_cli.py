@@ -77,7 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--measurements",
         nargs="+",
         default=None,
-        help="With --folder: only these measurement base names.",
+        help="With --folder: only these measurement base names, exact or glob "
+        '(e.g. "*-043").',
     )
     parser.add_argument(
         "--input-subfolder",
@@ -197,13 +198,19 @@ def main(argv: list[str] | None = None) -> None:
     for folder in folders:
         if len(folders) > 1:
             print(f"\n== {folder}", flush=True)
-        batch = api.process_folder(
-            folder,
-            input_subfolder=input_subfolder,
-            measurements=args.measurements,
-            on_file=_report,
-            **kwargs,
-        )
+        try:
+            batch = api.process_folder(
+                folder,
+                input_subfolder=input_subfolder,
+                measurements=args.measurements,
+                on_file=_report,
+                **kwargs,
+            )
+        except ValueError as exc:
+            if len(folders) == 1:
+                parser.error(str(exc))
+            print(f"  skipped: {exc}")
+            continue
         output_dir = batch.outputs[0].parent if batch.outputs else batch.dataset_folder
         print(
             f"{batch.n_files_success}/{batch.n_files_found} files written to "

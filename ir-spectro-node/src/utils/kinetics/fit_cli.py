@@ -56,7 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--measurements",
         nargs="+",
         default=None,
-        help="With --folder: only these measurement base names.",
+        help="With --folder: only these measurement base names, exact or glob "
+        '(e.g. "*-043").',
     )
     parser.add_argument(
         "--input-subfolder",
@@ -139,7 +140,8 @@ def _report(result: FitRunResult, label: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
     if not args.normal_priority:
         _lower_priority()
@@ -161,11 +163,14 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.build_areas:
-        reports = api.build_areas(
-            args.folder,
-            input_subfolder=args.input_subfolder,
-            measurements=args.measurements,
-        )
+        try:
+            reports = api.build_areas(
+                args.folder,
+                input_subfolder=args.input_subfolder,
+                measurements=args.measurements,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
         print(
             f"Built {len(reports)} area CSVs; "
             f"{sum(r.n_missing for r in reports)} spectra without a fit"
@@ -178,14 +183,17 @@ def main(argv: list[str] | None = None) -> None:
         done["n"] += 1
         _report(result, f"[{done['n']} done, {time.perf_counter() - start:.0f}s]")
 
-    batch = api.process_folder(
-        args.folder,
-        input_subfolder=args.input_subfolder,
-        measurements=args.measurements,
-        on_file=on_file,
-        workers=args.workers,
-        **kwargs,
-    )
+    try:
+        batch = api.process_folder(
+            args.folder,
+            input_subfolder=args.input_subfolder,
+            measurements=args.measurements,
+            on_file=on_file,
+            workers=args.workers,
+            **kwargs,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     print(
         f"{batch.n_files_success}/{batch.n_files_found} files processed under "
         f"{batch.dataset_folder}"

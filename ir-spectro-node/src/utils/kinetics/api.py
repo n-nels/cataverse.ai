@@ -21,6 +21,7 @@ import pandas as pd
 from src.utils.kinetics.areas import AreaBuildReport, build_folder_areas
 from src.utils.kinetics.result_types import BatchFitResult, FitRunResult
 from src.utils.kinetics.segments import SEGMENT_WRITER
+from src.utils.kinetics.utils import select_measurements
 from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT, WRITER
 
 LOGGER = logging.getLogger(__name__)
@@ -185,7 +186,8 @@ def process_folder(
 ) -> BatchFitResult:
     """``process_file`` over every area CSV of one dataset folder.
 
-    ``measurements`` restricts to these measurement base names. ``on_file`` is
+    ``measurements`` restricts to these measurement base names, exact or glob
+    (``["*-043"]``); a ``ValueError`` if none match. ``on_file`` is
     called after each file (progress reporting). ``workers`` > 1 processes that
     many files at once, one process each, as the ``ir_fitting`` refit does.
     Workers inherit this process's priority class.
@@ -193,10 +195,9 @@ def process_folder(
     dataset_path = _dataset_path(dataset_folder)
     csv_files = _discover_area_csvs(dataset_path, input_subfolder)
     if measurements is not None:
-        wanted = set(measurements)
-        csv_files = [
-            p for p in csv_files if p.name.removesuffix(str(AREA_SUFFIX)) in wanted
-        ]
+        by_name = {p.name.removesuffix(str(AREA_SUFFIX)): p for p in csv_files}
+        wanted = select_measurements(list(by_name), measurements, dataset_path)
+        csv_files = [by_name[name] for name in wanted]
     outputs: list[Path] = []
     failures: dict[str, str] = {}
 
