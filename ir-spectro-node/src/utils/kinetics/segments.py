@@ -126,10 +126,16 @@ def smoothed(
 def smoothed_max(
     time_s: NDArray[np.float64], values: NDArray[np.float64]
 ) -> tuple[float, float]:
-    """``(time, value)`` of the smoothed trajectory's max; NaN if empty."""
+    """``(time, value)`` of the smoothed trajectory's max; NaN if empty.
+
+    Also NaN while the trajectory is shorter than the smoothing window needs
+    (every smoothed value NaN), as at the start of a live run.
+    """
     if values.size == 0:
         return np.nan, np.nan
     smooth = smoothed(values)
+    if not np.isfinite(smooth).any():
+        return np.nan, np.nan
     i = int(np.nanargmax(smooth))
     return float(time_s[i]), float(smooth[i])
 
@@ -165,6 +171,9 @@ def detect_spike(
     )
     if window.size == 0:
         out["spike_note"] = "no points near monomer max"
+        return out
+    if not np.isfinite(smooth[window]).any():
+        out["spike_note"] = "too few points near monomer max"
         return out
     i = int(window[np.nanargmax(smooth[window])])
     cluster_max_s, cluster_max_au = float(time_s[i]), float(smooth[i])

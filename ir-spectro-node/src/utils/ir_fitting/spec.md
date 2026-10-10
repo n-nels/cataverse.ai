@@ -267,7 +267,9 @@ first. The test script may call live code, but the package must not.
 
 ## 9. Out of scope
 
-- Any change to `src/analysis/`, `voigt_fit`, the live server, or live schemas.
-- Promoting peaks or groups to live.
+- Changes to `src/analysis/` and the live server from this package. Since
+  2026-10-09, `voigt_fit` holds a copy of this block's values and live runs a port
+  of the default baseline recipe (`docs/spec-live-migration.md`). A change to the
+  peaks, rules or recipe meant for both has to land in both.
 - Changing the ROI window.
 - Fixing live FSD snapping.

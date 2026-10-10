@@ -240,8 +240,9 @@ Segments mode fits each trajectory once per segment: 5–90 s per file with all 
 ## 7. Out of scope
 
 - The discontinuous-regime models (the four equations) and renaming the labels.
-- `src/analysis/`, `voigt_fit`, and the live path. That includes porting the
-  classifier to live (`docs/spec_nuc-clf.md` §8).
+- `src/analysis/`, `voigt_fit`, and the live path. Since 2026-10-09 live runs ports
+  of this package's classifier and segments mode (`docs/spec-live-migration.md`):
+  a change here has to land there too.
 - Labeling the 6 unlabeled nn1120-4 files and the 3 refit-only measurements.
 
 ## 8. Segments mode (`--mode segments`, the `fit_cli` default)

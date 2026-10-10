@@ -151,16 +151,21 @@ def combined_voigt(
     fit_params: Parameters,
     peak_list_core: list[float],
 ) -> np.ndarray:
-    """Combine Voigt models for all peaks."""
+    """Combine Voigt models for all peaks.
+
+    Calls :func:`voigt_model` directly: the same arithmetic as wrapping it in
+    ``lmfit.Model(...).eval`` per peak per iteration, at a fraction of the cost
+    (``src/utils/ir_fitting/voigt.py``, parity gate in its spec section 7).
+    """
     combined_profile = np.zeros_like(x)
     for peak in peak_list_core:
-        center = fit_params[f"center_{peak}"].value
-        amplitude = fit_params[f"amplitude_{peak}"].value
-        sigma = fit_params[f"sigma_{peak}"].value
-        gamma = fit_params[f"gamma_{peak}"].value
-        y0 = fit_params[f"y0_{peak}"].value
-        combined_profile += Model(voigt_model).eval(
-            x=x, y0=y0, center=center, amplitude=amplitude, sigma=sigma, gamma=gamma
+        combined_profile += voigt_model(
+            x,
+            fit_params[f"y0_{peak}"].value,
+            fit_params[f"amplitude_{peak}"].value,
+            fit_params[f"center_{peak}"].value,
+            fit_params[f"sigma_{peak}"].value,
+            fit_params[f"gamma_{peak}"].value,
         )
     return combined_profile
 
@@ -173,6 +178,14 @@ def objective(
 ) -> np.ndarray:
     """Objective function for fitting."""
     return combined_voigt(wavenumbers, fit_params, peak_list_core) - y_baseline
+
+
+FIT_METHOD = "least_squares"
+"""lmfit method: scipy's trust-region-reflective, which enforces bounds
+directly. The former default, ``"leastsq"``, maps bounded parameters through a
+transform with zero slope at the bound and hit its evaluation cap on most
+24-peak fits; ``least_squares`` gave equal or better RSS, 25-90x faster
+(``src/utils/ir_fitting/spec.md`` section 7)."""
 
 
 def peak_fit(
@@ -188,7 +201,7 @@ def peak_fit(
         ),
         fit_params,
     )
-    return minimizer.minimize()
+    return minimizer.minimize(method=FIT_METHOD)
 
 
 def find_fsd_peaks(

@@ -22,10 +22,10 @@ those defaults as the correct settings.
 |---|---|---|
 | L1 | 10-09 | Copy code into `src/analysis/`, don't import from `src/utils/`. `src/utils/kinetics` already imports `src.analysis` (`areas.py`, `timeline.py`), so the reverse import would be circular. The repo already runs two implementations side by side. |
 | L2 | 10-09 | **Keep the live peak detector.** In `peak_analysis`, when `find_peaks` finds no positive or negative peak in the baseline-corrected ROI (`voigt_fit.find_peaks.subifg`), the fit is skipped: shape params are NaN and `Peak_Area = 0`. Reason (user): runs are very long, and fitting noise would build up a false cumulative area. The offline refit had no detector, so it is added there too (§2). |
-| L3 | 10-09 | Live seeds every peak from its yaml rule `value:` (unseeded; confirmed by the user 10-09). Offline seeded from the saved live fit of the same file, which doesn't exist live. Test, 13 spectra, median \|Δ\| vs `_reprocess`: monomer_sum 4.7e-4 unseeded vs 4.5e-4 seeded from the previous spectrum; cluster_sum 2.7e-4 vs 7.9e-4; nfev 2.6k vs 5.3k. |
+| L3 | 10-09 | Live seeds every peak from its yaml rule `value:` (unseeded; confirmed by the user 10-09). Offline seeded from the saved live fit of the same file, which doesn't exist live. Test, 13 spectra, median \|Δ\| vs `_reprocess`: monomer_sum 4.7e-4 unseeded vs 4.5e-4 seeded from the previous spectrum; cluster_sum 2.7e-4 vs 7.9e-4; nfev 2.6k vs 5.3k. On a full run (V2, §4.1) areas diverge more (cumulative monomer_sum up to 0.092), but the unseeded fits have equal or lower RSS: median ratio 0.98 vs `_reprocess`; lower in 76/148 spectra, higher in 18; 0.82 on the most divergent. Seeding would buy agreement with `_reprocess`, not better fits. |
 | L4 | 10-09 | Live kinetics are segments mode, rerun after every spectrum over the trajectory so far. The label is the causal label so far, so the results are provisional until the run ends. |
 | L5 | 10-09 | The per-row rolling pfo/pfo-sec columns are removed from live `*_CarbonylPeakArea.csv`. |
-| L6 | 10-09 | `plot_params` is not called by the migrated path. |
+| L6 | 10-09 | `plot_params` is not called by the migrated path; `src/visualizations/plot_params.py` and its `paths.yaml` keys are deleted. |
 | L7 | 10-09 | FSD snapping stays as it is in live for now (see O1). It is exposed in `ir_fitting` behind an opt-in flag (`--fsd-snap`), so it can be tested. |
 | L8 | 10-09 | Drop the three corrupted live params rows (§2.2) from the source CSVs, with backups. |
 
@@ -117,7 +117,26 @@ All 9 `monomer_max_s` files are continuous. Continuous files get one `adsorption
    `run_kinetics_fit.py --folder <ds> --input-subfolder _reprocess-v2`.
 2. Then the live migration (§3).
 
-## 3. Live migration (not started)
+## 3. Live migration (implemented 2026-10-09, not yet deployed)
+
+| Area | Change |
+|---|---|
+| `scripts/run_server.py` | BLAS pinned to one thread (`OMP/OPENBLAS/MKL_NUM_THREADS=1`), so a refit is reproducible (O3) |
+| `config/analysis.yaml` | `voigt_fit` = `ir_fitting.fit` values + `baseline_recipe` (anchors, cut, guard). `kinetics_classification` = `kinetics_reprocess_classification` values. New `kinetics_segments` = `kinetics_reprocess_segments` values. The voigt_fit rules for 1790–1800 / 1770–1780 had no peak and are gone. Peak_1988's center window is now −4/+1 (was −1/+1), as offline |
+| `src/analysis/baseline.py` (new) | Port of `BaselineVariant()` (`compute_baseline`) |
+| `spectral_fitting.py` | `least_squares` (`FIT_METHOD`); `combined_voigt` calls `voigt_model` directly. Detector and FSD unchanged |
+| `classification.py` (new) | Port of the offline detector + `classify_by_time` (verbatim apart from the yaml key) |
+| `segments.py` (new) | Port of `SegmentWriter`: `kinetic_features`, `plan_segments`, `detect_spike`, `fit_segment`, `compute_segment_kinetics` |
+| `kinetics_fitting.py` | Removed: old `classify_trajectory` and helpers, rolling `_prepare_*_fit_rows`, `append_fit_results`. Added: `exp_decay`, `fit_exp_decay_with_errors`, `classify_area_rows`. pfo `maxfev` 20000 → 500, offline's value |
+| `output.py` | `compute_kinetics_outputs` → `KineticsOutputs` (peak area + params + features); `save_kinetic_params_df` / `save_kinetic_features_df` (suffixes from `paths.yaml`) |
+| `main.py` | New baseline; kinetics recomputed whole every spectrum, writing all three files; `run_kinetics_fit(path_or_df, measurement)` returns `KineticsOutputs` |
+| `src/instrument/server.py` | `end_experiment` no longer calls `plot_params_folder` / `plot_params_all` (L6) |
+| `scripts/run_analysis.py` | Batch writer updated for `KineticsOutputs` |
+
+**Deploy.** Restart `run_server.py` only between measurements: a running process
+keeps the old code and the cached yaml, and a params CSV mixing 18- and 24-peak rows
+breaks the cumulative history.
+
 
 - **Config.** `ir_fitting.fit` values go into `voigt_fit`: 24 peaks, the groups (2175 → unknown, 6 new cluster peaks), rules, baseline. The live classification gets the `kinetics_reprocess_classification` values. The offline blocks are left as they are.
 - **Spectral fit.**
@@ -135,9 +154,57 @@ All 9 `monomer_max_s` files are continuous. Continuous files get one `adsorption
 - **Areas, classifier, segments:** run on `_reprocess-v2` params through the live code; the result should match `_reprocess-v2` areas, `classification` and segment params.
 - Write to a scratch `data.peak_fit` (config shim), never to `C:\Data\peakFit\<dataset>`.
 
+### 4.1 Results (2026-10-09, BLAS pinned, below-normal priority, scratch output)
+
+| Check | Result |
+|---|---|
+| V1 baseline, 8 default files: live `compute_baseline` vs `_reprocess` | max \|Δ\| 1e-16 |
+| V3a classification: live `classify_by_time` vs offline, on every `_reprocess-v2` area CSV | 299/299 identical |
+| V3b segments, 8 D24 test files: live `compute_kinetics_outputs` on v2 areas vs `_reprocess-v2\_test` | same rows and segments; features identical (one value 1 ulp from the CSV round trip); params ≤ 3.7e-9, except secondary_pfo on 004-013 at 1.2e-4 (its known ODE timeouts) |
+| V2 full live fit, 000-000 (148 spectra, ~4 s each): `DataAnalysisRunner.run_spectral_fit` vs `_reprocess-v2` | see below |
+| V4 incremental live path with kinetics, 000-000 | see below |
+
+**V2 detail.**
+
+Matches:
+- `Time_Delta` and area `Time (s)` are identical.
+- The skipped spectra are identical (delta5.0087, delta5.0152).
+- Live also fits delta8.0130, which the refit lost to an SVD failure (kinetics spec §3).
+- Classification, growth onset, latch time, monomer max, depletion start, spike flag
+  and every segment boundary are identical.
+
+Differences:
+- **Peak areas follow L3, the unseeded start.** Median \|Δ\| per peak is 2e-4, but the
+  max is 0.045, concentrated in a few early high-signal spectra (delta10.0032,
+  delta9.0029). There the unseeded fit stops with parameters on their bounds
+  (sigma 6.37, center 2114.0), where the seeded fit found interior values.
+- Cumulative monomer_sum differs by up to 0.092 (range 0.09–1.57); cluster_sum by up
+  to 0.015.
+- Spike prominence is 9.7 vs 10.7 (still detected). Monomer depletion R² is 0.937 vs
+  0.952; cluster pre_nucleation 0.934 vs 0.937.
+
+**V4 found a bug, now fixed.** At the third spectrum each trajectory has one point.
+`segments.smoothed_max` got an all-NaN smoothed array and `nanargmax` raised. That
+happened after the params CSV was written and before the area, residual and baseline
+files, so a spectrum's outputs would have been dropped.
+
+Fixes:
+- `smoothed_max` and `detect_spike` return NaN / a note when nothing is smoothable.
+  This is applied to the offline `segments.py` too; no result that worked before
+  changes.
+- `main.run_spectral_fit` catches a kinetics failure, prints it, and still writes
+  the areas (without the label), residual and baseline.
+
+After the fix, V4 on the first 200 files of 000-000 (56 spectra fitted, kinetics
+after every one, ~11 s per spectrum by the end): no kinetics failure. The label
+latches `discontinuous` with the same onset (2700 s) and latch time (14,701 s) as
+the full run. All three kinetics files are rewritten each spectrum.
+
 ## 5. Open
 
 - **O1. FSD snapping is dead in live.** `find_fsd_peaks` returns array indices (0–258), but `resolve_peak_lists` (±5) and `resolve_temp_peak` (2169.5 ± 0.5) compare them to wavenumbers, so neither ever matches. Every peak keeps its nominal wavenumber. It's exposed in `ir_fitting` with `--fsd-snap`, comparing wavenumber to wavenumber; that is the intended behavior and is untested. Experiment before deciding: fix it in live, or remove it.
 - **O2.** Why the partial-write fragments (§2.2) happened is unknown: `save_data` read-concat-writes the whole CSV each time. Possibly two writers at once.
 - **O3. Resolved 10-09.** The refit reproduces `_reprocess` to 1e-16 (areas and baseline, 000-007 delta10.0042/delta5.0047), but only with BLAS pinned to one thread (`OMP/OPENBLAS/MKL_NUM_THREADS=1`), as `--workers` sets. Unpinned, BLAS thread rounding moves this ill-conditioned joint fit by ≤ 1e-3 au in area. So the current `ir_fitting.fit` rules are the ones that produced `_reprocess`, and porting them is correct. For §4, pin threads in the validation runs. Live will not be pinned, so expect ~1e-3 au agreement there, not bit-identity.
+- **O5. Deploy blocker: graph-node reads per-row pfo columns.** `graph-node/src/graph_node/data/fits.py` takes the last-time row per peak of `*_CarbonylPeakArea.csv` and maps `pfo-sec_*` (and `knowledge/data_file_types.yaml` documents `pfo_*`, `pre_*`, `post_*`). It reads with `row.get`, so it won't crash, but AdsParams for runs under the new code would get None. Decide before deploying: point graph-node at `*_CarbonylKineticParams.csv`, or keep writing a per-peak summary in PeakArea.
+- **O6. Deploy timing.** Measurement nn1120-4_000 `-046` was last written 2026-10-09 06:36. Restart `run_server.py` only after the measurement in progress ends.
 - **O4.** `_reprocess-v2` has params, areas and features only. It has no baseline or residual CSVs; those are still in `_reprocess`.

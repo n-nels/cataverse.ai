@@ -92,7 +92,6 @@ src/
     plot_spectrum_fit.py       Spectrum fit plots
     plot_kinetics_fit.py       Kinetic segment fit plots
     plot_area_vs_time.py       Peak area vs time plots
-    plot_params.py             Parameter trend plots
 
 config/
   analysis.yaml                Voigt fit, peak lists, isotope settings

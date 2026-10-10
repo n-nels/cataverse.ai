@@ -1,3 +1,12 @@
+# -------------------
+# voigt_fit (live spectral fit, src/analysis/)
+# -------------------
+# Copied from ir_fitting.fit on 2026-10-09 (docs/spec-live-migration.md): the
+# 24-peak fit, groups and rules that produced _reprocess. Still a COPY, not a
+# reference: a change meant for both live and offline goes into both blocks.
+#
+# Units: peak lists are 12CO base (shifted -50 at read for 13CO) and must be
+# integers. param_rules are 13CO (param_rules_base_isotope).
 voigt_fit:
   isotope_default: "13CO"
   param_rules_base_isotope: "13CO"
@@ -24,8 +33,13 @@ voigt_fit:
     - 2050
     - 2038
     - 2025
-  monomer_peaks_base: # 12CO
-    - 2175 # remove
+    - 1988
+    - 1978
+    - 1963
+    - 1927
+    - 1899
+    - 1888
+  monomer_peaks_base:
     - 2163
     - 2153
     - 2143
@@ -36,16 +50,25 @@ voigt_fit:
     - 2090
     - 2080
     - 2065
-    - 2050 # 1997?
-    - 2038 # 1984?
-    - 2025 # 1971?
-  unknown_peaks_base: # 12CO particle integrate 1948-1878 [1928, 1938, 1913, 1877, 1849, 1838]
+    - 2050
+    - 2038
+    - 2025
+    - 1988
+    - 1978
+    - 1963
+    - 1927
+    - 1899
+    - 1888
+  unknown_peaks_base: # 12CO
     - 2246
     - 2226
     - 2206
     - 2196
     - 2186
-   # - 2175 # add
+    - 2175
+  # subifg: the skip detector (spectral_fitting.peak_analysis) -- a spectrum
+  # with no peak in raw - baseline is not fitted, area 0. fsd: FSD peak finding
+  # (find_fsd_peaks; its snapping never matches, docs/spec-live-migration.md O1).
   find_peaks:
     subifg:
       prominence: 0.0003
@@ -53,6 +76,7 @@ voigt_fit:
     fsd:
       prominence: 0.0001
       height: 0.003
+  # std_distribution settings for each baseline segment (baseline_recipe below).
   baseline:
     half_window: 10
     interp_half_window: 5
@@ -371,7 +395,7 @@ voigt_fit:
         vary: false
     - range_cm1: [1983, 1993]
       center:
-        min_offset: -1
+        min_offset: -4
         max_offset: 1
       amplitude:
         value: 0.01
@@ -405,36 +429,115 @@ voigt_fit:
         value: 0
         min: 0
         vary: false
-    - range_cm1: [1790, 1800]
+    # Low-band rules (Peak_1938..Peak_1838): set 2026-09-25 from a
+    # shared-shape fit on -000 delta10.0042-0072. Sign is free throughout;
+    # only 1928 and 1913 are widened -- the data does not pin the widths of
+    # 1877/1849/1838, so they stay narrow. See spec-working.md section 5.
+    - range_cm1: [1933, 1943] # Peak_1938 (new)
       center:
-        min_offset: -5
-        max_offset: 5
+        min_offset: -2
+        max_offset: 2
       amplitude:
         value: 0.01
       sigma:
         value: 5
         min: 2.55
-        max: 26
+        max: 6.37
       gamma:
         value: 2
         min: 0
+        max: 2.8
       y0:
         value: 0
         min: 0
         vary: false
-    - range_cm1: [1770, 1780]
+    - range_cm1: [1923, 1933] # Peak_1928 (new): FWHM up to ~26
       center:
-        min_offset: -5
-        max_offset: 5
+        min_offset: -2
+        max_offset: 2
+      amplitude:
+        value: 0.05
+      sigma:
+        value: 7
+        min: 2.55
+        max: 9.0
+      gamma:
+        value: 3
+        min: 0
+        max: 4.0
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [1908, 1918] # Peak_1913 (new): broad, FWHM ~19-36
+      center:
+        min_offset: -3
+        max_offset: 1
+      amplitude:
+        value: 0.03
+      sigma:
+        value: 12
+        min: 8
+        max: 14
+      gamma:
+        value: 1
+        min: 0
+        max: 3
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [1872, 1882] # Peak_1877 (new)
+      center:
+        min_offset: -3
+        max_offset: 2
       amplitude:
         value: 0.01
       sigma:
         value: 5
         min: 2.55
-        max: 26
+        max: 6.37
       gamma:
         value: 2
         min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [1844, 1854] # Peak_1849 (new)
+      center:
+        min_offset: -2
+        max_offset: 6
+      amplitude:
+        value: 0.01
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
+      y0:
+        value: 0
+        min: 0
+        vary: false
+    - range_cm1: [1833, 1844] # Peak_1838 (new)
+      center:
+        min_offset: -2
+        max_offset: 6
+      amplitude:
+        value: 0.01
+        min: 0
+      sigma:
+        value: 5
+        min: 2.55
+        max: 6.37
+      gamma:
+        value: 2
+        min: 0
+        max: 2.8
       y0:
         value: 0
         min: 0
@@ -459,16 +562,43 @@ voigt_fit:
         min: 0
         vary: false
 
+  # Anchored two-segment baseline (src/analysis/baseline.py): the offline
+  # BaselineVariant() defaults (src/utils/ir_fitting/baseline.py). Anchor order
+  # and duplicates are kept -- a repeated anchor is a weight (1955 x3).
+  baseline_recipe:
+    anchors_cm1: [2240, 2006, 1955, 1955, 1955]
+    lower_split_cm1: 1955         # below it a second baseline replaces the first
+    lower_anchors_cm1: [1955, 1800, 1820]
+    anchor_guard_cm1: 25.0        # drop an anchor (or the cut) with a dominant extremum this close
+    anchor_prominence_frac: 0.5   # dominant = prominence >= this x the whole-ROI range
+
+# Live nucleation detector (src/analysis/classification.py). Values copied from
+# kinetics_reprocess_classification on 2026-10-09; the offline block below is
+# the reprocessing copy. Design and scoring: docs/JOURNAL_nuc-clf-refit.md.
 kinetics_classification:
-  flat_window_s: 20000.0
-  min_flat_start_s: 10000.0
-  smoothing_window: 4
-  eps_flat: 1.0e-6
-  rise_delta: 1.1e-1
+  peak_name: Peak_1988          # 13CO Peak_Name of the swept peak
+  window_s: 28800.0             # rise is measured above the min of the last 8 h
+  smooth_n: 3                   # causal per-Delta_Group median of this many points
+  rise_threshold: 0.00275       # au; median-over-groups windowed rise must exceed this
+  amplitude_min: 0.006          # au; median-over-groups prefix peak-to-trough
+  zero_floor: false             # amplitude trough is max(0, min) when true
+  required_consecutive: 3       # latch after this many consecutive fires
+  growth_onset_amplitude_min: 0.010  # au; growth_onset_s gate on the pooled, unsmoothed prefix
+
+# Live segment-wise kinetics (src/analysis/segments.py). Values copied from
+# kinetics_reprocess_segments on 2026-10-09.
+kinetics_segments:
+  smooth_n: 5                   # points; centered running median of the pooled sum trajectory
+  spike_window_before_s: 7200.0 # cluster_sum max is searched from monomer max - 2 h ...
+  spike_window_after_s: 28800.0 # ... to monomer max + 8 h
+  spike_plateau_gap_s: 14400.0  # plateau = median smoothed cluster_sum from 4 h after the max
+  spike_min_plateau_points: 3
+  spike_min_prominence: 5.0     # (max - plateau) / noise; noise = 1.4826 * MAD(raw - smoothed)
+  spike_min_rise: 5.0           # (max - smoothed value at the spike base) / noise
 
 # Offline nucleation detector (src/utils/kinetics/classification.py) for the
-# 24-peak refit areas. Read by src/utils/kinetics only; live reads the block
-# above. Design and scoring: docs/JOURNAL_nuc-clf-refit.md.
+# 24-peak refit areas. Read by src/utils/kinetics only; live reads
+# kinetics_classification above. Design and scoring: docs/JOURNAL_nuc-clf-refit.md.
 kinetics_reprocess_classification:
   peak_name: Peak_1988          # 13CO Peak_Name of the swept peak
   window_s: 28800.0             # rise is measured above the min of the last 8 h

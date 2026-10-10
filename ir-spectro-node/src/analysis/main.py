@@ -12,22 +12,25 @@ from lmfit import Parameters
 
 from . import peak_heights
 from ..core import config
+from .baseline import compute_baseline
 from .io import import_calibration_data, import_data, load_peak_parameters
-from .kinetics_fitting import append_fit_results, calibration_statistics
+from .kinetics_fitting import calibration_statistics
 from .output import (
+    KineticsOutputs,
     compute_baseline_df,
     compute_cumulative_peak_area_df,
-    compute_peak_area_with_kinetics_df,
+    compute_kinetics_outputs,
     compute_peak_parameters_df,
     compute_residual_df,
     save_baseline_df,
+    save_kinetic_features_df,
+    save_kinetic_params_df,
     save_peak_area_versus_time_df,
     save_peak_parameters_df,
     save_residual_df,
 )
 from .spectral_fitting import (
     add_params,
-    create_baseline,
     find_fsd_peaks,
     get_peak_list,
     get_shifted_monomer_peaks,
@@ -212,9 +215,12 @@ class DataAnalysisRunner:
         peak_fit_records = []
         fit_params = Parameters()
 
-        baseline_corrected, baseline_std_distribution = create_baseline(
-            intensity, self.voigt_settings.get("baseline", {})
-        )
+        # Anchored two-segment baseline (voigt_fit.baseline_recipe).
+        baseline_outcome = compute_baseline(wavenumbers, intensity, self.voigt_settings)
+        for message in baseline_outcome.warnings:
+            print(f"{file_path}: {message}")
+        baseline_std_distribution = baseline_outcome.values
+        baseline_corrected = intensity - baseline_std_distribution
 
         peak_list = resolve_peak_lists(peak_list_core, fsd_peak_indices)
 
@@ -272,23 +278,32 @@ class DataAnalysisRunner:
             df_fit_peaks_history,
             [f"Peak_{peak}" for peak in get_shifted_monomer_peaks(self.voigt_settings)],
         )
+        kinetics: KineticsOutputs | None = None
+        df_peak_area_output = df_cumulative_areas
         if run_kinetics:
-            # Load prior kinetics results to carry forward
-            peak_area_csv = os.path.join(
-                paths.save_dir,
-                f"{paths.file_name}_CarbonylPeakArea.csv",
-            )
-            df_prior_kinetics = load_peak_parameters(peak_area_csv)
-            df_peak_area_output = compute_peak_area_with_kinetics_df(
-                df_cumulative_areas, df_prior_kinetics, latest_only=True
-            )
-        else:
-            df_peak_area_output = df_cumulative_areas
+            # The whole trajectory so far, recomputed: causal label on
+            # cluster_sum rows, provisional segment fits. A kinetics failure
+            # must not stop the area, residual and baseline files below from
+            # being written (parity-safe control flow).
+            try:
+                kinetics = compute_kinetics_outputs(
+                    df_cumulative_areas, paths.file_name
+                )
+                df_peak_area_output = kinetics.peak_area
+            except Exception as exc:
+                print(f"Kinetics failed for {file_path}; areas saved without it: {exc}")
         peak_area_path = save_peak_area_versus_time_df(
             df_peak_area_output,
             paths.file_name,
             paths.save_dir,
         )
+        if kinetics is not None:
+            save_kinetic_params_df(
+                kinetics.kinetic_params, paths.file_name, paths.save_dir
+            )
+            save_kinetic_features_df(
+                kinetics.kinetic_features, paths.file_name, paths.save_dir
+            )
         save_residual_df(
             df_residual,
             paths.file_name,
@@ -305,21 +320,28 @@ class DataAnalysisRunner:
     def run_kinetics_fit(
         self,
         cumulative_peak_area: str | pd.DataFrame | None,
-    ) -> pd.DataFrame | None:
-        """Run kinetics fitting on cumulative peak area outputs.
+        measurement: str = "",
+    ) -> KineticsOutputs | None:
+        """Run kinetics on cumulative peak area outputs (batch entry point).
 
-        This is the batch-mode entry point: every time point is fitted
-        from scratch (``latest_only=False``).
+        The same computation as the live path, which also recomputes the
+        whole trajectory on every spectrum. A ``*_CarbonylPeakArea.csv`` path
+        names the measurement when ``measurement`` is empty. Kinetics columns
+        already in the input (``classification``, ...) are replaced.
         """
         if cumulative_peak_area is None:
             return None
         if isinstance(cumulative_peak_area, str):
+            if not measurement:
+                measurement = os.path.basename(cumulative_peak_area).removesuffix(
+                    "_CarbonylPeakArea.csv"
+                )
             df_cumulative_peak_area = load_peak_parameters(cumulative_peak_area)
         else:
             df_cumulative_peak_area = cumulative_peak_area
         if df_cumulative_peak_area is None or df_cumulative_peak_area.empty:
-            return df_cumulative_peak_area
-        return append_fit_results(df_cumulative_peak_area, latest_only=False)
+            return None
+        return compute_kinetics_outputs(df_cumulative_peak_area, measurement)
 
     def run_spectral_peak_heights(self, file_path: str) -> None:
         """Run peak height analysis for a subIFG file."""
