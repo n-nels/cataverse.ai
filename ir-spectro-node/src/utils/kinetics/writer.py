@@ -372,7 +372,7 @@ class KineticWriter:
         self,
         area_path: str | Path,
         *,
-        output_folder_name: str = "_test",
+        output_folder_name: str = "_reprocess",
         **kwargs: Any,
     ) -> tuple[Path, pd.DataFrame]:
         """Classify (and fit) one area CSV and write it to ``output_folder_name``.

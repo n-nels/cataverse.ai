@@ -35,11 +35,11 @@ uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --classi
 uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --measurements <base name> --mode rolling
 uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004 --workers 8 --mode rolling   # one process per measurement
 
-# Classification only (no fits) -> _reprocess\_test_classification\
+# Classification only (no fits), written back into _reprocess\
 uv run python scripts\run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004
 
 # Score the detector against ground_truth.json
-uv run python scripts\run_kinetics_classification.py --validate --input-subfolder _reprocess
+uv run python scripts\run_kinetics_classification.py --validate
 
 # Segments mode (default): per-segment fits -> *_CarbonylKineticParams/Features.csv (§8)
 uv run python scripts\run_kinetics_fit.py --folder nn1120-3_pd_ceo2_004
@@ -51,7 +51,7 @@ uv run python scripts\run_kinetics_classification.py --validate-spikes   # spike
 glob (e.g. `"*-043"`).
 
 Other fit flags: `--peak-names` limits which rows are fitted, `--output-folder`
-defaults to `_test`, `--use-prior-p0` seeds each p0 search from the previous point,
+defaults to `_reprocess` (in place; since 2026-10-10, was `_test`), `--use-prior-p0` seeds each p0 search from the previous point,
 and `--normal-priority` turns off the below-normal default. Importable as
 `from src.utils.kinetics import build_areas, process_file, process_folder`.
 
@@ -111,7 +111,7 @@ and `--normal-priority` turns off the below-normal default. Importable as
    │    classify_by_time   causal nucleation label on cluster_sum rows (latch_sweep)
    │    rolling fits       REGIME_MODELS[(group, regime)] per time point
    ▼
-<dataset>\_reprocess\_test\*_CarbonylPeakArea.csv          (live schema)
+<dataset>\_reprocess\*_CarbonylPeakArea.csv                (in place, live schema)
 ```
 
 Spectrum discovery matches the refit: isoX files excluded, `manually_skip_files`
@@ -307,7 +307,8 @@ rise together. The test tables are in `spec-working.md` §7 Q12.
 
 ### 8.3 Outputs
 
-Files go to `<dataset>\_reprocess\<output-folder>\` (default `_test`). The suffixes
+Files go to `<dataset>\_reprocess\` itself (`--output-folder`, default `_reprocess`;
+another name writes a subfolder; before 2026-10-10 the default was `_test`). The suffixes
 are in `config/paths.yaml` (`kinetic_params_suffix`, `kinetic_features_suffix`).
 `--classify-only` writes only the features file.
 

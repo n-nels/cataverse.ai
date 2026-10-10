@@ -16,6 +16,9 @@ from src.utils.ir_fitting import config as ir_config
 
 LOGGER = logging.getLogger(__name__)
 
+REPROCESS_FOLDER = "_reprocess"
+"""The reprocessed dataset: refit params plus every file derived from them."""
+
 
 def select_measurements(
     names: Sequence[str], patterns: Sequence[str] | None, where: Path | str
@@ -58,10 +61,12 @@ class _KineticUtilities:
     def resolve_output_dir(source_dir: Path, output_folder_name: str) -> Path:
         """Resolve the output directory for a source dataset folder.
 
-        Offline reprocessing must never write next to its own input: the
-        source ``*_CarbonylPeakArea.csv`` is read back as fit history, so
-        overwriting it in place corrupts the dataset. Output always lands in
-        a subfolder of the source folder (normally ``_test``).
+        Offline reprocessing must never write next to live data: the live
+        ``*_CarbonylPeakArea.csv`` is read back as fit history, so overwriting
+        it in place corrupts the dataset. Output lands in a subfolder of the
+        source folder, normally ``_reprocess``. An input that is already in a
+        folder of that name is written in place there: the area, kinetic
+        params and kinetic features CSVs in ``_reprocess`` are derived files.
 
         Rejects any folder name that would resolve back to the source folder
         or escape it -- ``""`` and ``"."`` both collapse to the parent under
@@ -71,7 +76,7 @@ class _KineticUtilities:
         if not isinstance(output_folder_name, str) or not output_folder_name.strip():
             raise ValueError(
                 "output_folder_name must be a non-empty subfolder name "
-                "(e.g. '_test'); got "
+                "(e.g. '_reprocess'); got "
                 f"{output_folder_name!r}. Writing into the source folder "
                 "would overwrite the input CarbonylPeakArea CSV."
             )
@@ -87,6 +92,14 @@ class _KineticUtilities:
 
         # Input already inside the output subfolder: write in place there.
         output_dir = source_dir if source_dir.name == name else source_dir / name
+        if name == REPROCESS_FOLDER and source_dir.name != name:
+            # e.g. a live area CSV given with --path: its derived files would
+            # replace the reprocessed ones of the same measurement.
+            raise ValueError(
+                f"{source_dir} is not a {REPROCESS_FOLDER} folder; writing to "
+                f"{output_dir} would replace reprocessed files. Pass another "
+                "output folder name (e.g. '_test')."
+            )
         if output_dir.resolve() == source_dir.resolve() and source_dir.name != name:
             raise ValueError(
                 f"output_folder_name {name!r} resolves to the source folder; refusing "

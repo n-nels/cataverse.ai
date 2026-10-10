@@ -467,7 +467,7 @@ class SegmentWriter:
         self,
         area_path: str | Path,
         *,
-        output_folder_name: str = "_test",
+        output_folder_name: str = "_reprocess",
         **kwargs: Any,
     ) -> tuple[Path | None, Path, pd.DataFrame]:
         """Write the params (unless ``fit=False``) and features CSVs.

@@ -8,6 +8,9 @@ This module separates computation from I/O:
 from __future__ import annotations
 
 import os
+import shutil
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -33,6 +36,37 @@ def _coerce_df(value: Any) -> pd.DataFrame:
     return pd.DataFrame(value)
 
 
+#: os.replace fails on Windows while another process has the target open
+#: (a reader, a backup). Retry this many times, REPLACE_RETRY_S apart.
+REPLACE_RETRIES = 10
+REPLACE_RETRY_S = 0.2
+
+
+def write_csv(df: pd.DataFrame, path: str) -> None:
+    """Write a CSV whole, so no reader or other writer ever sees part of it.
+
+    The data goes to a temp file next to ``path``, which then replaces it. A
+    plain ``to_csv`` truncates and rewrites in place, so two overlapping writers
+    can leave the tail of the longer write after the end of the shorter one: the
+    nn1120-3_003 fragments (docs/spec-live-migration.md O2). If the replace keeps
+    failing, it falls back to the plain write, so the output is never dropped.
+    """
+    tmp_path = f"{path}.tmp-{os.getpid()}-{threading.get_ident()}"
+    df.to_csv(tmp_path, index=False)
+    for _ in range(REPLACE_RETRIES):
+        try:
+            os.replace(tmp_path, path)
+            return
+        except PermissionError:
+            time.sleep(REPLACE_RETRY_S)
+    print(f"Could not replace {path}; writing it in place instead.")
+    df.to_csv(path, index=False)
+    try:
+        os.remove(tmp_path)
+    except OSError:
+        pass
+
+
 def save_data(new_data: pd.DataFrame, file_path: str, axis: int) -> None:
     """Save or append CSV data along the provided axis."""
     if os.path.isfile(file_path):
@@ -40,7 +74,11 @@ def save_data(new_data: pd.DataFrame, file_path: str, axis: int) -> None:
             existing_data = pd.read_csv(file_path, header=0)
         except Exception as e:
             existing_data = pd.DataFrame()
-            print(f"Error reading existing data {file_path}: {e}")
+            # The write below would replace the whole history with the new
+            # rows. Keep the unreadable file so nothing is lost.
+            kept = f"{file_path}.unreadable-{time.strftime('%Y%m%d-%H%M%S')}"
+            shutil.copy2(file_path, kept)
+            print(f"Error reading existing data {file_path}: {e}; kept a copy at {kept}")
         if "Wavenumber (cm-1)" in existing_data.columns:
             new_data = new_data.drop(columns=["Wavenumber (cm-1)"])
         combined_data = cast(
@@ -63,7 +101,7 @@ def save_data(new_data: pd.DataFrame, file_path: str, axis: int) -> None:
     else:
         combined_data = new_data
 
-    combined_data.to_csv(file_path, index=False)
+    write_csv(combined_data, file_path)
 
 
 def compute_peak_parameters_df(
@@ -294,7 +332,7 @@ def save_kinetic_params_df(
     """Save the per-segment kinetic params, replacing any earlier file."""
     suffix = cast(str, config.get_setting("filenames.carbonyl_fit.kinetic_params_suffix"))
     path = os.path.join(save_dir, f"{file_name}{suffix}")
-    df_kinetic_params.to_csv(path, index=False)
+    write_csv(df_kinetic_params, path)
     return path
 
 
@@ -308,7 +346,7 @@ def save_kinetic_features_df(
         str, config.get_setting("filenames.carbonyl_fit.kinetic_features_suffix")
     )
     path = os.path.join(save_dir, f"{file_name}{suffix}")
-    df_kinetic_features.to_csv(path, index=False)
+    write_csv(df_kinetic_features, path)
     return path
 
 
@@ -320,7 +358,7 @@ def save_peak_area_versus_time_df(
     """Save pre-computed peak area versus time DataFrame to CSV."""
     filename = f"{file_name}_CarbonylPeakArea.csv"
     path = os.path.join(save_dir, filename)
-    df_peak_area_output.to_csv(path, index=False)
+    write_csv(df_peak_area_output, path)
     return path
 
 

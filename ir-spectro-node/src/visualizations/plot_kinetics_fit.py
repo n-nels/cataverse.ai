@@ -9,7 +9,7 @@ history.)
 Inputs, per measurement:
 
 - ``<data.peak_fit>/<folder>/_reprocess/*_CarbonylPeakArea.csv``: the data;
-- ``<...>/_reprocess/<FIT_SUBFOLDER>/*_CarbonylKineticFeatures.csv``: the
+- ``<...>/_reprocess/*_CarbonylKineticFeatures.csv``: the
   classification, growth onset, latch, monomer max and spike. Required: run
   ``scripts\\run_kinetics_fit.py --folder <folder>`` (``--classify-only`` is
   enough for the segments without fits);
@@ -58,7 +58,7 @@ from src.utils.kinetics.segments import (
 from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT, SUM_OF_GROUP, UTILS
 
 INPUT_SUBFOLDER = "_reprocess"
-FIT_SUBFOLDER = "_test"
+FIT_SUBFOLDER = ""  # kinetic files sit in _reprocess itself since 2026-10-10
 HOUR_S = 3600.0
 MARKER_SIZE = 4.5  # data points, in points
 OUTPUT_TAG = "_kinetics_fit"
@@ -302,7 +302,7 @@ def run_folder(folder_name: str, extra_peaks: tuple[str, ...] = ()) -> pd.DataFr
 
 
 if __name__ == "__main__":
-    FOLDER_NAME = "nn1120-2_pd_ceo2_000"
+    FOLDER_NAME = "nn1120-4_pd_ceo2_000"
     EXTRA_PEAKS: tuple[str, ...] = ()  # e.g. ("Peak_1988",)
     result = run_folder(FOLDER_NAME, EXTRA_PEAKS)
     print(f"Wrote {len(result)} figures to {output_dir(FOLDER_NAME)}")

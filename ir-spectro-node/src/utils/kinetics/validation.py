@@ -145,7 +145,7 @@ def run_validation(
     classify_fn: Callable[..., dict[str, Any]] | None = None,
     search_root: Path = SEARCH_ROOT,
     required_consecutive: int = REQUIRED_CONSECUTIVE_FIRES,
-    input_subfolder: str | None = None,
+    input_subfolder: str | None = "_reprocess",
     folders: list[str] | None = None,
     trajectory_fn: Callable[[pd.DataFrame], tuple[Any, Any]] | None = None,
 ) -> ValidationReport:

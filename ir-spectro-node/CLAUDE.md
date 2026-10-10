@@ -14,6 +14,7 @@ python scripts\run_kinetics_fit.py             # offline kinetics reprocessing C
 python scripts\run_kinetics_classification.py  # nucleation classification + ground-truth scoring CLI — see note below
 python scripts\run_baseline_fit.py             # baseline experiment CLI — see note below
 python scripts\run_spectral_fit.py             # offline 24-peak refit CLI — see note below
+python scripts\run_csv_check.py                # read-only check for torn / partial writes in *_Carbonyl*.csv
 
 uvx ruff check .                 # lint (ruff is not a declared dependency; run via uvx)
 uvx ruff format .
@@ -27,7 +28,7 @@ how batch work is run (`scripts/run_analysis.py`, `src/analysis/main.py`).
 To run a single file through the pipeline, edit those constants rather than
 adding argparse.
 
-**Four CLIs are the exceptions.** The first two are **offline kinetics**
+**Five CLIs are the exceptions.** The first two are **offline kinetics**
 (design and validation: `src/utils/kinetics/spec.md`, working spec `spec-working.md`):
 
 - `scripts/run_kinetics_fit.py` (wrapping `src/utils/kinetics/fit_cli.py` →
@@ -37,7 +38,7 @@ adding argparse.
   `ir_fitting.fit` groups. The default `--mode segments` fits once per (peak,
   segment) on the whole trajectory, with segments chosen by the final nucleation
   label. It writes `*_CarbonylKineticParams.csv` and `*_CarbonylKineticFeatures.csv`
-  into `_reprocess\_test\` (`segments.py`; design in `spec-working.md`).
+  into `_reprocess\` itself (`segments.py`; design in `spec-working.md`).
   `--mode rolling` writes live-schema, live-equivalent kinetics instead: monomer →
   secondary_pfo, cluster → pfo, and a causal per-row `cluster_sum` classification.
   `--classify-only` skips the (slow) fits. It runs at
@@ -45,11 +46,11 @@ adding argparse.
   process each.
 - `scripts/run_kinetics_classification.py` (wrapping `classify_cli.py`) writes the
   nucleation classification only (no fits): `--folder <dataset>` (or `--path`,
-  `--measurements`) reads `_reprocess\` area CSVs and writes them to
-  `_reprocess\_test_classification\` with the causal `classification`,
+  `--measurements`) reads `_reprocess\` area CSVs and writes them back in place
+  with the causal `classification`,
   `growth_onset_s` (the growth onset) and `latch_time_s` (the latch time) on `cluster_sum` rows. `--validate`
-  (`--input-subfolder`, `--folders`) scores the detector against
-  `ground_truth.json`: 286/288 on `_reprocess` (`docs/JOURNAL_nuc-clf-refit.md`).
+  (`--input-subfolder`, default `_reprocess`; `--folders`) scores the detector
+  against `ground_truth.json`: 287/289 on `_reprocess` (`docs/JOURNAL_nuc-clf-refit.md`).
 
 The third is **baseline runs**: `scripts/run_baseline_fit.py`
 (wrapping `src/utils/ir_fitting/baseline_cli.py` → `api.run_baseline`), for the
@@ -75,10 +76,26 @@ machine (OPUS, `run_server.py` and `run_norhoff.py` run here). Design and
 validation: `src/utils/ir_fitting/spec.md`. `api.py`'s `__main__`
 (edit-constants) remains for whole-measurement or whole-folder runs.
 
+The fifth is **`scripts/run_csv_check.py`** (`src/utils/csv_integrity.py`). It is a
+read-only scan of `*_Carbonyl*.csv` for torn or partially written files: field counts,
+key columns and duplicate rows. `--all` or `--folder <ds>`, plus `--subfolder` and
+`--recursive`. It exits 1 on any issue. Background: `docs/spec-live-migration.md` O2.
+
 `src/utils/kinetics/` is also importable:
-`from src.utils.kinetics import build_areas, process_file, process_folder`. Output
-defaults to a `_test` subfolder — keep that default when experimenting; never
-overwrite source data in place.
+`from src.utils.kinetics import build_areas, process_file, process_folder`.
+
+**Folder layout (since 2026-10-10).** Each dataset has a single `<dataset>\_reprocess\`,
+with no subfolders. It holds the refit params, `peak_detector.csv`, and the files
+derived from the params: areas, KineticParams and KineticFeatures. The kinetics CLIs
+read `_reprocess` and write those derived files back into it, in place
+(`--output-folder` defaults to `_reprocess`). `utils.resolve_output_dir` refuses to
+write into `_reprocess` from an input that is not already there, such as a live area
+CSV given with `--path`. Pass `--output-folder _test` to experiment without touching
+it.
+
+The refit (`run_spectral_fit.py`) still defaults to `_test`, because writing to
+`_reprocess` would replace the reference params. Never overwrite live source data in
+place.
 
 ## Architecture
 
@@ -108,6 +125,10 @@ pure DataFrame builders → **I/O phase** of `save_*` calls (`output.py`). Kinet
 through `output.compute_kinetics_outputs`. That compute/I/O split in
 `run_spectral_fit` is deliberate; keep new work on the correct side of it. Since
 2026-10-09, live runs the offline defaults (`docs/spec-live-migration.md`).
+**Live and `_reprocess` don't start fits the same way.** Live starts every
+spectrum from the yaml rule values. `_reprocess` (formerly `_reprocess-v2`) started
+from each file's old live fit. Areas can differ by several percent (see the warning at the top of that spec,
+and O7: a full refit with rule-value starts is pending).
 
 Files carry state between steps. `*_CarbonylPeakFitParams.csv` is appended to on
 every fit and re-read as the fit history; cumulative peak areas are recomputed

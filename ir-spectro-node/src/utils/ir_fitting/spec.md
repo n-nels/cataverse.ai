@@ -113,8 +113,9 @@ A peak that matches no `range_cm1` falls through to the `default: true` rule
    `ir_fitting.fit.find_peaks.subifg`. If neither finds a peak, nothing is fitted:
    every peak gets live's skip row (shape params NaN, `Peak_Area` 0) and the
    residual is 0. Reason (user): runs are long, and fitted noise would build up a
-   false cumulative area. `api.apply_peak_detector` applies it to an existing
-   refit without refitting (`docs/spec-live-migration.md` §2).
+   false cumulative area. (The one-off `api.apply_peak_detector`, which applied it
+   to `_reprocess` without refitting, was removed on 2026-10-10 once its output
+   became `_reprocess`; `docs/spec-live-migration.md` §2.)
 4. Build `Parameters` for all peaks. Bounds come from the rule around the
    **nominal** wavenumber (with `--fsd-snap`, around the snapped FSD peak, below).
    Initial values are seeded from the saved

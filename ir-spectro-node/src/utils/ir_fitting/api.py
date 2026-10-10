@@ -28,8 +28,6 @@ from fnmatch import fnmatchcase
 from functools import partial
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
 
 path = Path(__file__).resolve().parents[3]
 if str(path) not in sys.path:
@@ -52,7 +50,7 @@ from src.utils.ir_fitting.result_types import (
     matches_file_key,
 )
 from src.utils.ir_fitting.runner import fit_subifg_file, load_subifg_file
-from src.utils.ir_fitting.voigt import FIT_METHOD, SEED_NUDGE_FRAC, has_peaks
+from src.utils.ir_fitting.voigt import FIT_METHOD, SEED_NUDGE_FRAC
 
 PACKAGE_LOGGER = "src.utils.ir_fitting"
 # Named explicitly, not __name__: run as a script this module is "__main__",
@@ -844,80 +842,6 @@ def _fit_parallel(
     finally:
         listener.stop()
     return sorted(results, key=lambda item: item.file_name)
-
-SHAPE_COLUMNS = ["Center", "Amplitude", "Sigma", "Gamma", "Y0", "fwhm"]
-
-
-def apply_peak_detector(
-    folder: str,
-    *,
-    input_subfolder: str = "_reprocess",
-    output_folder: str = "_reprocess-v2",
-    measurements: Sequence[str] | None = None,
-    variant: BaselineVariant | None = None,
-) -> pd.DataFrame:
-    """Apply the skip detector to an existing refit's params, without refitting.
-
-    For every spectrum in ``<peak_fit>\\<folder>\\<input_subfolder>\\*_CarbonylPeakFitParams.csv``,
-    recompute the baseline (``variant``, default recipe) and run
-    ``voigt.has_peaks`` on ``raw - baseline``, as :func:`fit_file` now does
-    before fitting. Where it finds no peak, that spectrum's rows get live's
-    skip values (shape columns NaN, ``Peak_Area`` 0). Every other row is copied
-    unchanged. Writes the params CSVs, plus ``peak_detector.csv`` (one row per
-    spectrum checked), into ``<peak_fit>\\<folder>\\<output_folder>``. Baseline and
-    residual CSVs are not written.
-
-    Returns the per-spectrum table: ``Measurement, File, has_peaks, note``.
-    """
-    fit_settings = ir_config.get_fit_settings()
-    subifg_settings = fit_settings.get("find_peaks", {}).get("subifg", {})
-    source = writer.peak_fit_dir(folder)
-    input_dir = source / input_subfolder
-    output_dir = writer.resolve_output_dir(source, output_folder)
-    if output_dir == input_dir.resolve():
-        raise ValueError("output_folder must differ from input_subfolder")
-    suffix = writer.params_suffix()
-    names = sorted(p.name.removesuffix(suffix) for p in input_dir.glob(f"*{suffix}"))
-    if measurements is not None:
-        names = [
-            n for n in names if any(n == m or fnmatchcase(n, m) for m in measurements)
-        ]
-    spectra_dir = subifg_dir(folder)
-
-    report: list[dict] = []
-    for name in names:
-        params = pd.read_csv(input_dir / f"{name}{suffix}")
-        zeroed: list[str] = []
-        for file_key in params["File"].astype(str).unique():
-            path = spectra_dir / f"{name}_{file_key}"
-            entry = {"Measurement": name, "File": file_key, "has_peaks": np.nan, "note": ""}
-            if not path.exists():
-                entry["note"] = "subIFG file missing; rows copied unchanged"
-                LOGGER.warning("%s %s: subIFG file missing; rows unchanged", name, file_key)
-                report.append(entry)
-                continue
-            arr_roi = runner.load_subifg_roi(path)
-            warnings: list[str] = []
-            baseline_values, _ = runner.resolve_baseline(
-                arr_roi[:, 0], arr_roi[:, 1], file_key, None, "recompute",
-                fit_settings, warnings, variant=variant,
-            )
-            found = has_peaks(arr_roi[:, 1] - baseline_values, subifg_settings)
-            entry["has_peaks"] = found
-            entry["note"] = "; ".join(warnings)
-            if not found:
-                zeroed.append(file_key)
-            report.append(entry)
-        mask = params["File"].astype(str).isin(zeroed)
-        params.loc[mask, SHAPE_COLUMNS] = np.nan
-        params.loc[mask, "Peak_Area"] = 0.0
-        params.to_csv(output_dir / f"{name}{suffix}", index=False)
-        LOGGER.info("%s: %d spectra, %d zeroed: %s", name,
-                    params["File"].nunique(), len(zeroed), " ".join(zeroed))
-
-    table = pd.DataFrame(report, columns=["Measurement", "File", "has_peaks", "note"])
-    table.to_csv(output_dir / "peak_detector.csv", index=False)
-    return table
 
 
 if __name__ == "__main__":

@@ -17,7 +17,8 @@ written into ``*_CarbonylPeakArea.csv``:
 Inputs are the area CSVs in ``<dataset>/<input-subfolder>/`` (default
 ``_reprocess``, the refit output), and ``--build-areas`` first (re)builds them
 from the refit params (``areas.py``). Output goes to
-``<dataset>/<input-subfolder>/<output-folder>/``. Sums and groups come from the
+``<dataset>/<input-subfolder>/`` itself (``--output-folder`` defaults to
+``_reprocess``; another name writes a subfolder of it). Sums and groups come from the
 ``ir_fitting.fit`` block of ``config/analysis.yaml``, not from flags.
 
 Runs at below-normal process priority by default: this is the lab machine.
@@ -73,8 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output-folder",
-        default="_test",
-        help="Output subfolder next to the input CSVs (default: %(default)s).",
+        default="_reprocess",
+        help="Output folder: the input folder itself when it has this name, "
+        "otherwise a subfolder of it (default: %(default)s).",
     )
     parser.add_argument(
         "--mode",

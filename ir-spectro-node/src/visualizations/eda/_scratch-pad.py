@@ -161,7 +161,7 @@ def plot(table: pd.DataFrame, output_path: Path) -> Path:
 if __name__ == "__main__":
     FOLDER_NAME = "nn1120-4_pd_ceo2_000"
     INPUT_SUBFOLDER = "_reprocess"  # "" for the folder root
-    FIT_SUBFOLDER = "_test"
+    FIT_SUBFOLDER = ""  # kinetic files sit in _reprocess itself since 2026-10-10
 
     result = collect(FOLDER_NAME, INPUT_SUBFOLDER, FIT_SUBFOLDER)
     out = plot(

@@ -8,11 +8,46 @@ and status as the work goes. The finished design moves into the package specs
 (`run_spectral_fit.py` and `run_kinetics_fit.py` with no flags). The user treats
 those defaults as the correct settings.
 
+> **Naming, 2026-10-10.** The user consolidated each dataset to one flat
+> `<dataset>\_reprocess\`: what this spec calls `_reprocess-v2` is now `_reprocess`.
+> The old `_reprocess` and every `_test*` / `_reprocess-v2` subfolder are gone. It
+> holds params, `peak_detector.csv`, areas, KineticParams and KineticFeatures; the
+> full segments kinetics was rerun on it. The utils CLIs now read `_reprocess` and
+> write derived files back into it in place; the refit still defaults to `_test`.
+> `apply_peak_detector` (the one-off v2 builder) is removed. In the history below,
+> "`_reprocess`" before this date means the old, pre-detector folder.
+
 **Order.**
 
 1. Correct the offline reference into `_reprocess-v2` (§2).
 2. Migrate live (§3).
 3. Validate live against `_reprocess-v2` (§4).
+
+> [!WARNING]
+> **`_reprocess` (formerly `_reprocess-v2`) and live do NOT fit spectra the same way. Do not mix them
+> without accounting for this.**
+>
+> - **Live (deployed <TBD>)** starts every spectrum's fit from the yaml rule
+>   `value:` (L3). That is the rule from now on.
+> - **`_reprocess`, formerly `_reprocess-v2`** (= the old `_reprocess` params + the peak-detector zeroing, §2.1;
+>   no refit) started each spectrum's fit from that file's old 18-peak live fit.
+>   That start can't be reproduced live or in a future run.
+>
+> The 24-peak fit has several near-equal solutions, so the two can land on different
+> area splits. On 000-000 (the only measurement compared, 148 / 24,583 spectra),
+> 4 early spectra differ by 2–10% in monomer area. Cumulative areas carry that
+> forward as a constant offset: −0.09 au on delta10, which is 100% of the late-run
+> value there (§4.1, V2). Kinetics move by ~5% (k_a) to ~12% (depletion y_inf).
+> How widespread this is across all datasets is unknown.
+>
+> **Consequences.**
+> - Results from `_reprocess` and from live runs after <TBD> are not directly
+>   comparable at the few-percent level.
+> - Classification, onset, latch and segment boundaries matched on 000-000, so the
+>   labels are not affected there.
+>
+> **Resolution (O7, not now):** refit all spectra with rule-value starts, so
+> offline matches live.
 
 ---
 
@@ -112,10 +147,8 @@ All 9 `monomer_max_s` files are continuous. Continuous files get one `adsorption
 - 000-026 had nothing zeroed but still moved by ≤ 7e-3 in R². That is
   secondary_pfo ODE-timeout noise.
 
-**Next.**
-1. The user runs the full segments kinetics on `_reprocess-v2`:
-   `run_kinetics_fit.py --folder <ds> --input-subfolder _reprocess-v2`.
-2. Then the live migration (§3).
+**Done 10-10.** The user ran the full segments kinetics on all datasets, then
+consolidated the folders (see the naming note at the top).
 
 ## 3. Live migration (implemented 2026-10-09, not yet deployed)
 
@@ -178,8 +211,17 @@ Differences:
   max is 0.045, concentrated in a few early high-signal spectra (delta10.0032,
   delta9.0029). There the unseeded fit stops with parameters on their bounds
   (sigma 6.37, center 2114.0), where the seeded fit found interior values.
-- Cumulative monomer_sum differs by up to 0.092 (range 0.09–1.57); cluster_sum by up
-  to 0.015.
+- Cumulative monomer_sum differs by up to 0.092; cluster_sum by up to 0.015. The
+  "range 0.09–1.57" first given here understated it. The monomer offset is set by 4
+  early spectra (Δ monomer area: delta10.0032 −0.066, delta7.0030 −0.028,
+  delta9.0029 −0.013, delta6.0032 −0.012, each ~2–10% of that spectrum's monomer
+  area; the other 144 spectra are within 0.01). A cumulative sum carries each one
+  forward, so it is a constant offset for the rest of the run: −0.09 on delta10,
+  −0.03 on delta6/7/8, −0.015 on delta9, −0.004 on delta5. Late in the run,
+  cumulative monomer has fallen to 0.09–0.19, so the offset is 2–23% of the value,
+  and 100% on delta10 (live −0.002 vs v2 0.087). Those 4 spectra have RSS 0.81–0.85×
+  `_reprocess`. Kinetics on monomer_sum: supersaturation k_a 2.29e-4 vs 2.18e-4,
+  q_e 2.12 vs 2.20; depletion y_inf 0.197 vs 0.224, k 5.59e-5 vs 5.52e-5.
 - Spike prominence is 9.7 vs 10.7 (still detected). Monomer depletion R² is 0.937 vs
   0.952; cluster pre_nucleation 0.934 vs 0.937.
 
@@ -203,8 +245,45 @@ the full run. All three kinetics files are rewritten each spectrum.
 ## 5. Open
 
 - **O1. FSD snapping is dead in live.** `find_fsd_peaks` returns array indices (0–258), but `resolve_peak_lists` (±5) and `resolve_temp_peak` (2169.5 ± 0.5) compare them to wavenumbers, so neither ever matches. Every peak keeps its nominal wavenumber. It's exposed in `ir_fitting` with `--fsd-snap`, comparing wavenumber to wavenumber; that is the intended behavior and is untested. Experiment before deciding: fix it in live, or remove it.
-- **O2.** Why the partial-write fragments (§2.2) happened is unknown: `save_data` read-concat-writes the whole CSV each time. Possibly two writers at once.
-- **O3. Resolved 10-09.** The refit reproduces `_reprocess` to 1e-16 (areas and baseline, 000-007 delta10.0042/delta5.0047), but only with BLAS pinned to one thread (`OMP/OPENBLAS/MKL_NUM_THREADS=1`), as `--workers` sets. Unpinned, BLAS thread rounding moves this ill-conditioned joint fit by ≤ 1e-3 au in area. So the current `ir_fitting.fit` rules are the ones that produced `_reprocess`, and porting them is correct. For §4, pin threads in the validation runs. Live will not be pinned, so expect ~1e-3 au agreement there, not bit-identity.
-- **O5. Deploy blocker: graph-node reads per-row pfo columns.** `graph-node/src/graph_node/data/fits.py` takes the last-time row per peak of `*_CarbonylPeakArea.csv` and maps `pfo-sec_*` (and `knowledge/data_file_types.yaml` documents `pfo_*`, `pre_*`, `post_*`). It reads with `row.get`, so it won't crash, but AdsParams for runs under the new code would get None. Decide before deploying: point graph-node at `*_CarbonylKineticParams.csv`, or keep writing a per-peak summary in PeakArea.
+- **O2. Partial writes: detection and a live fix in place (10-10); cause likely, not confirmed.**
+  - **Likely cause: two overlapping writers.** A plain `to_csv` truncates and rewrites in place. If two
+    processes rewrite the same CSV at once, the shorter write can land over the longer one, leaving the
+    longer one's tail after its end. The next `save_data` reads that tail back as a row and rewrites it
+    full width, which is the nn1120-3_003 signature (§2.2). This was reproduced in scratch with two file
+    handles. A single writer that crashes leaves a truncated file, not a tail. Which second writer it
+    was (a manual rerun during live? two servers?) is unknown.
+  - **Detection:** `scripts/run_csv_check.py` (`src/utils/csv_integrity.py`), read-only. It checks
+    `*_Carbonyl*.csv` for lines whose field count differs from the header, a missing trailing newline,
+    blank lines, invalid `File` / `Delta_Group` / `Peak_Name` / `Measurement` keys, bad wide-file
+    columns or wavenumbers, and duplicate `(File, Peak_Name)` rows. It exits 1 if anything is found.
+    Example: `--all --subfolder _reprocess`.
+  - **Scan, 10-10.**
+    - `_reprocess-v2`, recursive: 983 files, 0 issues.
+    - Live dataset folders: 1197 files, 6 files flagged, none of them a params CSV:
+      - 003-106 PeakArea: 2 rows with an empty `File` (delta8, t = 3899.7 s). The file is stale (09-10),
+        derived before the fragment fix.
+      - 003-002 PeakArea: 43 duplicate `monomer_sum` rows, equal to 1e-16. That looks like sums computed
+        twice, not a tear.
+      - 000-014 residual: 134 rows with no wavenumber, which looks like a misaligned column concat.
+      - 001-037 baseline and residual, and 003-004 residual: one trailing blank line each.
+    - None was changed.
+  - **Prevention (live, `output.write_csv`):** each CSV is written to a temp file next to it, then
+    `os.replace`d. A reader or a second writer sees one writer's whole file, never a splice. If the
+    replace keeps failing (a Windows reader holding the file), it retries 10 × 0.2 s, then falls back
+    to the plain write so no output is dropped. `save_data` also keeps a copy
+    (`<file>.unreadable-<timestamp>`) when the existing file can't be read, instead of silently
+    replacing the history with the new rows only.
+  - **Not covered:** two writers can still lose one of their updates (last one wins). Peak-heights and
+    iso-exchange writers and the offline writers still write in place.
+- **O3. Resolved 10-09.** The refit reproduces `_reprocess` to 1e-16 (areas and baseline, 000-007 delta10.0042/delta5.0047), but only with BLAS pinned to one thread (`OMP/OPENBLAS/MKL_NUM_THREADS=1`), as `--workers` sets. Unpinned, BLAS thread rounding moves this ill-conditioned joint fit by ≤ 1e-3 au in area. So the current `ir_fitting.fit` rules are the ones that produced `_reprocess`, and porting them is correct. For §4, pin threads in the validation runs. `run_server.py` now pins them too (§3), from its next start.
+- **O5. Deploy blocker: graph-node reads per-row pfo columns.** `graph-node/src/graph_node/data/fits.py` takes the last-time row per peak of `*_CarbonylPeakArea.csv` and maps `pfo-sec_*` (and `knowledge/data_file_types.yaml` documents `pfo_*`, `pre_*`, `post_*`). It reads with `row.get`, so it won't crash, but AdsParams for runs under the new code would get None. Decided 10-10: graph-node will read only `*_CarbonylKineticParams.csv`. The user does that work separately; it is noted in `graph-node/spec.md` §7.8, and nothing is changed here.
 - **O6. Deploy timing.** Measurement nn1120-4_000 `-046` was last written 2026-10-09 06:36. Restart `run_server.py` only after the measurement in progress ends.
-- **O4.** `_reprocess-v2` has params, areas and features only. It has no baseline or residual CSVs; those are still in `_reprocess`.
+- **O7. Refit all spectra with rule-value starts (deferred by the user 10-10).** This
+  resolves the warning at the top. Add a rule-value start to `ir_fitting` (today
+  `runner.saved_seeds` always seeds from the saved params) and make it the default.
+  Then refit all 24,583 spectra into `_reprocess-v3`, with the detector and pinned
+  BLAS, and rebuild areas, classification and kinetics.
+  - Cost: likely about a day at below-normal priority on the lab machine; the user
+    starts it.
+  - It also measures how widespread the V2 discrepancy is.
+- **O4.** `_reprocess-v2` has params, areas and features only. Its baseline and residual CSVs would be identical to `_reprocess`'s (no refit), so the user will copy them over later.
