@@ -180,7 +180,7 @@ def process_all_area_vs_time(
     """Plot every ``*_CarbonylPeakArea.csv`` in exactly one folder.
 
     Reads ``<data.peak_fit>/<folder>/<subfolder>/`` non-recursively (e.g.
-    ``subfolder="_reprocess/_test"``), so live, ``_reprocess`` and ``_test``
+    ``subfolder="_reprocess"``, or ``""`` for live), so live and ``_reprocess``
     CSVs sharing a name are never mixed. Figures go to
     ``<data.figures>/<folder>/plot_area_vs_time/<subfolder>/``.
     """
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     process_all_area_vs_time(
         folder="nn1120-4_pd_ceo2_000",
-        subfolder="_reprocess",
+        subfolder=None,
         include_unknown=False,
         time_unit="s",
         constituents={
