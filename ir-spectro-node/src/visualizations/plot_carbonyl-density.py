@@ -3,8 +3,8 @@
 Standalone, no CLI -- edit the constants in ``__main__``. Promoted from
 ``eda/_scratch-pad.py`` (monomer only). Reads the segment fits written by
 ``scripts\\run_kinetics_fit.py --folder <folder>`` (default ``--mode segments``)
-from ``<data.peak_fit>/<folder>/<INPUT_SUBFOLDER>/<FIT_SUBFOLDER>/
-*_CarbonylKineticParams.csv``.
+from ``<data.peak_fit>/<folder>/*_CarbonylKineticParams.csv`` (or under
+``_reprocess/``, per the yaml ``data.plot_source``; see ``_source.py``).
 
 Per measurement and sum, ``q_e`` comes from the **first** segment (the
 smallest ``t_start_s``), i.e. before the division at nucleation; nothing after
@@ -53,7 +53,7 @@ if str(path) not in sys.path:
 
 from src.core import config
 from src.utils.kinetics.segments import PARAMS_SUFFIX
-from src.utils.kinetics.writer import SEARCH_ROOT
+from src.visualizations._source import source_dir
 
 EXP_PARAMS_SUFFIX = "_expParams.json"
 # (column prefix, Peak_Name), top panel first.
@@ -145,9 +145,12 @@ def filename_flags(folder_name: str, measurement: str) -> dict | None:
         return json.load(handle).get("filename_flags", {})
 
 
-def collect(folder_name: str, input_subfolder: str, fit_subfolder: str) -> pd.DataFrame:
-    """First-segment ``q_e`` of every successful reference of one dataset."""
-    source = SEARCH_ROOT / folder_name / input_subfolder / fit_subfolder
+def collect(folder_name: str, subfolder: str | None = None) -> pd.DataFrame:
+    """First-segment ``q_e`` of every successful reference of one dataset.
+
+    ``subfolder`` defaults to the yaml ``data.plot_source`` (``_source.py``).
+    """
+    source = source_dir(folder_name, subfolder)
     files = sorted(source.glob(f"*{PARAMS_SUFFIX}"))
     if not files:
         raise FileNotFoundError(f"no *{PARAMS_SUFFIX} in {source}")
@@ -281,10 +284,8 @@ def plot(table: pd.DataFrame, output_path: Path) -> Path:
 
 if __name__ == "__main__":
     FOLDER_NAME = "nn1120-4_pd_ceo2_000"
-    INPUT_SUBFOLDER = "_reprocess"  # "" for the folder root
-    FIT_SUBFOLDER = ""  # kinetic files sit in _reprocess itself since 2026-10-10
 
-    result = collect(FOLDER_NAME, INPUT_SUBFOLDER, FIT_SUBFOLDER)
+    result = collect(FOLDER_NAME)
     out = plot(
         result,
         Path(config.get_path("data.figures", FOLDER_NAME, "carbonyl_density.tiff")),

@@ -8,8 +8,9 @@ history.)
 
 Inputs, per measurement:
 
-- ``<data.peak_fit>/<folder>/_reprocess/*_CarbonylPeakArea.csv``: the data;
-- ``<...>/_reprocess/*_CarbonylKineticFeatures.csv``: the
+- ``<data.peak_fit>/<folder>/*_CarbonylPeakArea.csv``: the data (or under
+  ``_reprocess/``, per the yaml ``data.plot_source``; see ``_source.py``);
+- ``*_CarbonylKineticFeatures.csv`` next to it: the
   classification, growth onset, latch, monomer max and spike. Required: run
   ``scripts\\run_kinetics_fit.py --folder <folder>`` (``--classify-only`` is
   enough for the segments without fits);
@@ -55,10 +56,9 @@ from src.utils.kinetics.segments import (
     plan_segments,
     segment_curve,
 )
-from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT, SUM_OF_GROUP, UTILS
+from src.utils.kinetics.writer import AREA_SUFFIX, SUM_OF_GROUP, UTILS
+from src.visualizations._source import source_dir
 
-INPUT_SUBFOLDER = "_reprocess"
-FIT_SUBFOLDER = ""  # kinetic files sit in _reprocess itself since 2026-10-10
 HOUR_S = 3600.0
 MARKER_SIZE = 4.5  # data points, in points
 OUTPUT_TAG = "_kinetics_fit"
@@ -94,14 +94,6 @@ SEGMENT_LABELS = {
     "burst_nucleation": "nucleation",
     "diffusion_growth": "growth",
 }
-
-
-def input_dir(folder_name: str) -> Path:
-    return SEARCH_ROOT / folder_name / INPUT_SUBFOLDER
-
-
-def fit_dir(folder_name: str) -> Path:
-    return input_dir(folder_name) / FIT_SUBFOLDER
 
 
 def output_dir(folder_name: str) -> Path:
@@ -261,14 +253,14 @@ def process_file(
     extra_peaks: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     measurement = area_path.name.removesuffix(str(AREA_SUFFIX))
-    features_path = fit_dir(folder_name) / f"{measurement}{FEATURES_SUFFIX}"
+    features_path = source_dir(folder_name) / f"{measurement}{FEATURES_SUFFIX}"
     if not features_path.exists():
         raise FileNotFoundError(
             f"{features_path.name} missing; run scripts\\run_kinetics_fit.py "
             f"--folder {folder_name} (--classify-only is enough) first"
         )
     features = pd.read_csv(features_path).iloc[0].to_dict()
-    params_path = fit_dir(folder_name) / f"{measurement}{PARAMS_SUFFIX}"
+    params_path = source_dir(folder_name) / f"{measurement}{PARAMS_SUFFIX}"
     params = pd.read_csv(params_path) if params_path.exists() else pd.DataFrame()
     _plot_file(
         measurement, pd.read_csv(area_path), features, params, out_dir, extra_peaks
@@ -282,7 +274,7 @@ def run_folder(folder_name: str, extra_peaks: tuple[str, ...] = ()) -> pd.DataFr
     ``extra_peaks`` adds one panel per ``Peak_Name`` (e.g. ``("Peak_1988",)``)
     below the two sums.
     """
-    source = input_dir(folder_name)
+    source = source_dir(folder_name)
     area_files = sorted(source.glob(f"*{AREA_SUFFIX}"))
     if not area_files:
         raise FileNotFoundError(f"no *{AREA_SUFFIX} in {source}")
@@ -305,7 +297,11 @@ if __name__ == "__main__":
     FOLDER_NAME = "nn1120-4_pd_ceo2_000"
     EXTRA_PEAKS: tuple[str, ...] = ()  # e.g. ("Peak_1988",)
     result = run_folder(FOLDER_NAME, EXTRA_PEAKS)
-    print(f"Wrote {len(result)} figures to {output_dir(FOLDER_NAME)}")
+    n_failed = int(result["error"].notna().sum()) if "error" in result else 0
+    print(
+        f"Wrote {len(result) - n_failed} figures to {output_dir(FOLDER_NAME)}"
+        f" ({n_failed} failed; see the error column)"
+    )
     columns = [
         c
         for c in (
