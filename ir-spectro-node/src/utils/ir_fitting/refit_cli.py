@@ -104,6 +104,13 @@ def build_parser() -> argparse.ArgumentParser:
         "*_CarbonylFitBaseline.csv, i.e. the old baseline (default: %(default)s).",
     )
     add_recipe_arguments(parser, window=False)
+    fit.add_argument(
+        "--fsd-snap",
+        action="store_true",
+        help="Center each peak's window on an FSD peak within 5 cm-1, as live "
+        "intends (live's snapping never matches). Off by default; experimental "
+        "(docs/spec-live-migration.md O1).",
+    )
 
     output = parser.add_argument_group("output")
     output.add_argument(
@@ -298,6 +305,7 @@ def main(argv: list[str] | None = None) -> None:
         save=not args.no_save,
         on_file=on_file,
         workers=args.workers,
+        fsd_snap=args.fsd_snap,
     )
 
     if args.plot:

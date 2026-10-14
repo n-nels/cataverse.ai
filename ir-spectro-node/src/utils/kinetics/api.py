@@ -52,16 +52,20 @@ def _discover_area_csvs(
 
     With ``input_subfolder`` (e.g. ``"_reprocess"``): exactly the files in
     ``<dataset>/<input_subfolder>/``, non-recursive. Without it: the live files
-    under the dataset folder, excluding output/reference subfolders (``_test``,
-    ``_reprocess``, ``arxiv``, ``CalibrationData``).
+    under the dataset folder, excluding output/reference subfolders (``_test*``,
+    ``_reprocess*``) and ``arxiv``, ``CalibrationData``.
     """
     if input_subfolder:
         return sorted((dataset_path / input_subfolder).glob(f"*{AREA_SUFFIX}"))
-    excluded = {"_test", "_reprocess", "arxiv", "CalibrationData"}
+    excluded = {"arxiv", "CalibrationData"}
+    excluded_prefixes = ("_test", "_reprocess")
     return [
         path
         for path in sorted(dataset_path.rglob(f"*{AREA_SUFFIX}"))
-        if not excluded.intersection(path.parts)
+        if not any(
+            part in excluded or part.startswith(excluded_prefixes)
+            for part in path.relative_to(dataset_path).parts[:-1]
+        )
     ]
 
 
@@ -90,7 +94,7 @@ def process_file(
     path: str | Path,
     *,
     mode: str = "rolling",
-    output_folder: str = "_test",
+    output_folder: str = "_reprocess",
     fit: bool = True,
     min_points: int = 4,
     carry_forward_p0: bool = False,

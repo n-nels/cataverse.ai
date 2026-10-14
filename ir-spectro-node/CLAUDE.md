@@ -14,6 +14,7 @@ python scripts\run_kinetics_fit.py             # offline kinetics reprocessing C
 python scripts\run_kinetics_classification.py  # nucleation classification + ground-truth scoring CLI — see note below
 python scripts\run_baseline_fit.py             # baseline experiment CLI — see note below
 python scripts\run_spectral_fit.py             # offline 24-peak refit CLI — see note below
+python scripts\run_csv_check.py                # read-only check for torn / partial writes in *_Carbonyl*.csv
 
 uvx ruff check .                 # lint (ruff is not a declared dependency; run via uvx)
 uvx ruff format .
@@ -27,7 +28,7 @@ how batch work is run (`scripts/run_analysis.py`, `src/analysis/main.py`).
 To run a single file through the pipeline, edit those constants rather than
 adding argparse.
 
-**Four CLIs are the exceptions.** The first two are **offline kinetics**
+**Five CLIs are the exceptions.** The first two are **offline kinetics**
 (design and validation: `src/utils/kinetics/spec.md`, working spec `spec-working.md`):
 
 - `scripts/run_kinetics_fit.py` (wrapping `src/utils/kinetics/fit_cli.py` →
@@ -37,7 +38,7 @@ adding argparse.
   `ir_fitting.fit` groups. The default `--mode segments` fits once per (peak,
   segment) on the whole trajectory, with segments chosen by the final nucleation
   label. It writes `*_CarbonylKineticParams.csv` and `*_CarbonylKineticFeatures.csv`
-  into `_reprocess\_test\` (`segments.py`; design in `spec-working.md`).
+  into `_reprocess\` itself (`segments.py`; design in `spec-working.md`).
   `--mode rolling` writes live-schema, live-equivalent kinetics instead: monomer →
   secondary_pfo, cluster → pfo, and a causal per-row `cluster_sum` classification.
   `--classify-only` skips the (slow) fits. It runs at
@@ -45,11 +46,11 @@ adding argparse.
   process each.
 - `scripts/run_kinetics_classification.py` (wrapping `classify_cli.py`) writes the
   nucleation classification only (no fits): `--folder <dataset>` (or `--path`,
-  `--measurements`) reads `_reprocess\` area CSVs and writes them to
-  `_reprocess\_test_classification\` with the causal `classification`,
+  `--measurements`) reads `_reprocess\` area CSVs and writes them back in place
+  with the causal `classification`,
   `growth_onset_s` (the growth onset) and `latch_time_s` (the latch time) on `cluster_sum` rows. `--validate`
-  (`--input-subfolder`, `--folders`) scores the detector against
-  `ground_truth.json`: 286/288 on `_reprocess` (`docs/JOURNAL_nuc-clf-refit.md`).
+  (`--input-subfolder`, default `_reprocess`; `--folders`) scores the detector
+  against `ground_truth.json`: 287/289 on `_reprocess` (`docs/JOURNAL_nuc-clf-refit.md`).
 
 The third is **baseline runs**: `scripts/run_baseline_fit.py`
 (wrapping `src/utils/ir_fitting/baseline_cli.py` → `api.run_baseline`), for the
@@ -75,10 +76,26 @@ machine (OPUS, `run_server.py` and `run_norhoff.py` run here). Design and
 validation: `src/utils/ir_fitting/spec.md`. `api.py`'s `__main__`
 (edit-constants) remains for whole-measurement or whole-folder runs.
 
+The fifth is **`scripts/run_csv_check.py`** (`src/utils/csv_integrity.py`). It is a
+read-only scan of `*_Carbonyl*.csv` for torn or partially written files: field counts,
+key columns and duplicate rows. `--all` or `--folder <ds>`, plus `--subfolder` and
+`--recursive`. It exits 1 on any issue. Background: `docs/spec-live-migration.md` O2.
+
 `src/utils/kinetics/` is also importable:
-`from src.utils.kinetics import build_areas, process_file, process_folder`. Output
-defaults to a `_test` subfolder — keep that default when experimenting; never
-overwrite source data in place.
+`from src.utils.kinetics import build_areas, process_file, process_folder`.
+
+**Folder layout (since 2026-10-10).** Each dataset has a single `<dataset>\_reprocess\`,
+with no subfolders. It holds the refit params, `peak_detector.csv`, and the files
+derived from the params: areas, KineticParams and KineticFeatures. The kinetics CLIs
+read `_reprocess` and write those derived files back into it, in place
+(`--output-folder` defaults to `_reprocess`). `utils.resolve_output_dir` refuses to
+write into `_reprocess` from an input that is not already there, such as a live area
+CSV given with `--path`. Pass `--output-folder _test` to experiment without touching
+it.
+
+The refit (`run_spectral_fit.py`) still defaults to `_test`, because writing to
+`_reprocess` would replace the reference params. Never overwrite live source data in
+place.
 
 ## Architecture
 
@@ -101,66 +118,77 @@ state and before any path is used; it also `mkdir`s every output directory.
 
 **Analysis half (`src/analysis/`)** — `main.py::DataAnalysisRunner` orchestrates
 one subIFG file: resolve paths → load subIFG/FSD/log/exp-params (`io.py`) →
-baseline + multi-peak Voigt fit (`spectral_fitting.py`) → **compute phase** of
-pure DataFrame builders → **I/O phase** of `save_*` calls (`output.py`) →
-kinetics (`kinetics_fitting.py`). That compute/I/O split in `run_spectral_fit` is
-deliberate; keep new work on the correct side of it.
+anchored two-segment baseline (`baseline.py`, yaml `voigt_fit.baseline_recipe`) +
+multi-peak Voigt fit (`spectral_fitting.py`, `least_squares`) → **compute phase** of
+pure DataFrame builders → **I/O phase** of `save_*` calls (`output.py`). Kinetics
+(`classification.py`, `segments.py`, models in `kinetics_fitting.py`) run in between,
+through `output.compute_kinetics_outputs`. That compute/I/O split in
+`run_spectral_fit` is deliberate; keep new work on the correct side of it. Since
+2026-10-09, live runs the offline defaults (`docs/spec-live-migration.md`).
+**Live and `_reprocess` don't start fits the same way.** Live starts every
+spectrum from the yaml rule values. `_reprocess` (formerly `_reprocess-v2`) started
+from each file's old live fit. Areas can differ by several percent (see the warning at the top of that spec,
+and O7: a full refit with rule-value starts is pending).
 
 Files carry state between steps. `*_CarbonylPeakFitParams.csv` is appended to on
 every fit and re-read as the fit history; cumulative peak areas are recomputed
-from that whole history, and `*_CarbonylPeakArea.csv` is re-read to carry prior
-kinetics results forward. Deleting or reformatting those CSVs mid-run corrupts
-the run.
+from that whole history. Deleting or reformatting it mid-run corrupts the run, and
+so does a params CSV mixing the old 18-peak and the 24-peak rows (switch between
+measurements). A spectrum the skip detector finds no peak in is not fitted and gets
+area 0 (`peak_analysis`), so fitted noise cannot build up a false cumulative area.
 
-**Real-time vs. batch kinetics.** `append_fit_results(..., latest_only=True)` is
-the live path: only the newest time point per peak group is fitted and earlier
-kinetics rows are merged in from the saved CSV. `latest_only=False` (via
-`run_kinetics_fit`) refits everything from scratch. Both must produce the same
-column set.
+**Kinetics: recomputed whole, every spectrum.** After each fit,
+`compute_kinetics_outputs` classifies and segment-fits the whole trajectory so far
+and rewrites three files: `*_CarbonylPeakArea.csv` (areas, with `classification`,
+`growth_onset_s`, `latch_time_s` on `cluster_sum` rows; no per-row pfo columns),
+`*_CarbonylKineticParams.csv` (one row per peak and segment) and
+`*_CarbonylKineticFeatures.csv` (one row). Nothing is carried over from earlier
+output. The label is causal, so earlier rows keep theirs; the segments use the label
+so far, so they are provisional until the run ends. The batch entry point
+`run_kinetics_fit` runs the same computation.
 
 **Two kinetics implementations exist — check which one you are editing.**
-`src/analysis/kinetics_fitting.py` is the live/real-time implementation used by
-the server pipeline. `src/utils/kinetics/` is a parallel class-based implementation
-used for offline reprocessing (`MODELS` / `WRITER`, wired together at
-the bottom of `writer.py`):
-- `models.py`: PFO/secondary-PFO.
+`src/analysis/` is the live implementation used by the server pipeline.
+`src/utils/kinetics/` is a parallel class-based implementation used for offline
+reprocessing (`MODELS` / `WRITER`, wired together at the bottom of `writer.py`):
+- `models.py`: PFO/secondary-PFO/exp_decay.
 - `classification.py`: the `classify_nucleation` detector plus the causal `latch_sweep`.
-- `writer.py`: `REGIME_MODELS` and the per-measurement classify/fit/write.
+- `segments.py`: segment planning and fits (the `fit_cli` default).
+- `writer.py`: `REGIME_MODELS` (the rolling mode) and the per-measurement classify/fit/write.
 - `timeline.py` / `areas.py`: params → area CSVs.
 
-The offline models duplicate live's, and are verified bit-identical against
-`append_fit_results(latest_only=False)` (see `src/utils/kinetics/spec.md`). The
-offline side differs by design in four ways:
-- groups come from `ir_fitting.fit`;
-- the label is causal;
-- time comes from the subIFG log;
-- the classifier is the Peak_1988 detector (yaml
-  `kinetics_reprocess_classification`), while live reads `kinetics_classification`. A change
-to model behavior usually has to land in both, or the two paths silently disagree.
-Porting a validated offline classifier into the live path is separate, future,
-out-of-scope work (`docs/spec_nuc-clf.md` §8). Do not do it as a side effect of
-editing one side.
+Live's classifier, segments and models are ports of the offline ones and are verified
+identical on the reprocessed areas: classification on 299/299 files, segment params
+to ≤ 1e-9 apart from ODE-timeout noise (`docs/spec-live-migration.md` §4). The two
+sides still differ by design in three ways:
+- live reads its own yaml copies: `voigt_fit` (offline `ir_fitting.fit`),
+  `kinetics_classification` and `kinetics_segments` (offline
+  `kinetics_reprocess_*`);
+- time is a running sum of params-row `Time_Delta` in live, and comes from the subIFG
+  log offline;
+- live labels and segments the trajectory so far, while offline segments use the final label.
+
+A change to model, classifier or segment behavior has to land in both, or the two
+paths silently disagree.
 
 **Models.** Cluster peaks get PFO `q(t) = q_0 + q_e(1 - exp(-k t))`; monomer peaks
-get a coupled-ODE secondary PFO solved with `solve_ivp`. Peak membership is not
-hardcoded. Live `_get_peak_names` reads `voigt_fit.cluster_peaks_base` /
-`monomer_peaks_base`; offline `utils.group_peak_names` reads the `ir_fitting.fit` groups.
+get a coupled-ODE secondary PFO solved with `solve_ivp`; discontinuous monomer
+depletion gets `exp_decay`. Each segment's clock starts at its first row
+(`t_ref_s`). Peak membership is not hardcoded. Live `_get_peak_names` reads
+`voigt_fit.cluster_peaks_base` / `monomer_peaks_base`; offline
+`utils.group_peak_names` reads the `ir_fitting.fit` groups, which have the same values.
 Both apply the isotope shift. `monomer_sum` / `cluster_sum` rows are summed per
 `(Time, Delta_Group, File)`. Trajectories are then fitted per `Peak_Name`, with all
 `Delta_Group` rows interleaved in time.
 
-**Classification.** Live `classify_trajectory` labels the `cluster_sum` trajectory
-`continuous` or `discontinuous` by finding a flat window followed by a sustained
-rise; a discontinuous trajectory also gets `pre_`/`post_` breakpoint PFO fits around
-`growth_onset_s`. Offline uses a different detector, `classify_nucleation`
-(`src/utils/kinetics/classification.py`), built for the refit areas. It watches
-Peak_1988 per `Delta_Group`, and fires on a windowed rise above a zero-clamped floor,
-gated on `monomer_sum > 0` and a minimum prefix amplitude. Its parameters are in the
-yaml `kinetics_reprocess_classification` block. It labels causally: `latch_sweep`
-sweeps growing prefixes and latches `discontinuous` after 3 consecutive fires. The
-label is written on `cluster_sum` rows with `latch_time_s` (the latch time) and
-`growth_onset_s` (`growth_onset`, the earlier pooled-Peak_1988 onset), and there
-are no `pre_`/`post_` columns.
+**Classification.** `classify_nucleation` (live `src/analysis/classification.py`,
+offline `src/utils/kinetics/classification.py`) watches Peak_1988 per `Delta_Group`.
+It fires on a windowed rise above a zero-clamped floor, gated on `monomer_sum > 0`
+and a minimum prefix amplitude. It labels causally: `latch_sweep` sweeps growing
+prefixes and latches `discontinuous` after 3 consecutive fires. The label is written
+on `cluster_sum` rows with `latch_time_s` (the latch time) and `growth_onset_s`
+(`growth_onset`, the earlier pooled-Peak_1988 onset). There are no `pre_`/`post_`
+columns. It scores 287/289 against `ground_truth.json`.
 
 ### Configuration
 

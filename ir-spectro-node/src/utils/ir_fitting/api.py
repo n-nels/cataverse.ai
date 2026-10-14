@@ -25,7 +25,9 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from fnmatch import fnmatchcase
+from functools import partial
 from pathlib import Path
+
 
 path = Path(__file__).resolve().parents[3]
 if str(path) not in sys.path:
@@ -229,6 +231,7 @@ def fit_file(
     log_file: bool = True,
     file_keys: Sequence[str] | None = None,
     on_file: FileCallback | None = None,
+    fsd_snap: bool = False,
 ) -> MeasurementFitResult:
     """Refit every configured peak for one measurement.
 
@@ -260,6 +263,9 @@ def fit_file(
         on_file: Called after each file is fitted, before the next one starts,
             e.g. to write its figure while the run is still going. An exception
             it raises is logged and does not stop the fit.
+        fsd_snap: Center each peak's window on an FSD peak within 5 cm-1
+            (``voigt.snap_peaks``). Off by default; untested
+            (docs/spec-live-migration.md O1).
 
     Returns:
         MeasurementFitResult with per-file curves, rows and output paths.
@@ -270,9 +276,11 @@ def fit_file(
     folder_name, file_name, source_dir = _resolve_measurement(measurement)
     with _run_log(folder_name, output_folder, enabled=save and log_file) as log_path:
         if log_path is not None:
-            _log_run_header(folder_name, [file_name], baseline, variant, output_folder)
+            _log_run_header(
+                folder_name, [file_name], baseline, variant, output_folder, fsd_snap
+            )
         result = _run_measurement(
-            fit_subifg_file,
+            partial(fit_subifg_file, fsd_snap=fsd_snap),
             folder_name,
             file_name,
             source_dir,
@@ -363,7 +371,14 @@ def _run_measurement(
             continue
         result.files.append(file_result)
         result.warnings.extend(file_result.warnings)
-        if file_result.rows:
+        if file_result.skipped:
+            LOGGER.info(
+                "%s %s: no peaks found, not fitted (area 0) %.1fs",
+                file_name,
+                file_result.file_key,
+                time.perf_counter() - started,
+            )
+        elif file_result.rows:
             LOGGER.info(
                 "%s %s: %s nfev=%d seeded=%d nudged=%d clipped=%d %.1fs",
                 file_name,
@@ -583,6 +598,7 @@ def _log_run_header(
     baseline: str,
     variant: BaselineVariant | None,
     output_folder: str,
+    fsd_snap: bool = False,
 ) -> None:
     """Record what this run was, so a log read the next morning stands alone."""
     fit_settings = ir_config.get_fit_settings()
@@ -598,6 +614,11 @@ def _log_run_header(
         LOGGER.info("baseline: saved *_CarbonylFitBaseline.csv")
     LOGGER.info("optimizer: %s, seed nudge %.2g of range", FIT_METHOD, SEED_NUDGE_FRAC)
     LOGGER.info("peaks (%d): %s", len(peaks), " ".join(str(peak) for peak in peaks))
+    LOGGER.info(
+        "skip detector: %s; FSD snapping: %s",
+        fit_settings.get("find_peaks", {}).get("subifg", {}),
+        "on" if fsd_snap else "off",
+    )
 
 
 def _log_warning_summary(result: MeasurementFitResult) -> None:
@@ -624,6 +645,7 @@ def fit_folder(
     save: bool = True,
     measurements: Sequence[str] | None = None,
     file_keys: Sequence[str] | None = None,
+    fsd_snap: bool = False,
 ) -> BatchFitResult:
     """Refit the measurements of a subIFG dataset folder.
 
@@ -651,7 +673,9 @@ def fit_folder(
     with _run_log(folder_path.name, output_folder, enabled=save) as log_path:
         batch.log_path = log_path
         if save:
-            _log_run_header(folder_path.name, names, baseline, variant, output_folder)
+            _log_run_header(
+                folder_path.name, names, baseline, variant, output_folder, fsd_snap
+            )
         for index, base_name in enumerate(names, start=1):
             LOGGER.info("measurement %d/%d: %s", index, len(names), base_name)
             try:
@@ -664,6 +688,7 @@ def fit_folder(
                         save=save,
                         log_file=False,
                         file_keys=file_keys,
+                        fsd_snap=fsd_snap,
                     )
                 )
             except Exception:  # one bad measurement must not stop the batch
@@ -703,6 +728,7 @@ def fit_files(
     save: bool = True,
     on_file: FileCallback | None = None,
     workers: int = 1,
+    fsd_snap: bool = False,
 ) -> BatchFitResult:
     """Refit an explicit list of subIFG files from one dataset folder.
 
@@ -736,11 +762,14 @@ def fit_files(
         save=save,
         log_file=False,
         on_file=on_file,
+        fsd_snap=fsd_snap,
     )
     with _run_log(folder_path.name, output_folder, enabled=save) as log_path:
         batch.log_path = log_path
         if save:
-            _log_run_header(folder_path.name, names, baseline, variant, output_folder)
+            _log_run_header(
+                folder_path.name, names, baseline, variant, output_folder, fsd_snap
+            )
             LOGGER.info("files (%d): %s", len(files), " ".join(sorted(map(str, files))))
         if n_workers == 1:
             for index, base_name in enumerate(names, start=1):
@@ -813,6 +842,7 @@ def _fit_parallel(
     finally:
         listener.stop()
     return sorted(results, key=lambda item: item.file_name)
+
 
 if __name__ == "__main__":
     # Edit the constants below, then run:

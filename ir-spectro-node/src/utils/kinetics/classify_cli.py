@@ -7,8 +7,8 @@ Two modes:
   ``growth_onset_s`` (the growth onset, ``classification.growth_onset``)
   and ``latch_time_s`` (the latch time) on the ``cluster_sum`` rows. No kinetic
   fits; for those use ``scripts\\run_kinetics_fit.py``. Inputs are
-  ``<dataset>/<input-subfolder>/`` (default ``_reprocess``), output goes to
-  ``<dataset>/<input-subfolder>/<output-folder>/``.
+  ``<dataset>/<input-subfolder>/`` (default ``_reprocess``), and the output
+  is written back into it (``--output-folder`` defaults to ``_reprocess``).
 - **validate** (``--validate``): score the detector against
   ``ground_truth.json`` (``validation.py``), e.g. after retuning it.
   ``--validate-spikes`` scores the cluster_sum spike detector
@@ -23,7 +23,7 @@ Usage:
     python scripts\\run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004
     python scripts\\run_kinetics_classification.py --folder "*"
     python scripts\\run_kinetics_classification.py --folder nn1120-3_pd_ceo2_004 --measurements 20260506_052154_pd_ceo2_004-019
-    python scripts\\run_kinetics_classification.py --validate --input-subfolder _reprocess
+    python scripts\\run_kinetics_classification.py --validate
     python scripts\\run_kinetics_classification.py --validate-spikes
 """
 
@@ -41,8 +41,9 @@ from src.utils.kinetics import api, validation
 from src.utils.kinetics.result_types import FitRunResult
 from src.utils.kinetics.writer import SEARCH_ROOT
 
-DEFAULT_OUTPUT_FOLDER = "_test_classification"
-"""Not ``_test``: that is where ``run_kinetics_fit.py`` writes fitted CSVs."""
+DEFAULT_INPUT_SUBFOLDER = "_reprocess"
+DEFAULT_OUTPUT_FOLDER = "_reprocess"
+"""In place: the input folder has this name (see ``utils.resolve_output_dir``)."""
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -82,14 +83,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--input-subfolder",
-        default=None,
-        help="Read area CSVs from <folder>/<input-subfolder>/ (default: _reprocess "
-        "with --folder; the live dataset folder with --validate).",
+        default=DEFAULT_INPUT_SUBFOLDER,
+        help="Read area CSVs from <folder>/<input-subfolder>/ (default: %(default)s). "
+        'Pass "" to read the live dataset folder.',
     )
     parser.add_argument(
         "--output-folder",
         default=DEFAULT_OUTPUT_FOLDER,
-        help="Output subfolder next to the input CSVs (default: %(default)s).",
+        help="Output folder: the input folder itself when it has this name, "
+        "otherwise a subfolder of it (default: %(default)s).",
     )
     parser.add_argument(
         "--folders",
@@ -111,7 +113,7 @@ def _resolve_folders(patterns: list[str], input_subfolder: str) -> list[str]:
 
     A plain name is taken as given (``process_folder`` reports it if empty);
     a glob keeps only folders that have ``input_subfolder``, so ``"*"`` skips
-    e.g. ``_test``. Raises ``ValueError`` for a glob that matches nothing.
+    e.g. live-only folders. Raises ``ValueError`` for a glob that matches nothing.
     """
     names: list[str] = []
     for pattern in patterns:
@@ -169,7 +171,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.validate_spikes:
         validation.print_spike_summary(
             validation.run_spike_validation(
-                input_subfolder=args.input_subfolder or "_reprocess",
+                input_subfolder=args.input_subfolder,
                 folders=args.folders,
             )
         )
@@ -189,7 +191,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Wrote {result.output_path}")
         return
 
-    input_subfolder = args.input_subfolder or "_reprocess"
+    input_subfolder = args.input_subfolder
     try:
         folders = _resolve_folders(args.folder, input_subfolder)
     except ValueError as exc:

@@ -21,6 +21,7 @@ path = Path(__file__).resolve().parents[3]
 if str(path) not in sys.path:
     sys.path.append(str(path))
 
+from src.core import config
 from src.utils.ir_fitting import config as ir_config
 from src.utils.ir_fitting.baseline import (
     DEFAULT_WINDOW,
@@ -29,10 +30,13 @@ from src.utils.ir_fitting.baseline import (
 from src.utils.ir_fitting.result_types import FileFitResult, PeakCurve
 from src.utils.ir_fitting.voigt import (
     add_params,
+    find_fsd_peaks,
     get_shifted_rules,
+    has_peaks,
     manually_skip_files,
     peak_fit,
     select_param_rule,
+    snap_peaks,
     voigt_fwhm,
     voigt_model,
 )
@@ -98,6 +102,28 @@ def load_subifg_roi(
         raise ValueError(
             f"No subIFG data in {low:.0f}-{high:.0f} cm-1 for {subifg_path}"
         )
+    return np.asarray(roi.values, dtype=float)
+
+
+def load_fsd_roi(subifg_path: Path) -> np.ndarray:
+    """Load the FSD spectrum live pairs with a subIFG file, clipped to the ROI.
+
+    Same path as ``src/analysis/main.py::_resolve_paths``:
+    ``<fsd_output>\\<dataset>\\<base name>.<index>`` (no delta group).
+    """
+    base_name = "_".join(subifg_path.name.split("_")[:-1])
+    file_index = subifg_path.name.split(".")[-1]
+    fsd_path = Path(
+        config.get_path(
+            "utility.subtract_ifg.fsd_output",
+            subifg_path.parent.name,
+            f"{base_name}.{file_index}",
+        )
+    )
+    df = pd.read_csv(fsd_path, header=None)
+    roi = df.loc[(df[0] >= ROI_MIN_CM1) & (df[0] <= ROI_MAX_CM1)]
+    if roi.empty:
+        raise ValueError(f"No FSD data in {ROI_MIN_CM1:.0f}-{ROI_MAX_CM1:.0f} cm-1 for {fsd_path}")
     return np.asarray(roi.values, dtype=float)
 
 
@@ -311,16 +337,23 @@ def fit_subifg_file(
     fit_settings: dict,
     baseline: str = "recompute",
     variant: BaselineVariant | None = None,
+    fsd_snap: bool = False,
 ) -> FileFitResult | None:
     """Refit every configured peak for one subIFG file.
 
     Returns ``None`` when the file is skipped by ``manually_skip_files``, so
     offline coverage matches the live path exactly.
 
+    When the skip detector (``voigt.has_peaks``) finds no peak in
+    ``raw - baseline``, nothing is fitted: every peak gets live's skip row
+    (shape params NaN, ``Peak_Area`` 0) and the residual is 0, as in live
+    ``peak_analysis``.
+
     Each peak starts from its saved ``(File, Peak_Name)`` row when one exists
     with finite values, else from its rule. Bounds always come from the rule
     around the nominal wavenumber, never around the seed, so centers cannot
-    walk across repeated refits.
+    walk across repeated refits. ``fsd_snap`` (opt-in, untested) instead
+    centers each window on an FSD peak within 5 cm-1 (``voigt.snap_peaks``).
     """
     file_key = file_key_for(subifg_path)
     delta_group, file_index = split_file_key(file_key)
@@ -345,16 +378,49 @@ def fit_subifg_file(
     corrected = intensity - baseline_values
 
     df_file_params = _file_rows(df_saved_params, file_key)
-    seeds = saved_seeds(df_file_params)
-
     peaks = ir_config.get_peaks(fit_settings)
+    data_integral, time_delta = _carry_file_columns(df_file_params)
+    find_peaks_settings = fit_settings.get("find_peaks", {})
+
+    if not has_peaks(corrected, find_peaks_settings.get("subifg", {})):
+        warnings.append(f"{file_key}: no peaks found; not fitted, area 0")
+        return FileFitResult(
+            file_key=file_key,
+            delta_group=delta_group,
+            subifg_path=subifg_path,
+            wavenumbers=wavenumbers,
+            raw=intensity,
+            baseline=baseline_values,
+            corrected=corrected,
+            composite=np.zeros_like(wavenumbers),
+            residual=np.zeros_like(wavenumbers),
+            rows=skipped_rows(file_key, peaks, data_integral, time_delta),
+            warnings=warnings,
+            baseline_source=baseline_source,
+            skipped=True,
+        )
+
+    seeds = saved_seeds(df_file_params)
     rules = _rules_for(peaks, fit_settings, warnings)
+
+    centers: list[float | None] = [None] * len(peaks)
+    if fsd_snap:
+        fsd_wavenumbers = find_fsd_peaks(
+            load_fsd_roi(subifg_path),
+            ir_config.get_baseline_settings(fit_settings),
+            find_peaks_settings.get("fsd", {}),
+        )
+        centers = snap_peaks(peaks, fsd_wavenumbers)
 
     fit_params = Parameters()
     n_clipped = n_nudged = 0
-    for peak in peaks:
+    for peak, center in zip(peaks, centers):
         clipped, nudged = add_params(
-            fit_params, peak, rules[peak], seeds.get(ir_config.peak_name(peak))
+            fit_params,
+            peak,
+            rules[peak],
+            seeds.get(ir_config.peak_name(peak)),
+            center_cm1=center,
         )
         n_clipped += clipped
         n_nudged += nudged
@@ -371,12 +437,14 @@ def fit_subifg_file(
             "are wherever the optimizer stopped"
         )
     fitted = result.params
-    data_integral, time_delta = _carry_file_columns(df_file_params)
 
     curves: list[PeakCurve] = []
     rows: list[dict] = []
     composite = np.zeros_like(wavenumbers)
-    for peak in peaks:
+    for peak, window_center in zip(peaks, centers):
+        # Peak_Value is the center the window was built on: nominal, or the
+        # FSD peak with fsd_snap (live writes its snapped value there).
+        peak_value = float(peak) if window_center is None else float(window_center)
         center = float(fitted[f"center_{peak}"].value)
         amplitude = float(fitted[f"amplitude_{peak}"].value)
         sigma = float(fitted[f"sigma_{peak}"].value)
@@ -395,7 +463,7 @@ def fit_subifg_file(
         curves.append(
             PeakCurve(
                 peak_name=name,
-                peak_value=float(peak),
+                peak_value=peak_value,
                 center=center,
                 amplitude=amplitude,
                 sigma=sigma,
@@ -412,10 +480,10 @@ def fit_subifg_file(
                 "File": file_key,
                 "Delta_Group": delta_group,
                 "Peak_Name": name,
-                # Nominal shifted wavenumber: the live FSD snapping compares
-                # indices against wavenumbers and never matches, so nominal is
-                # what live output holds.
-                "Peak_Value": float(peak),
+                # Nominal unless fsd_snap: live FSD snapping compares indices
+                # against wavenumbers and never matches, so nominal is what
+                # live output holds.
+                "Peak_Value": peak_value,
                 "Data_Integral": data_integral,
                 "Time_Delta (s)": time_delta,
                 "Peak_Area": area,
@@ -506,6 +574,38 @@ def load_subifg_file(
         warnings=warnings,
         baseline_source=baseline_source,
     )
+
+
+def skipped_rows(
+    file_key: str,
+    peaks: list[int],
+    data_integral: float,
+    time_delta: float,
+) -> list[dict]:
+    """Params rows for a file the skip detector did not fit.
+
+    Live ``peak_analysis``'s skip rows: shape parameters NaN, ``Peak_Area`` 0,
+    so the spectrum adds nothing to the cumulative area.
+    """
+    delta_group, _ = split_file_key(file_key)
+    return [
+        {
+            "File": file_key,
+            "Delta_Group": delta_group,
+            "Peak_Name": ir_config.peak_name(peak),
+            "Peak_Value": float(peak),
+            "Data_Integral": data_integral,
+            "Time_Delta (s)": time_delta,
+            "Peak_Area": 0.0,
+            "Center": np.nan,
+            "Amplitude": np.nan,
+            "Sigma": np.nan,
+            "Gamma": np.nan,
+            "Y0": np.nan,
+            "fwhm": np.nan,
+        }
+        for peak in peaks
+    ]
 
 
 def _carry_file_columns(df_file_params: pd.DataFrame) -> tuple[float, float]:

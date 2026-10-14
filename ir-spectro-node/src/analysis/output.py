@@ -8,16 +8,23 @@ This module separates computation from I/O:
 from __future__ import annotations
 
 import os
+import shutil
+import threading
+import time
+from dataclasses import dataclass
 from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 
+from ..core import config
+from .classification import classify_by_time
 from .kinetics_fitting import (
-    append_fit_results,
     build_cluster_sum,
+    classify_area_rows,
     linfunc_no_intercept,
 )
+from .segments import FEATURE_COLUMNS, compute_segment_kinetics
 
 
 def _coerce_df(value: Any) -> pd.DataFrame:
@@ -29,6 +36,37 @@ def _coerce_df(value: Any) -> pd.DataFrame:
     return pd.DataFrame(value)
 
 
+#: os.replace fails on Windows while another process has the target open
+#: (a reader, a backup). Retry this many times, REPLACE_RETRY_S apart.
+REPLACE_RETRIES = 10
+REPLACE_RETRY_S = 0.2
+
+
+def write_csv(df: pd.DataFrame, path: str) -> None:
+    """Write a CSV whole, so no reader or other writer ever sees part of it.
+
+    The data goes to a temp file next to ``path``, which then replaces it. A
+    plain ``to_csv`` truncates and rewrites in place, so two overlapping writers
+    can leave the tail of the longer write after the end of the shorter one: the
+    nn1120-3_003 fragments (docs/spec-live-migration.md O2). If the replace keeps
+    failing, it falls back to the plain write, so the output is never dropped.
+    """
+    tmp_path = f"{path}.tmp-{os.getpid()}-{threading.get_ident()}"
+    df.to_csv(tmp_path, index=False)
+    for _ in range(REPLACE_RETRIES):
+        try:
+            os.replace(tmp_path, path)
+            return
+        except PermissionError:
+            time.sleep(REPLACE_RETRY_S)
+    print(f"Could not replace {path}; writing it in place instead.")
+    df.to_csv(path, index=False)
+    try:
+        os.remove(tmp_path)
+    except OSError:
+        pass
+
+
 def save_data(new_data: pd.DataFrame, file_path: str, axis: int) -> None:
     """Save or append CSV data along the provided axis."""
     if os.path.isfile(file_path):
@@ -36,7 +74,11 @@ def save_data(new_data: pd.DataFrame, file_path: str, axis: int) -> None:
             existing_data = pd.read_csv(file_path, header=0)
         except Exception as e:
             existing_data = pd.DataFrame()
-            print(f"Error reading existing data {file_path}: {e}")
+            # The write below would replace the whole history with the new
+            # rows. Keep the unreadable file so nothing is lost.
+            kept = f"{file_path}.unreadable-{time.strftime('%Y%m%d-%H%M%S')}"
+            shutil.copy2(file_path, kept)
+            print(f"Error reading existing data {file_path}: {e}; kept a copy at {kept}")
         if "Wavenumber (cm-1)" in existing_data.columns:
             new_data = new_data.drop(columns=["Wavenumber (cm-1)"])
         combined_data = cast(
@@ -59,7 +101,7 @@ def save_data(new_data: pd.DataFrame, file_path: str, axis: int) -> None:
     else:
         combined_data = new_data
 
-    combined_data.to_csv(file_path, index=False)
+    write_csv(combined_data, file_path)
 
 
 def compute_peak_parameters_df(
@@ -233,34 +275,79 @@ def compute_cumulative_peak_area_df(
     return df_cumulative_areas
 
 
-def compute_peak_area_with_kinetics_df(
-    df_cumulative_areas: pd.DataFrame,
-    df_prior_kinetics: pd.DataFrame | None = None,
-    *,
-    latest_only: bool = True,
-) -> pd.DataFrame:
-    """Compute peak area DataFrame with kinetics fit results (no file I/O).
+@dataclass
+class KineticsOutputs:
+    """Everything kinetics adds for one measurement (no file I/O)."""
 
-    Parameters
-    ----------
-    df_cumulative_areas : pd.DataFrame
-        Fresh cumulative peak areas (no kinetics columns).
-    df_prior_kinetics : pd.DataFrame | None
-        Previously saved CarbonylPeakArea data containing kinetics
-        columns from earlier runs.  Kinetics rows are carried forward
-        and only the latest time point is re-fitted.
-    latest_only : bool
-        If True (default, real-time mode), only the latest time point
-        is fitted.  If False (batch mode), every time point is fitted.
+    peak_area: pd.DataFrame
+    """The cumulative areas, with ``classification`` / ``growth_onset_s`` /
+    ``latch_time_s`` on the ``cluster_sum`` rows."""
+    kinetic_params: pd.DataFrame
+    """One row per ``(Peak_Name, segment)`` (``segments.PARAMS_COLUMNS``)."""
+    kinetic_features: pd.DataFrame
+    """One row (``segments.FEATURE_COLUMNS``)."""
+
+
+def compute_kinetics_outputs(
+    df_cumulative_areas: pd.DataFrame,
+    measurement: str,
+    *,
+    min_points: int = 4,
+) -> KineticsOutputs:
+    """Classify and segment-fit a measurement's whole trajectory so far.
+
+    Recomputed from scratch on every call, never merged onto earlier output:
+    the nucleation label is causal, so earlier rows keep their labels, while
+    the segment fits use the label so far and are provisional until the run
+    ends (docs/spec-live-migration.md L4). The live and batch paths therefore
+    produce the same output for the same areas.
     """
     if df_cumulative_areas.empty:
-        return cast(pd.DataFrame, df_cumulative_areas)
-    return cast(
-        pd.DataFrame,
-        append_fit_results(
-            df_cumulative_areas, df_prior_kinetics, latest_only=latest_only
-        ),
+        return KineticsOutputs(
+            peak_area=df_cumulative_areas,
+            kinetic_params=pd.DataFrame(),
+            kinetic_features=pd.DataFrame(columns=FEATURE_COLUMNS),
+        )
+    df = df_cumulative_areas.copy()
+    df["Time (s)"] = pd.to_numeric(df["Time (s)"], errors="coerce")
+    df["Cumulative_Peak_Area"] = pd.to_numeric(
+        df["Cumulative_Peak_Area"], errors="coerce"
     )
+    by_time = classify_by_time(df, min_points=min_points)
+    params, features = compute_segment_kinetics(
+        df, measurement, min_points=min_points, by_time=by_time
+    )
+    return KineticsOutputs(
+        peak_area=classify_area_rows(df_cumulative_areas, by_time),
+        kinetic_params=params,
+        kinetic_features=pd.DataFrame([features]).reindex(columns=FEATURE_COLUMNS),
+    )
+
+
+def save_kinetic_params_df(
+    df_kinetic_params: pd.DataFrame,
+    file_name: str,
+    save_dir: str,
+) -> str:
+    """Save the per-segment kinetic params, replacing any earlier file."""
+    suffix = cast(str, config.get_setting("filenames.carbonyl_fit.kinetic_params_suffix"))
+    path = os.path.join(save_dir, f"{file_name}{suffix}")
+    write_csv(df_kinetic_params, path)
+    return path
+
+
+def save_kinetic_features_df(
+    df_kinetic_features: pd.DataFrame,
+    file_name: str,
+    save_dir: str,
+) -> str:
+    """Save the one-row kinetic features, replacing any earlier file."""
+    suffix = cast(
+        str, config.get_setting("filenames.carbonyl_fit.kinetic_features_suffix")
+    )
+    path = os.path.join(save_dir, f"{file_name}{suffix}")
+    write_csv(df_kinetic_features, path)
+    return path
 
 
 def save_peak_area_versus_time_df(
@@ -271,7 +358,7 @@ def save_peak_area_versus_time_df(
     """Save pre-computed peak area versus time DataFrame to CSV."""
     filename = f"{file_name}_CarbonylPeakArea.csv"
     path = os.path.join(save_dir, filename)
-    df_peak_area_output.to_csv(path, index=False)
+    write_csv(df_peak_area_output, path)
     return path
 
 

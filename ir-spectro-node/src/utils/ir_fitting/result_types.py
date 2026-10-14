@@ -99,6 +99,9 @@ class FileFitResult:
     fit_success: bool = True
     """lmfit's ``success``; False when ``leastsq`` hit its evaluation cap."""
 
+    skipped: bool = False
+    """The skip detector found no peak: nothing fitted, every area 0."""
+
     @property
     def new_curves(self) -> list[PeakCurve]:
         """Only the curves for peaks the saved fit did not have."""
@@ -178,9 +181,10 @@ class MeasurementFitResult:
 
     def summary(self) -> str:
         """One-line run summary."""
+        n_skipped = sum(result.skipped for result in self.files)
         return (
-            f"{self.file_name}: {len(self.files)} files, "
-            f"{self.n_fitted} rows fitted, {self.n_clipped} seeds clipped, "
+            f"{self.file_name}: {len(self.files)} files ({n_skipped} with no "
+            f"peaks, area 0), {self.n_fitted} rows written, {self.n_clipped} seeds clipped, "
             f"{len(self.warnings)} warnings"
         )
 
@@ -247,5 +251,5 @@ class BatchFitResult:
         fitted = sum(item.n_fitted for item in self.measurements)
         return (
             f"{self.folder_name}: {len(self.measurements)} measurements, "
-            f"{fitted} rows fitted"
+            f"{fitted} rows written"
         )

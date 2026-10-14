@@ -3,6 +3,12 @@
 
 import os
 os.environ.setdefault("MPLBACKEND", "Agg") # disable tkinter backend for matplotlib
+# One BLAS thread: the 24-peak joint fit is ill-conditioned, and multithreaded
+# BLAS rounding moves it by up to ~1e-3 au per peak area between runs. Pinned,
+# a refit of the same spectrum is reproducible (docs/spec-live-migration.md O3).
+# Must be set before numpy is imported.
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
 from pathlib import Path
 import sys
 

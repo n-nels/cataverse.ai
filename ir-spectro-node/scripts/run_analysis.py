@@ -32,7 +32,7 @@ class KineticFit:
         Workflow:
         - Read a *_CarbonylPeakFitParams.csv file.
         - Compute cumulative peak areas (monomer/cluster sums included).
-        - Append kinetics fits (PFO + biexponential).
+        - Classify nucleation and fit kinetics per segment.
         - Write *_CarbonylPeakArea.csv output.
         """
 
@@ -41,11 +41,19 @@ class KineticFit:
         # sum_peaks = [f"Peak_{peak}" for peak in get_shifted_monomer_peaks(settings)]
         # df_cumulative = compute_cumulative_peak_area_df(df, sum_peaks)
 
-        df_with_kinetics = self.runner.run_kinetics_fit(self.input_path)
-        if df_with_kinetics is None:
+        kinetics = self.runner.run_kinetics_fit(self.input_path)
+        if kinetics is None:
             raise SystemExit("No data returned from kinetics fit.")
-        df_with_kinetics.to_csv(self.output_path, index=False)
+        kinetics.peak_area.to_csv(self.output_path, index=False)
         print(f"Saved: {self.output_path}")
+        # Segment fits and features go next to it, named from output_path.
+        stem = self.output_path.removesuffix("_CarbonylPeakArea.csv").removesuffix(".csv")
+        for suffix, frame in (
+            ("_CarbonylKineticParams.csv", kinetics.kinetic_params),
+            ("_CarbonylKineticFeatures.csv", kinetics.kinetic_features),
+        ):
+            frame.to_csv(stem + suffix, index=False)
+            print(f"Saved: {stem + suffix}")
 
     def run_voigt_fit(self, subifg_file_path: str) -> str | None:
         """Run Voigt profile fitting on a subIFG file (no PFO/secondary kinetics)."""
