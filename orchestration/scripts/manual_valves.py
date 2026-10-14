@@ -33,13 +33,13 @@ if __name__ == "__main__":
 
     # success = valves.write("13CO", 1.0)
 
-    success = valves.write("irCell", 5.0)
+    # success = valves.write("irCell", 1.0)
 
-    # success = valves.write("MassSpec", 1.0)
+    # success = valves.write("13CO", 1.0)
 
-    # success = valves.write("RoughPump", 1.0)
+    success = valves.write("RoughPump", 1.0)
 
-    # success = valves.write("TurboPump", 5.0)
+    # success = valves.write("TurboPump", 1.0)
 
     if success:
         print("Success")
