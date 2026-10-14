@@ -4,8 +4,8 @@ Standalone, no CLI -- edit the constants in ``__main__``. Like
 ``plot_kinetics_fit.py`` but data only: no fits, segments or labels.
 
 Left, stacked on a shared time axis: the pooled ``monomer_sum`` and
-``cluster_sum`` points from ``<data.peak_fit>/<folder>/_reprocess/
-*_CarbonylPeakArea.csv``.
+``cluster_sum`` points from ``<data.peak_fit>/<folder>/*_CarbonylPeakArea.csv``
+(or under ``_reprocess/``, per the yaml ``data.plot_source``).
 
 Right: every ``every_n``-th scan's lgRefl spectrum
 (``utility.subtract_ifg.lg_refl_output``), raw -- no baseline -- and only
@@ -63,9 +63,9 @@ if str(path) not in sys.path:
 from src.core import config
 from src.utils.ir_fitting import config as ir_config
 from src.utils.kinetics.classification import sorted_trajectory
-from src.utils.kinetics.writer import AREA_SUFFIX, SEARCH_ROOT
+from src.utils.kinetics.writer import AREA_SUFFIX
+from src.visualizations._source import source_dir
 
-INPUT_SUBFOLDER = "_reprocess"
 OUTPUT_SUBFOLDER = "scratch_kinetics_spectra"
 OUTPUT_TAG = "_kinetics_spectra"
 HOUR_S = 3600.0
@@ -312,7 +312,7 @@ def run_folder(
     end_h: float | None = None,
 ) -> list[Path]:
     """One figure per area CSV (or only ``measurements``, if given)."""
-    source = SEARCH_ROOT / folder_name / INPUT_SUBFOLDER
+    source = source_dir(folder_name)
     area_files = sorted(source.glob(f"*{AREA_SUFFIX}"))
     if measurements:
         area_files = [

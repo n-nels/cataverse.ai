@@ -23,6 +23,7 @@ if str(path) not in sys.path:
 
 from src.core import config
 from src.utils.kinetics.utils import _KineticUtilities
+from src.visualizations._source import source_dir, source_subfolder
 
 LOGGER = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ def plot_area_vs_time(
             ``None``/``[]`` (no constituent peaks). Default: monomer and cluster,
             all peaks and the sum (plus unknown with ``include_unknown``).
         groups: Which yaml block defines the groups: ``"ir_fitting"`` for the
-            refit (``_reprocess``) CSVs, ``"voigt_fit"`` for live CSVs.
+            refit CSVs, ``"voigt_fit"`` for live CSVs.
     """
     if not csv_path.exists():
         LOGGER.warning("Missing CSV: %s", csv_path)
@@ -179,12 +180,14 @@ def process_all_area_vs_time(
 ) -> None:
     """Plot every ``*_CarbonylPeakArea.csv`` in exactly one folder.
 
-    Reads ``<data.peak_fit>/<folder>/<subfolder>/`` non-recursively (e.g.
-    ``subfolder="_reprocess"``, or ``""`` for live), so live and ``_reprocess``
-    CSVs sharing a name are never mixed. Figures go to
+    Reads ``<data.peak_fit>/<folder>/<subfolder>/`` non-recursively, so
+    root and ``_reprocess`` CSVs sharing a name are never mixed. ``subfolder``
+    defaults to the yaml ``data.plot_source`` (``_source.py``); pass
+    ``"_reprocess"`` or ``""`` to override. Figures go to
     ``<data.figures>/<folder>/plot_area_vs_time/<subfolder>/``.
     """
-    search_dir = Path(config.get_path("data.peak_fit", folder))
+    subfolder = source_subfolder(subfolder)
+    search_dir = source_dir(folder, subfolder)
     figure_dir = Path(
         config.get_path(
             "data.figures",
@@ -193,7 +196,6 @@ def process_all_area_vs_time(
         )
     )
     if subfolder:
-        search_dir = search_dir / subfolder
         figure_dir = figure_dir / subfolder
     if not search_dir.exists():
         LOGGER.warning("Missing folder: %s", search_dir)
@@ -214,7 +216,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     process_all_area_vs_time(
         folder="nn1120-4_pd_ceo2_000",
-        subfolder=None,
+        subfolder=None,  # None: yaml data.plot_source
         include_unknown=False,
         time_unit="s",
         constituents={

@@ -34,6 +34,7 @@ from src.visualizations._axes import (
     as_windows,
     rescale_y_to_window,
 )
+from src.visualizations._source import source_dir
 
 LOGGER = logging.getLogger(__name__)
 
@@ -63,9 +64,7 @@ def _saved_baseline_column(
 ) -> np.ndarray | None:
     """Read one file's column from the dataset's saved baseline CSV."""
     suffix = str(config.get_setting("filenames.carbonyl_fit.baseline_suffix"))
-    csv_path = Path(config.get_path("data.peak_fit", folder_name)) / (
-        f"{file_name}{suffix}"
-    )
+    csv_path = source_dir(folder_name) / f"{file_name}{suffix}"
     if not csv_path.exists():
         return None
     df = pd.read_csv(csv_path)

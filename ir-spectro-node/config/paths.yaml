@@ -29,6 +29,11 @@ data:
   # Directory for log reflectance outputs.
   lg_refl: "C:\\Data\\OpusConvert_lgRfl"
 
+  # Which copy of a dataset the src/visualizations plots read fit outputs from
+  # (src/visualizations/_source.py): "" for the dataset root,
+  # <peak_fit>/<folder>/, or "_reprocess" for <peak_fit>/<folder>/_reprocess/.
+  plot_source: "_reprocess"
+
   # Visualization subfolders (used with data.figures).
   plot_kinetics_fit: "plot_kinetics_fit"
   plot_area_vs_time: "plot_area_vs_time"
