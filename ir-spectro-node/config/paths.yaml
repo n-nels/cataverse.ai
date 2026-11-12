@@ -32,7 +32,7 @@ data:
   # Which copy of a dataset the src/visualizations plots read fit outputs from
   # (src/visualizations/_source.py): "" for the dataset root,
   # <peak_fit>/<folder>/, or "_reprocess" for <peak_fit>/<folder>/_reprocess/.
-  plot_source: "_reprocess"
+  plot_source: ""
 
   # Visualization subfolders (used with data.figures).
   plot_kinetics_fit: "plot_kinetics_fit"
