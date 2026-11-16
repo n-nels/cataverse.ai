@@ -80,6 +80,16 @@ try {
     "machine : $env:COMPUTERNAME" | Tee-Object -FilePath $LogFile -Append
     "" | Tee-Object -FilePath $LogFile -Append
 
+    # Python logging writes INFO lines to stderr. Under Windows PowerShell 5.1,
+    # with "Stop" in force, the first stderr line from a native command is
+    # raised as a terminating NativeCommandError and the run dies with exit 1
+    # before uploading anything. Relax it for this call only; the real result
+    # comes from $LASTEXITCODE. The ForEach turns 5.1's stderr ErrorRecords
+    # back into plain lines so the log doesn't fill with "uv.exe : ..." noise.
+    $ErrorActionPreference = "Continue"
+    & uv @cliArgs 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $LogFile -Append
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = "Stop"
     & uv @cliArgs 2>&1 | Tee-Object -FilePath $LogFile -Append
     $code = $LASTEXITCODE
 
