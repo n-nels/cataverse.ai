@@ -38,10 +38,11 @@ measured fact.
 
 `DELTA_FROM` is the worked example. It is arithmetic on AdsParams properties
 (`delta_ka = source.pfo_sec_k_a - target.pfo_sec_k_a`, and the same for q_e, k_s,
-k_p, q_inf, q0, time_s) with no knowledge-graph input at all. It currently ships
-in `knowledge.cypher` because that is where it happened to get written, not
-because it belongs there. **Moving it to the data side is the first concrete act
-of separation.** `RELATIVE_TO` comes from the same routine and moves with it.
+k_p, q_inf, q0, time_s) with no knowledge-graph input at all. It shipped in
+`knowledge.cypher` because that is where it happened to get written, not because
+it belonged there; it and `RELATIVE_TO` are owned by DATA now. That was the
+first concrete act of separation, and the reason the boundary is enforced by a
+test rather than by intent.
 
 ### Keeping the line from blurring
 
@@ -53,24 +54,26 @@ So: each loader declares the labels and relationship types it owns, and a test
 fails if it writes anything outside that set. Cheap, and it would have caught
 `DELTA_FROM` on the day it was written.
 
-## 3. Current state (as of 2026-09-02)
+## 3. Current state
 
-The pipeline is complete except for its trigger.
+Complete and applied. 3,979 nodes in Aura as of 2026-09-10, rebuilt from S3 by
+one command. What remains is in §7, and only two items there block anything.
 
 | Piece | Where | State |
 |---|---|---|
-| Per-experiment JSON (`material`, `filename_flags`, `pretreatments`, `exp_conditions`) | `orchestration/src/experiments/session.py` | **Done**, and unchanged by this work. `build_exp_params_payload()` assembles it; `_persist_exp_params_json()` writes it beside the experiment. It is the schema of record — see §5a. |
-| Fit results CSV (`*_CarbonylPeakArea.csv`) | `ir-spectro-node`, analysis + file I/O | **Done**, unchanged. Source of every AdsParams property. |
-| Reading both | `data/source.py`, `data/fits.py` | **Done.** Tested against real files from both ends of the dataset. |
-| Assembling the data graph | `data/build.py`, `data/drift.py` | **Done.** Nodes, edges, kinetic chains, and the §11 reference-drift layer. |
-| Assembling the knowledge graph | `knowledge/source.py`, `knowledge/build.py` | **Done 2026-09-02.** Vocabulary from YAML plus the attachment to data — see §5e. |
-| Deterministic node ids | `common/ids.py` | **Done.** Carried over unchanged from the original pipeline, so a rebuild matches the nodes already stored rather than duplicating them. |
-| Dry run | `data/plan.py` | **Done.** Diffs the intended graph against the database, per scope, writing nothing. |
-| Writing to Neo4j | `common/writer.py`, `data/apply.py` | **Done 2026-09-02.** MERGE on the per-label identity property, stamp, then sweep. Replaced the manual Aura CSV import. |
-| Running it unattended | Windows Task Scheduler, `scripts/rebuild.ps1` | **Designed, not deployed.** No trigger and no change to `orchestration/` — see §5f. Blocked on the lab network allowing outbound 7687. |
+| Per-experiment JSON | `orchestration/src/experiments/session.py` | Unchanged by this work, and the schema of record - see §5a. |
+| Fit results CSV | `ir-spectro-node` | Unchanged. Source of every AdsParams property. |
+| Reading the sources | `data/source.py`, `data/fits.py`, `data/store.py` | From the **bucket**, not the share. `--from-share` remains as a fallback. |
+| The data graph | `data/build.py`, `data/drift.py` | Nodes, edges, kinetic chains, reference drift. |
+| The knowledge graph | `knowledge/source.py`, `knowledge/build.py` | Vocabulary, attachment to data, and Level 2 - see §5e and §5g. |
+| Pointers into S3 | `data/pointers.py` | RawFile and SpectrumSeries, their own sweep scope. |
+| Dry run | `data/plan.py` | Per scope, writing nothing. Always run first. |
+| Writing | `common/writer.py`, `data/apply.py` | MERGE on identity, stamp, sweep. |
+| Backing up the share | `backup.py`, `scripts/backup.ps1` | Nightly on the lab PC. |
+| Running the rebuild unattended | `scripts/rebuild.ps1` | **Not scheduled anywhere.** §7.2. |
 
-Source data root is `X:\peakFit\` (share drive), which is why this does not need
-to live in `orchestration/` — see §4.
+The rebuild needs S3 on 443 and Aura on 7687, and no share drive - so it runs
+wherever both are reachable. The lab PC still cannot reach 7687.
 
 ## 4. Placement
 
@@ -290,7 +293,7 @@ which is what allowed the ported scripts to be deleted.
 ### The exclusions are prospective, not cleanup
 
 Built 2026-09-02. Nothing out of scope is in the graph today - zero `iso`
-experiments, zero `_test` files, all 295 Filenames are `exp_type: adsorption`.
+experiments, zero `_test` files, every Filename is `exp_type: adsorption`.
 That is not because the rules were enforced; it is because `md_to_json.py` only
 ever produced JSON for in-scope experiments, so the scope was implicit in which
 files existed.
@@ -313,43 +316,30 @@ earlier in `dashboard-node/spec.md` as a probable mislabel and never resolved.
 It is now a checkable invariant rather than an observation, and the rebuild
 should assert it. *Owner: Nick — decide whether the flag or the edge is wrong.*
 
-## 5d. First live rebuild — 2026-09-02
+## 5d. Standing procedure for a rebuild
 
-Ran twice. Both runs wrote every data node and deleted nothing.
+The first live rebuild ran 2026-09-02 and took the data graph from 1,840 nodes
+to 2,179, deleting nothing. Current counts are in §3; the before/after is not
+worth keeping.
 
-| | Before | After |
-|---|---|---|
-| Pretreatment | 1,107 | 1,297 |
-| Filename | 249 | 295 |
-| ExpConditions | 238 | 294 |
-| AdsParams | 238 | 283 |
-| KineticChain | 6 | 7 |
-| Material | 2 | 3 |
-| **Total data nodes** | 1,840 | **2,179** |
+**One lesson from it is.** It ran twice, because the first run had a bug:
+`_as_float` coerced `step_index` to `1.0`, which disagreed with the `order`
+property on its own `HAS_STEP` edge and made the dashboard render "step 1.0".
+The fix was one line in `source.py` and a re-run - the database was never edited
+by hand. That is the argument for rebuild over append, exercised on day one, and
+it is why `INTEGER_FIELDS` exists.
 
-Everything §5a and §5b predicted happened: `pressure_meas_g1`/`g2` gone and
-`mfld`/`cell` in their place, the hollow Pretreatment filled in, `is_reference`
-corrected, four months of missing experiments loaded, the third material
-appearing, and six uniqueness constraints created. Knowledge nodes were
-untouched — 35 before, 35 after — so the ownership boundary held under a real
-write.
+The procedure, which has not changed:
 
-**The second run existed because the first had a bug**, and that is the part
-worth remembering. `_as_float` coerced `step_index` to `1.0`, leaving it
-disagreeing with the `order` property on its own `HAS_STEP` edge and making the
-dashboard render "step 1.0". Nothing broke functionally; Cypher compares across
-numeric types. The fix was a one-line change in `source.py` plus a re-run — the
-database was never edited by hand. That is the whole argument for rebuild over
-append, exercised for real on the first day.
-
-### Standing procedure
-
-1. Dry run first, every time. Read the delete column.
-2. `--source-root` must cover the whole of `X:\peakFit`. A subset means the
-   sweep deletes everything the subset does not account for. The 20% guard is a
-   backstop for that mistake, not a substitute for reading the plan.
-3. Verify after. The single most useful check is that `_run` has exactly one
-   distinct value covering every data node - two values means a partial write.
+1. **Dry run first, every time.** Read the delete column.
+2. **The source must be complete.** A partial source means the sweep deletes
+   everything it does not account for. Reading from the bucket makes this
+   harder to get wrong than a `--source-root` subset did, and two guards back
+   it up - the 20% mass-deletion threshold and the unreadable-source threshold
+   (§5g) - but neither is a substitute for reading the plan.
+3. **Verify after.** The single most useful check is that `_run` has exactly one
+   distinct value across every node in a scope. Two values means a partial
+   write.
 
 ## 5e. Knowledge graph port — 2026-09-02
 
@@ -378,7 +368,7 @@ id. Knowledge edges attach to data nodes, so the nodes must exist first.
 
 | | |
 |---|---|
-| Run stamps | One value across 2,179 data and 35 knowledge nodes |
+| Run stamps | One value across every node in a scope |
 | Vocabulary | Reproduces the stored graph exactly: 15/8/5/1/6 nodes, SUBTYPE_OF 8, PARAMETER_OF 6, IMPLEMENTS 12, USES_SPECIES 12 |
 | Pretreatment concepts | 1,297 / 1,297 — the 190-node gap closed |
 | AdsParams `FIT_BY` | 283 / 283 |
@@ -402,11 +392,17 @@ per ExpConditions node - reads as a gap and is not one.
 Decided 2026-09-02. Written up for the machine it runs on in
 [SCHEDULING.md](SCHEDULING.md).
 
-**There is no trigger.** A rebuild reads the share drive and works out what
-changed by comparing; it does not need telling that an experiment finished. So
-Windows Task Scheduler runs it every six hours and `orchestration/` is
-untouched. The lab PC's experiment code keeps knowing nothing about Neo4j, and
-no database problem can reach a running experiment.
+**There is no trigger.** A rebuild enumerates its sources and works out what
+changed by comparing; it does not need telling that an experiment finished. So a
+scheduled run suffices and `orchestration/` is untouched. The lab PC's
+experiment code keeps knowing nothing about Neo4j, and no database problem can
+reach a running experiment.
+
+Two things have changed since this was decided and neither undoes it. The
+sources are now the S3 bucket rather than the share (§5g), so the rebuild no
+longer needs a mapped drive. And **it is still not scheduled anywhere** - see
+§7.2. The argument for scheduling over triggering stands; the scheduling has not
+happened.
 
 Nick's instinct was to trigger from `finalize()` in `orchestration/adsorption.py`
 — which is where the `_expParams.json` is copied to the share drive, so it is
@@ -436,7 +432,7 @@ Two lasting consequences:
   the host must be a machine with both share-drive access and that egress. As
   of 2026-09-02 the lab PC has the first and not the second.
 
-## 5g. Raw data on S3 (design 2026-09-02; backup built and run 2026-09-05)
+## 5g. Raw data on S3
 
 ### The decision
 
@@ -570,6 +566,33 @@ each spectrum's timestamp, parsed from `OpusReadParams/<base>.txt`. The dashboar
 fetches it first, to know what exists before requesting any spectra. **Not built**
 - it belongs to the graph-pointer work below, not to the backup.
 
+### The pressure log
+
+**It is its own instrument stream.** The transducers log continuously and
+independently; nothing in this file comes from the IR pipeline that produces the
+`Carbonyl*` CSVs. It shares only the experiment it belongs to and the
+`base_name` convention that names it. That is why it is its own `DataFileType`
+rather than another product of the peak fit - worth remembering when reading the
+`kind` list on `RawFile`, where it sits beside five files that *are* peak-fit
+output.
+
+All logs live under `pressureData/`, one per run, and the loader reads nowhere
+else. Not every run has one: of 34 runs with spectra on the sample checked, 31
+had a log.
+
+**Runs last days, and the graph holds only the start.** `ExpConditions` carries
+the pressure from `_expParams.json`, which is the value at the beginning; the
+log is a multi-day trace sampled about every 5 seconds. A setpoint and a trace
+are not two representations of one thing, which is the whole reason this is
+modelled separately.
+
+**One consequence for plotting.** The three derived columns are recomputed from
+`p_mfld` on every row, so they carry nothing it does not and can be downsampled
+hard. `p_cell` cannot - it is the finest-grained column in the file.
+
+Columns, units and roles are in `knowledge/data_file_types.yaml`, which is what
+the graph is built from. They are not repeated here.
+
 ### Graph additions — the schema
 
 Pointers and descriptions. No file contents enter the graph.
@@ -596,17 +619,24 @@ of files; it can follow later without changing Level 1.
 
     -[:HAS_SPECTRA]-->   (:SpectrumSeries)
                              base_name      identity property
-                             prefix         "spectra/<base_name>/"
-                             index_key      "spectra/<base_name>/index.json"
+                             prefix         "OpusConvert_lgRfl/<folder>/<base_name>."
+                             index_key      "OpusConvert_lgRfl/<folder>/<base_name>.index.json"
                              count          number of spectra
-                             first_at       timestamp of the first spectrum
-                             last_at        timestamp of the last
                              bytes          total across the series
 ```
 
 Roughly 1,400 `RawFile` nodes (five CSV kinds plus pressure logs across ~285
 experiments) and ~300 `SpectrumSeries`, so about 1,700 new nodes. Aura Free
-allows 200,000 and 2,214 are in use.
+allows 200,000, which is far more headroom than this will use.
+
+`prefix` is a *filename* prefix, not a folder. One notebook folder holds every
+experiment for that sample - 5,729 spectra across 35 `base_name`s in the one
+checked - so the spectra for a single run are selected by
+`ListObjectsV2 Prefix=OpusConvert_lgRfl/<folder>/<base_name>.` rather than by
+listing a directory. This is a direct cost of mirroring the share: the old
+`spectra/<base_name>/` scheme gave each run its own clean folder. S3 prefixes
+are plain string matches, so it works, but the graph must now store the notebook
+folder instead of deriving the key from `base_name`.
 
 **One node per spectrum *series*, not per spectrum.** 130 spectra x ~300
 experiments would be 39,000 nodes to describe files nothing queries
@@ -615,6 +645,38 @@ node points at the prefix; `index.json` in S3 carries the per-file detail.
 
 `kind` is doing real work here: it is what lets a query ask "which experiments
 have a residual file" without opening anything.
+
+#### Level 1, built - `data/pointers.py`
+
+Built from a bucket listing, not from the share, so a pointer cannot promise a
+file that was never uploaded - which is also why reconciling S3 against the
+graph is not a job that needs doing. It opens no object, so `ListBucket` is
+enough.
+
+**A third scope, `POINTERS`, and the sweep is the reason.** A pointer run writes
+no Material, Filename or Pretreatment, so if those labels were in its scope the
+first run from a machine without the share would find every one of them
+unstamped and delete the lot. Splitting the scope means each sweep can only
+reach what its own loader wrote. It is the same provenance rule as everywhere
+else: DATA from the share, KNOWLEDGE from YAML, POINTERS from the listing.
+`HAS_RAW_FILE` and `HAS_SPECTRA` start on a `Filename` and end here; POINTERS
+owns them because POINTERS creates them, exactly as KNOWLEDGE owns
+`INSTANCE_OF`.
+
+**`uploaded_at` replaces `source_mtime`.** A listing knows when S3 accepted an
+object, not when the instrument wrote it. Recording `LastModified` under the
+name `source_mtime` would be a different fact wearing the same label.
+
+**`first_at` and `last_at` were dropped, `index_key` kept.** Build nothing the
+agent does not need: the two timestamps would have cost 289 file reads a run to
+store what no query asks for. `index_key` stays because a dashboard needs a file
+list before it can request anything - it is still unbuilt, §7.5.
+
+**Every object is either modelled or reported**, and a test pins it. A file that
+is silently neither is how the two stores drift apart unnoticed. The report also
+names what it skipped, which is how `OpusConvert_lgRfl/.../test.0000` surfaced:
+test data that escaped the `_test` rule, because that rule only examines
+directory names.
 
 #### Level 2 — what is inside the files (knowledge scope)
 
@@ -633,30 +695,69 @@ have a residual file" without opening anything.
 (:DataColumn)-[:MEASURES]-->(:ModelParameter)      already exists, carries definitions
 ```
 
-Six `DataFileType` nodes and perhaps sixty `DataColumn` nodes — they describe
-*formats*, so they do not multiply with experiments.
+The `pressureLog` type can be authored now that a file has been read (see
+"The pressure log, read" above). It is the first concrete instance of this level:
 
-This is what turns "plot the adsorption rate constant over time" into a named
-column in a named file. `ModelParameter` already holds the definition of `k_a`,
-so `MEASURES` connects the column a plot needs to the concept a question uses.
-Without it the agent is pattern-matching on column names.
+```
+(:DataFileType {name: "pressureLog"})
+    row_grain    "one row per 5-second instrument sample"
+    description  "Manifold and cell pressure through the whole run, with
+                  adsorption quantities recomputed at each sample"
 
-**`pressureLog` is its own `DataFileType` - decided 2026-09-05.** The open
-question was whether pressure should instead be read from the `Pretreatment` and
-`ExpConditions` nodes, which already carry it. It should not. Those nodes hold
-the value from `_expParams.json`, which is the pressure *at the start*, and the
-experiments run for days. The log is a time series; the nodes are a single
-setpoint. They are not two representations of one thing, and a question like
-"did pressure drift during the run" is unanswerable from the nodes alone.
+    -[:HAS_COLUMN]--> (:DataColumn)
+        id                          role        units      note
+        pressureLog.timestamp       index       -          absolute, microsecond
+        pressureLog.relative_time_s index       s          since run start
+        pressureLog.p_mfld          measured    Torr       manifold; 65 levels
+        pressureLog.p_cell          measured    Torr       cell; finest column
+        pressureLog.amount_adsorbed derived     umol/g     f(p_mfld)
+        pressureLog.apparent_conversion derived -          f(p_mfld)
+        pressureLog.apparent_coverage   derived -          f(p_mfld)
+```
 
-That makes pressure the one quantity living in both stores without duplication:
-the setpoint in the graph, the trace in S3. It is the same split as `AdsParams`
-holding the final fit row while the CSV holds the fit converging.
+Two things this surfaces about the Level 2 design:
 
-Its `DataColumn` entries have to wait. `pressureData/` was uploaded but never
-opened, and how it relates to `peakFit/<base>_pressureLog.csv` is unestablished -
-they may be the same series at different stages. Level 2 cannot be authored for
-pressure until a real file is read.
+- **`role` needs a fourth value, `derived`.** The vocabulary was
+  `"fitted" | "measured" | "index" | "provenance"`, and none of them fit a column
+  computed per row from another column in the same file. `fitted` would be wrong
+  in a way that matters: nothing here was fitted.
+- **`units` cannot be bluffed.** The file records none, and the two pressure
+  columns only carry `Torr` because Nick said so. Inventing `bar` would have put
+  a wrong number on every future plot axis, and nothing downstream would ever
+  have contradicted it.
+**Authored against every file, not a sample.** `knowledge/data_file_types.yaml`
+is the source; it holds the columns, units, roles and definitions and is not
+repeated here. Two findings from building it shaped the schema above.
+
+**The column set is not fixed, even for the `long` files.** Reading the header
+of all 287 `CarbonylPeakArea` objects found seven distinct shapes, from 22 to 45
+columns: 21 columns appear in every file and 26 do not. So a `DataColumn`
+carries `optional` and `present_in`. An agent that does not know a column may be
+absent writes a plot that works for one experiment and fails on the next.
+
+**Two of the five file types are matrices**, which `HAS_COLUMN` to an enumerated
+list could not express. `CarbonylFitBaseline` and `CarbonylFitResidual` are one
+row per wavenumber and one *column per spectrum*, named `delta<group>.<index>`,
+and the set differs by experiment - 94, 141 and 276 columns seen. Enumerating
+them would put thousands of per-experiment nodes into something meant to
+describe formats. So `DataFileType` carries a `layout`, and a matrix type
+describes its repeating columns by pattern:
+
+```
+(:DataFileType {name: "CarbonylFitResidual", layout: "matrix"})
+    -[:HAS_COLUMN]-->  (:DataColumn {name: "Wavenumber (cm-1)", role: "index"})
+    -[:HAS_COLUMN]-->  (:DataColumn {pattern: "delta<group>.<index>",
+                                     matches: "^delta[0-9]+[.][0-9]+$",
+                                     role: "fitted"})
+```
+
+One `DataColumn` either names a column or matches a family of them. Same label,
+because both answer the same question - what is in this file - and a reader
+should not have to know which kind it is getting.
+
+**`role` gained a fourth value, `derived`:** a column computed per row from
+another column in the same file. `pressureLog` has three. `fitted` would be
+wrong in a way that matters, because nothing was fitted.
 
 **Where each lives.** `RawFile` and `SpectrumSeries` are **data** — derived from
 what is on the share. `DataFileType` and `DataColumn` are **knowledge** —
@@ -666,6 +767,54 @@ boundary exactly as `INSTANCE_OF` already does, so the knowledge loader owns it.
 
 This is also the first real piece of the "context graph" (§2): the join between
 measured data and authored meaning.
+
+#### Built 2026-09-10
+
+`knowledge/data_file_types.yaml`, loaded by the knowledge loader. Against the
+live graph: **5 `DataFileType`, 65 `DataColumn`, 3 `PeakGroup`**, with 65
+`HAS_COLUMN`, 6 `MEASURES`, 6 `HAS_GROUP` and **1,373 `OF_TYPE`** - one for
+every RawFile whose kind is described. Applies cleanly, no deletions.
+
+**A third label the sketch above did not have: `PeakGroup`.** Without it Level 2
+gets an agent as far as `CarbonylPeakArea.Cumulative_Peak_Area` and leaves it
+there, because "the monomer band" is not a column - it is a set of `Peak_Name`
+values, summed. Three nodes carry the sets and both isotope numberings, so a
+question asked in 12CO terms finds the 13CO peaks the data actually holds.
+
+**`role` gained `derived`** and `DataFileType` gained `layout`, as designed
+above. A matrix type's repeating columns are one `DataColumn` carrying a
+`pattern` and a `matches` regex rather than a name.
+
+**The phases were reordered: data, pointers, knowledge.** `OF_TYPE` starts on a
+`RawFile`, so the pointer graph has to exist before the knowledge graph can
+describe what those files are. Knowledge now runs last and receives the labels
+of everything the earlier phases wrote, since its edges reach into both.
+
+Two things are reported rather than dropped, both being ways a join can go
+quietly missing: a `measures` naming a parameter no model defines, and a
+`RawFile` kind no `DataFileType` describes.
+
+#### A second kinetic model - 2026-09-10
+
+`model_parameters.yaml` holds a list of models rather than one. `pfo_secondary`
+stays primary: `FIT_BY` attaches every `AdsParams` to it, because `AdsParams`
+holds the pfo-sec columns and nothing else.
+
+**`pfo` is one model, not two.** The `pfo_*`, `pre_pfo_*` and `post_pfo_*`
+column families carry the same three quantities - `k`, `q_e`, `q_0` - because
+they are the same equation fitted over different windows. Two `KineticModel`
+nodes would mean six `ModelParameter`s behind three physical quantities, and
+"the PFO rate constant" would have two answers. Which window a column came from
+is a `segment` property on the column.
+
+**`measures` is now `model.parameter`.** Parameter names collide across models -
+both have `q_e` - so a bare name cannot say which is meant. A bare name still
+resolves against the primary model, which is what every entry meant before a
+second model existed, and `pfo.k_a` is reported rather than silently resolved:
+`k_a` belongs to `pfo_secondary`.
+
+That takes `MEASURES` from 6 to 15. The seven `pfo_*` columns and the six
+pre/post columns can now be reached from the concept a question names.
 
 #### Identity and ownership
 
@@ -680,6 +829,49 @@ New relationship types: `HAS_RAW_FILE` and `HAS_SPECTRA` in DATA; `OF_TYPE` and
 `HAS_COLUMN` and `MEASURES` in KNOWLEDGE. Both scopes' declarations in
 `common/ownership.py` need updating, and `ids.IDENTITY` gains four labels — the
 existing coverage test fails until they do, which is the intended behaviour.
+
+### S3 is the source of truth - 2026-09-08
+
+The rebuild reads experiments from the bucket, not the share. `--from-share`
+still works, for when S3 is unreachable or to compare the two.
+
+This does **not** unblock the lab PC. The firewall blocks 7687, which is Aura,
+and the rebuild still has to write to Aura. What changed is the *share*
+dependency: a rebuild now needs 443 and 7687 and no mapped drive, so it can run
+on any machine that can reach both - which today means the home PC. The firewall
+request goes from blocking to merely desirable.
+
+**How a deletion reaches the graph.** No new mechanism - mark and sweep did not
+care where the sources came from:
+
+1. Delete the objects in the S3 console.
+2. The next rebuild lists the bucket, does not see them, does not stamp them.
+3. The sweep deletes exactly what is not stamped.
+
+`_expParams.json` is the object that creates a `Filename` node, so that is the
+one whose removal retires an experiment; `DETACH DELETE` takes its
+`Pretreatment`, `ExpConditions`, `AdsParams` and `RawFile` nodes with it.
+Removing a file from `X:` on its own does nothing - the next backup simply does
+not re-upload it and the object stays. That is one deliberate action instead of
+two, and it keeps `DeleteObject` off every programmatic key.
+
+**`data/store.py`** holds the two implementations. Both return the same
+`relative` path shape, so the exclusion rules do not know which they are
+looking at - and a test asserts the two enumerate identically, because a
+difference between them would surface as a sweep rather than as an error.
+
+**A guard the first run earned.** Pointed at S3 with the write-only uploader
+key, all 299 sources failed `GetObject`. Nothing was built, so the plan offered
+to **delete all 2,179 nodes** - and called itself applyable. The sweep's own
+20% threshold would have aborted it, but the dry run had already printed a plan
+worth applying, and that is the failure: a guard behind another guard is not the
+same as one guard.
+
+So `UNREADABLE_SOURCE_THRESHOLD` sits beside `MASS_DELETION_THRESHOLD`. A few
+unreadable files stay a warning - a corrupt file is real and its experiment
+should leave the graph. More than 20% is not a few bad files; it is the source
+itself, and the rebuild refuses rather than treating unread data as deleted
+data.
 
 ### Knowing what is already uploaded
 
@@ -727,6 +919,13 @@ withheld from it so a leaked lab-PC key cannot read the data back.
 Useful accident: **S3 is port 443, which the lab firewall already allows** (§5f).
 Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
+### Housekeeping
+
+- One orphaned object to delete by hand in the S3 console:
+  `peakFit/nn1120-3_pd_ceo2_004/20260522_210041_pd_ceo2_004-024_pressureLog.csv`.
+  The file moved on the share, so the backup re-uploaded it under its new key
+  and neither IAM user can remove the old one.
+
 ### Deferred
 
 - **gzip on upload.** The spectra are text and compress 3-4x, taking the
@@ -740,9 +939,6 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ### Open
 
-- What `pressureData/` actually contains, and how it relates to
-  `peakFit/<base>_pressureLog.csv`. Both are uploaded; neither has been opened.
-  Level 2's pressure columns are blocked on this.
 - Whether Level 2 is authored now, while the file formats are fresh, or when
   the agent work starts. Level 1 does not depend on it.
 
@@ -774,19 +970,120 @@ Uploads work from the lab PC today, even while Bolt on 7687 is blocked.
 
 ## 7. Open questions
 
-1. **Getting the scheduled rebuild running.** Designed and documented (§5f,
-   SCHEDULING.md); blocked on the lab network allowing outbound 7687.
-2. **Noticing if the scheduled task stops.** A job that dies quietly looks
-   exactly like a graph with no new experiments. Every run logs, but nothing
-   watches the logs. No design yet.
-3. ~~Loading the raw data.~~ **Designed 2026-09-02 — see §5g.** Everything
-   bulk goes to AWS S3; the graph gains pointers only. Not built: waiting on the
-   AWS account and bucket.
-4. **Hashing, as a `verify` capability.** Orthogonal to the rebuild (§5), still
-   worth having: storing a source hash on each node would let "is the graph
-   consistent with its sources?" be answered without rebuilding. Computed in
-   `graph-node`, not `orchestration/`, which cannot see the fit CSVs. Deferred
-   by Nick, 2026-09-02.
+Ordered by what actually blocks something. Each says what is missing, what it
+would take, and when it stops being deferrable - so the choice to leave it is a
+choice rather than an oversight.
+
+### 7.1 Presigned URLs - the only item that blocks work
+
+**Missing.** The bucket is private with no public access, deliberately (§5g).
+Nothing outside AWS can read an object. The graph can resolve a question all the
+way to `peakFit/.../x_CarbonylPeakArea.csv` and column `pfo-sec_k_a_s-1`, and
+then nothing can open the file.
+
+**What it takes.** An API route that takes a key, checks the caller is
+authorised, and returns a short-lived signed URL - `generate_presigned_url`,
+minutes not hours. The `cataverse-reader` identity already exists for exactly
+this. An hour or so, most of it deciding where the route lives (`dashboard-node`
+serves the browser; the agent may want its own path).
+
+**When it stops being deferrable.** The moment anything needs a number rather
+than a name. An agent answering "which experiments have a residual file" needs
+nothing; one answering "plot k_a over time" needs this first.
+
+### 7.2 Scheduling the rebuild - degrades quietly
+
+**Missing.** The backup runs nightly on the lab PC. The rebuild runs nowhere on
+a schedule: the lab PC still needs outbound 7687, and the home PC is not
+reliably on. So the graph is a snapshot from whenever it was last run by hand.
+
+**Three ways out**, none blocked on code: get 7687 opened; schedule it on a
+machine that is always on and can reach Aura; or keep running it by hand and
+accept the drift.
+
+**Why this one is worth a reminder.** It is the only item that gets worse while
+nobody is looking, and it fails silently - a month-old graph looks exactly like
+a graph with no new experiments. See 7.3.
+
+### 7.3 Keeping S3 in step with the share - half closed
+
+**Edits now propagate. Deletions still do not, on purpose.**
+
+| Change on the share | Reaches S3? |
+|---|---|
+| New file | Yes |
+| Edited, size changed | Yes |
+| Edited, size unchanged | **Yes, since 2026-09-11** - `modified since upload` |
+| Deleted | No. The object stays and is reported as orphaned. |
+| File moved | Uploaded at the new key; the old one stays as an orphan. |
+
+**What changed.** The backup compares modification time as well as size. A file
+is always written before it is uploaded, so in the normal case its mtime is
+earlier than the object's `LastModified` and nothing happens. A file touched
+afterwards is re-uploaded. Both sides were already free: `stat` is called for
+the size anyway, and the listing already returns `LastModified`.
+
+`UPLOAD_CLOCK_TOLERANCE_S` is 60 seconds, and it is the part worth
+understanding. Without it a machine running a minute fast would find every file
+newer than its upload and re-send the entire share, every night, for ever. A
+minute is far more skew than a domain-joined machine should have and far less
+than the gap between an upload and any real later edit.
+
+An unknown or unparseable upload time is treated as *no change*. Absence of
+evidence is not evidence, and guessing the other way re-uploads everything.
+
+**Still open: deletion**, and deliberately. Closing it means granting
+`DeleteObject` to something, which trades away the property that makes an
+accidental removal upstream recoverable - the case that has already come up
+once. The orphan report names the candidates; removing them is a console
+action, taken on purpose.
+
+**Not closed: content hashing.** mtime catches a file that was written to. It
+does not catch a file whose contents differ with mtime intact, which a restore
+from backup or a careless copy can produce. That needs the hash comparison in
+§7.6.
+
+### 7.4 Noticing when the scheduled task stops
+
+**Missing, no design.** Every run writes a timestamped log to `graph-node\logs\`
+and Task Scheduler records a Last Run Result. Nothing reads either. A job that
+dies is indistinguishable from a quiet week.
+
+Only matters once 7.2 exists. The cheap version is a habit rather than code:
+when cataverse.ai does not show an experiment you know finished, read the newest
+file in `logs\` before suspecting anything else.
+
+### 7.5 `index.json` for spectrum series
+
+**Missing.** `SpectrumSeries.index_key` names an object that does not exist. It
+would hold the per-spectrum timestamps parsed from `OpusReadParams/<base>.txt`,
+so a browser can know what a series contains before fetching 130 spectra.
+
+**What it takes.** Parse 289 `.txt` files, write 289 small JSON objects, one
+extra phase in the rebuild. An hour or two.
+
+**Workable substitute meanwhile:** `ListObjectsV2` with the series prefix
+returns the file list, just without timestamps.
+
+### 7.6 Hashing, as a `verify` capability
+
+Deferred by Nick 2026-09-02 and still sensible. Storing a source hash on each
+node would answer "is the graph consistent with its sources?" without
+rebuilding. Cheaper now than it was: the bucket listing returns an `ETag`, which
+is an MD5 for single-part uploads, so the hash no longer has to be computed.
+
+### 7.7 Small and genuinely optional
+
+- **One orphaned S3 object** to delete by hand in the console:
+  `peakFit/nn1120-3_pd_ceo2_004/20260522_210041_pd_ceo2_004-024_pressureLog.csv`.
+  Its file moved on the share, and no IAM identity here can delete.
+- **`pfo`'s `q_0`** is marked `fitted: false` by analogy with `pfo_secondary`.
+  Unconfirmed.
+- **`ka`/`kd`/`Keq` columns** still exist in 14 files. Recorded under
+  `ignored_columns` in `data_file_types.yaml`; nothing needs doing unless the
+  files are cleaned.
+- **`Cumulative_PdCO_mol`** is calibrated from isotopic exchange "with large
+  error bars" - worth knowing before anyone plots it as absolute truth.
 
 ## 8. Non-goals for now
 

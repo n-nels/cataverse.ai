@@ -127,13 +127,21 @@ class Experiment:
         return self.material.get("mass_g")
 
 
-def load(path: str | Path) -> Experiment:
+def load(path, store=None) -> Experiment:
     """Parse one `_expParams.json`. Raises SourceError if it is unusable."""
-    path = Path(path)
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise SourceError(f"{path.name}: {exc}") from exc
+    if store is not None:
+        name = path.name
+        try:
+            raw = json.loads(store.read_text(path))
+        except Exception as exc:  # noqa: BLE001 - any read failure is a bad source
+            raise SourceError(f"{name}: {exc}") from exc
+    else:
+        path = Path(path)
+        name = path.name
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SourceError(f"{name}: {exc}") from exc
 
     missing = [k for k in REQUIRED_TOP_LEVEL if k not in raw]
     if missing:
@@ -206,13 +214,22 @@ def exclusion_reason(path: Path, root: str | Path) -> str | None:
         relative = Path(path).relative_to(root)
     except ValueError:
         relative = Path(path)
+    return reason_for_relative(relative)
+
+
+def reason_for_relative(relative) -> str | None:
+    """The same rules, against a path already relative to the source root.
+
+    S3 keys are relative by construction, so this is the entry point the bucket
+    store uses. `exclusion_reason` relativises a filesystem path and delegates.
+    """
     for parent in relative.parents:
         if parent.name and TEST_DIRECTORY_MARKER in parent.name.lower():
             return f"under a test directory ({parent.name})"
     # Matches the original rule: a substring check on the base name. Loose
     # enough to catch a sample deliberately named with `iso` in it, which has
     # not happened - no base name in the graph contains it.
-    if ISOTOPIC_MARKER in path.name.lower().removesuffix(SUFFIX.lower()):
+    if ISOTOPIC_MARKER in relative.name.lower().removesuffix(SUFFIX.lower()):
         return "isotopic exchange (not an adsorption experiment)"
     return None
 
@@ -241,13 +258,15 @@ def discover(root: str | Path) -> Discovered:
     whatever its sources do not account for, so a file silently skipped here
     becomes a node silently deleted later.
     """
-    root = Path(root)
-    included: list[Path] = []
-    excluded: list[tuple[Path, str]] = []
-    for path in sorted(root.rglob(f"*{SUFFIX}")):
-        reason = exclusion_reason(path, root)
+    from .store import LocalStore
+
+    store = root if hasattr(root, "find") else LocalStore(root)
+    included = []
+    excluded = []
+    for ref in store.find(SUFFIX):
+        reason = reason_for_relative(ref.relative)
         if reason is None:
-            included.append(path)
+            included.append(ref)
         else:
-            excluded.append((path, reason))
+            excluded.append((ref, reason))
     return Discovered(included=included, excluded=excluded)

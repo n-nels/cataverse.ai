@@ -90,6 +90,8 @@ try {
     & uv @cliArgs 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $LogFile -Append
     $code = $LASTEXITCODE
     $ErrorActionPreference = "Stop"
+    & uv @cliArgs 2>&1 | Tee-Object -FilePath $LogFile -Append
+    $code = $LASTEXITCODE
 
     "" | Tee-Object -FilePath $LogFile -Append
     "finished: $(Get-Date -Format 'u')  exit=$code" | Tee-Object -FilePath $LogFile -Append

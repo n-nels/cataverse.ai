@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -43,6 +44,17 @@ UPLOAD_ROOTS = (
     "OpusReadParams",
     "pressureData",
 )
+
+#: How far a local mtime may exceed an object's upload time before the file is
+#: treated as edited.
+#:
+#: A file is always written before it is uploaded, so in the normal case mtime
+#: is comfortably earlier than LastModified. The tolerance exists for clock
+#: skew between the machine running this and S3: without it, a lab PC running a
+#: minute fast would re-upload the entire share every night, for ever. A minute
+#: is far more skew than a domain-joined machine should have, and far less than
+#: the gap between an upload and any real subsequent edit.
+UPLOAD_CLOCK_TOLERANCE_S = 60.0
 
 #: A directory whose name *contains* one of these is skipped, along with
 #: everything beneath it. `_test` is not real data; `archive` is superseded
@@ -69,12 +81,32 @@ def is_excluded(relative: Path) -> str | None:
     return None
 
 
+def modified_since_upload(mtime: float, uploaded_at: str | None) -> bool:
+    """Whether a local file has been touched since its object was written.
+
+    Size alone cannot see an edit that preserves the byte count, and that edit
+    leaves no other trace: no orphan, no error, and S3 keeps serving the old
+    contents to a rebuild that now reads from the bucket.
+
+    Returns False when the upload time is unknown rather than guessing - an
+    unknown timestamp is not evidence of a change, and treating it as one would
+    re-upload the share.
+    """
+    if not uploaded_at:
+        return False
+    try:
+        uploaded = datetime.fromisoformat(uploaded_at).timestamp()
+    except ValueError:
+        return False
+    return mtime > uploaded + UPLOAD_CLOCK_TOLERANCE_S
+
+
 @dataclass
 class Candidate:
     path: Path
     key: str
     bytes: int
-    reason: str  # "new" | "size differs"
+    reason: str  # "new" | "size differs" | "modified since upload"
 
 
 @dataclass
@@ -89,6 +121,14 @@ class Plan:
     #: for it before trusting the run.
     excluded_by_directory: dict[str, int] = field(default_factory=dict)
     missing_roots: list[str] = field(default_factory=list)
+    #: Keys in the bucket with no file at the matching path on the share.
+    #:
+    #: Reported, never deleted. Neither IAM user has DeleteObject and that is
+    #: deliberate: an orphan is what a backup looks like when a file is removed
+    #: upstream, which is precisely the case a backup exists for. Automatic
+    #: deletion would turn every accidental removal into a permanent one.
+    orphaned: list[str] = field(default_factory=list)
+    orphan_bytes: int = 0
 
     @property
     def upload_bytes(self) -> int:
@@ -106,11 +146,24 @@ class Plan:
 def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
     """Compare the share against the bucket. Reads no file contents.
 
-    Size is the only comparison. Every file here is written once by an
-    instrument and never edited, so a same-size file is the same file. Hashing
-    would mean reading ~5 GB on every run to learn nothing.
+    Two comparisons, neither of which opens a file. Size catches most changes.
+    Modification time catches the rest: an edit that preserves the byte count is
+    invisible to size, and leaves no other trace either - no orphan, no error,
+    and S3 goes on serving the old contents to a rebuild that now reads from the
+    bucket.
+
+    Both sides are free. `stat` is already being called for the size, and the
+    bucket listing already returns `LastModified`.
+
+    Content hashing would be exact - the listing returns an `ETag`, an MD5 for
+    single-part uploads - but the local half means reading gigabytes on every
+    run. Deferred; see spec.md 7.6.
     """
     plan = Plan()
+    #: Every path found on the share, excluded or not. An excluded file still
+    #: exists, so its key is not an orphan - only a key with no file at all is.
+    on_share: set[str] = set()
+    roots_present: set[str] = set()
 
     for root_name in UPLOAD_ROOTS:
         root = share_root / root_name
@@ -118,10 +171,12 @@ def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
             plan.missing_roots.append(root_name)
             continue
 
+        roots_present.add(root_name)
         for path in sorted(root.rglob("*")):
             if not path.is_file():
                 continue
             relative = path.relative_to(share_root)
+            on_share.add(relative.as_posix())
             cause = is_excluded(relative)
             if cause:
                 plan.excluded += 1
@@ -132,16 +187,32 @@ def build_plan(share_root: Path, stored: dict[str, s3mod.StoredObject]) -> Plan:
                 continue
 
             key = relative.as_posix()
-            size = path.stat().st_size
+            stat = path.stat()
+            size = stat.st_size
             existing = stored.get(key)
 
             if existing is None:
                 plan.to_upload.append(Candidate(path, key, size, "new"))
             elif existing.bytes != size:
                 plan.to_upload.append(Candidate(path, key, size, "size differs"))
+            elif modified_since_upload(stat.st_mtime, existing.last_modified):
+                plan.to_upload.append(
+                    Candidate(path, key, size, "modified since upload")
+                )
             else:
                 plan.already_present += 1
                 plan.already_bytes += size
+
+    # Only roots that were actually walked. If X: is half-mounted, the missing
+    # roots' objects are not orphans - they are unreadable, which is a different
+    # problem and must not be reported as though the data were deleted.
+    for key, obj in sorted(stored.items()):
+        root_name = key.split("/", 1)[0]
+        if root_name not in roots_present:
+            continue
+        if key not in on_share:
+            plan.orphaned.append(key)
+            plan.orphan_bytes += obj.bytes
 
     return plan
 
@@ -167,6 +238,11 @@ def render(plan: Plan, share_root: Path, bucket: str) -> str:
     lines += [
         "",
         f"already in the bucket : {plan.already_present} file(s), {_human(plan.already_bytes)}",
+        *(
+            [f"    of which re-uploaded because they changed since: "
+             f"{sum(1 for c in plan.to_upload if c.reason != 'new')}"]
+            if any(c.reason != "new" for c in plan.to_upload) else []
+        ),
         f"skipped (excluded)    : {plan.excluded} file(s)",
         f"to upload             : {len(plan.to_upload)} file(s), {_human(plan.upload_bytes)}",
     ]
@@ -177,6 +253,24 @@ def render(plan: Plan, share_root: Path, bucket: str) -> str:
             plan.excluded_by_directory.items(), key=lambda kv: -kv[1]
         ):
             lines.append(f"    {where:<44}{count:>8}")
+
+    if plan.orphaned:
+        lines += [
+            "",
+            f"in the bucket but no longer on the share: {len(plan.orphaned)} "
+            f"object(s), {_human(plan.orphan_bytes)}",
+            "    Nothing is deleted - neither key can. Remove them in the S3",
+            "    console if they are genuinely unwanted.",
+        ]
+        by_base: dict[str, int] = {}
+        for key in plan.orphaned:
+            name = key.rsplit("/", 1)[-1]
+            base = name.split(".")[0] if "." in name else name
+            by_base[base[:40]] = by_base.get(base[:40], 0) + 1
+        for base, count in sorted(by_base.items(), key=lambda kv: -kv[1])[:15]:
+            lines.append(f"    {base:<44}{count:>6}")
+        if len(by_base) > 15:
+            lines.append(f"    ... and {len(by_base) - 15} more")
 
     if plan.missing_roots:
         lines += ["", f"roots not found under {share_root}:"]
@@ -231,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    s3 = s3mod.client(settings.aws_region)
+    s3 = s3mod.client(settings.aws_region, settings.uploader_credentials)
     print(f"Listing s3://{settings.s3_bucket} ...")
     stored = s3mod.list_objects(s3, settings.s3_bucket)
     print(f"  {len(stored)} object(s) already there\n")

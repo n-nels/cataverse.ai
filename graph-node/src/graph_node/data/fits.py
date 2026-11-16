@@ -19,6 +19,7 @@ dependency for a `for` loop, and its NaN handling actively gets in the way
 from __future__ import annotations
 
 import csv
+import io
 import math
 from pathlib import Path
 from typing import Any
@@ -84,18 +85,26 @@ def load(base_name: str, folder: str | Path) -> list[dict[str, Any]]:
     path = csv_path_for(base_name, Path(folder))
     if not path.exists():
         return []
+    return parse(path.read_text(encoding="utf-8"))
 
+
+def parse(text: str) -> list[dict[str, Any]]:
+    """The selection rule, over CSV text from wherever.
+
+    Split out from `load` so a bucket object and a file on disk go through the
+    same code. The rule is unchanged: within each wanted peak, keep the row
+    with the largest Time (s).
+    """
     best: dict[str, tuple[float, dict[str, str]]] = {}
-    with path.open(encoding="utf-8", newline="") as handle:
-        for row in csv.DictReader(handle):
-            peak = (row.get("Peak_Name") or "").strip()
-            if peak not in LOADED_PEAKS:
-                continue
-            elapsed = _number(row.get("Time (s)"))
-            if elapsed is None:
-                continue
-            if peak not in best or elapsed > best[peak][0]:
-                best[peak] = (elapsed, row)
+    for row in csv.DictReader(io.StringIO(text)):
+        peak = (row.get("Peak_Name") or "").strip()
+        if peak not in LOADED_PEAKS:
+            continue
+        elapsed = _number(row.get("Time (s)"))
+        if elapsed is None:
+            continue
+        if peak not in best or elapsed > best[peak][0]:
+            best[peak] = (elapsed, row)
 
     return [
         {
@@ -106,12 +115,15 @@ def load(base_name: str, folder: str | Path) -> list[dict[str, Any]]:
     ]
 
 
-def load_all(base_names: list[str], root: str | Path) -> dict[str, list[dict[str, Any]]]:
+def load_all(base_names: list[str], root) -> dict[str, list[dict[str, Any]]]:
     """Fits for many experiments, keyed by base name.
 
     Each CSV sits beside its experiment's JSON, so the folder is found per
     experiment rather than assumed to be one directory.
     """
+    if hasattr(root, "find"):
+        return _load_all_from_store(base_names, root)
+
     root = Path(root)
     found: dict[str, list[dict[str, Any]]] = {}
     for base_name in base_names:
@@ -120,4 +132,26 @@ def load_all(base_names: list[str], root: str | Path) -> dict[str, list[dict[str
             if rows:
                 found[base_name] = rows
             break
+    return found
+
+
+def _load_all_from_store(base_names, store) -> dict[str, list[dict[str, Any]]]:
+    """Same thing against a store, reading only the CSVs that exist.
+
+    The listing is consulted first so nothing is fetched for an experiment that
+    has no fit file - normal for an abandoned run, and roughly one in twenty
+    here. Each hit is one GetObject of a few hundred kilobytes.
+    """
+    by_name = {}
+    for ref in store.find(SUFFIX):
+        by_name[ref.name] = ref
+
+    found: dict[str, list[dict[str, Any]]] = {}
+    for base_name in base_names:
+        ref = by_name.get(f"{base_name}{SUFFIX}")
+        if ref is None:
+            continue
+        rows = parse(store.read_text(ref))
+        if rows:
+            found[base_name] = rows
     return found

@@ -35,13 +35,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    import boto3
     from botocore.exceptions import ClientError
+
+    from .common import s3 as s3mod
 
     print(f"bucket : {settings.s3_bucket}")
     print(f"region : {settings.aws_region}\n")
 
-    s3 = boto3.client("s3", region_name=settings.aws_region)
+    s3 = s3mod.client(settings.aws_region, settings.uploader_credentials)
     body = f"cataverse connectivity check {datetime.now(timezone.utc).isoformat()}\n"
     ok = True
 

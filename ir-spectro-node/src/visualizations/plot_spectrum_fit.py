@@ -19,6 +19,7 @@ if str(path) not in sys.path:
 
 from src.analysis.spectral_fitting import get_shifted_monomer_peaks
 from src.core import config
+from src.visualizations._source import source_dir
 
 
 LOGGER = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ class SpectrumFitPaths:
 
     @property
     def fit_params_dir(self) -> Path:
-        return Path(config.get_path("data.peak_fit", self.folder_name))
+        return source_dir(self.folder_name)
 
     @property
     def _params_suffix(self) -> str:

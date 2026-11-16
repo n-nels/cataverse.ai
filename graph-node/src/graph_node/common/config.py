@@ -34,6 +34,11 @@ class Settings:
     #: pressureData. The backup mirrors everything beneath it. Distinct from
     #: `source_root`, which points at peakFit alone for the graph rebuild.
     share_root: Path | None
+    #: Per-identity S3 keys, when one machine runs both jobs. None means the
+    #: plain AWS_ACCESS_KEY_ID pair is used, which is right for a machine that
+    #: only does one of them.
+    uploader_credentials: dict[str, str] | None
+    builder_credentials: dict[str, str] | None
 
     @classmethod
     def from_env(cls, env_file: str | Path | None = None) -> "Settings":
@@ -60,4 +65,24 @@ class Settings:
             share_root=Path(os.environ["SHARE_ROOT"])
             if os.environ.get("SHARE_ROOT")
             else None,
+            uploader_credentials=_named_credentials("UPLOADER"),
+            builder_credentials=_named_credentials("BUILDER"),
         )
+
+
+def _named_credentials(prefix: str) -> dict[str, str] | None:
+    """`<PREFIX>_AWS_ACCESS_KEY_ID` and its secret, or None if absent.
+
+    The lab PC will eventually run both the backup and the rebuild, and boto3
+    reads only one AWS_ACCESS_KEY_ID from the environment. Naming the pairs
+    lets one machine hold both identities without either job borrowing the
+    other's permissions.
+
+    Absent is the normal case on a machine that does one job: it falls back to
+    the plain AWS_ACCESS_KEY_ID pair, so nothing has to change to keep working.
+    """
+    key = os.environ.get(f"{prefix}_AWS_ACCESS_KEY_ID")
+    secret = os.environ.get(f"{prefix}_AWS_SECRET_ACCESS_KEY")
+    if not key or not secret:
+        return None
+    return {"aws_access_key_id": key, "aws_secret_access_key": secret}
