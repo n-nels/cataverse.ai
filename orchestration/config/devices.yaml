@@ -56,10 +56,10 @@ actuators:
     v16: [act1-2, ao0]
     RoughPump: [act1-2, ao1]
     H2: [act3-4, ao0]
-    H2O: [act3-4, ao1]
+    CO2: [act3-4, ao1]
     MassSpec: [act5-6, ao0]
     "13CO": [act5-6, ao1]
-    irCell: [act7-8, ao0] # [fix] change to HVC_DRM5?
+    irCell: [act7-8, ao0]
     O2: [act7-8, ao1]
     TurboPump: [act9-10, ao0]
 

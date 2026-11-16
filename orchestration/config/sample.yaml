@@ -6,7 +6,7 @@ sample:
   support: ceo2
 
   # Catalyst mass [g]  (8 mg quartz wool)
-  mass: 0.0167
+  mass: 0.0164
 
   # Metal loading [wt.%]
   metal_load: 0.06645

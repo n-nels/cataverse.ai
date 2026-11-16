@@ -75,33 +75,33 @@ def run_adsorption_experiment(inst: Instruments):
     success = False
     
     try:
-        ads.clean_surface(evac_temp=500,
-                          evac_time=0.25,
+        ads.clean_surface(evac_temp=450,
+                          evac_time=1.2,
                           enable_ms=False,
-                          chiller=True)
+                          chiller=False)
         
-        ads.oxidize_surface(pressure=3.9,
-                            temp=500,
+        ads.oxidize_surface(pressure=3.5,
+                            temp=450,
                             time=1.8,
-                            evac_temp=500,
-                            evac_time=0.5)
+                            evac_temp=450,
+                            evac_time=0.35)
         
-        # ads.pretreat_adsorbate(adsorbate=["O2", "H2"],
-        #                        pressure=[1.25, 1.25],
-        #                        temp=190,
-        #                        time=1.4,
-        #                        evac_temp=190,
-        #                        evac_time=0.50)
+        ads.pretreat_adsorbate(adsorbate=["H2", "CO2"],
+                               pressure=[1.5, 5],
+                               temp=450,
+                               time=1.4,
+                               evac_temp=450,
+                               evac_time=0.50)
         
-        ads.pretreat_adsorbate(adsorbate="H2",
-                               pressure=6.9,
-                               temp=70,
-                               time=1.0,
-                               evac_temp=70,
-                               evac_time=0.5)
+        # ads.pretreat_adsorbate(adsorbate="H2",
+        #                        pressure=3.4,
+        #                        temp=45,
+        #                        time=1.2,
+        #                        evac_temp=45,
+        #                        evac_time=0.5)
         
         ads.monitor_adsorption(adsorbate="13CO",
-                               pressure=5.0,
+                               pressure=1.0,
                                temp=45,
                                repeat=[10, 5, 15, 100],
                                delay=[60, 300, 600, 1800])
@@ -132,7 +132,7 @@ def run_adsorption_reference(inst: Instruments):
         ads.monitor_adsorption(adsorbate="13CO",
                                pressure=0.84,
                                temp=45,
-                               repeat=[10, 5, 15, 100],
+                               repeat=[10, 5, 15, 130],
                                delay=[60, 300, 600, 1800])
         success = True
     
