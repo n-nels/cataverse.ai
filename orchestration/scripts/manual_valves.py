@@ -33,7 +33,7 @@ if __name__ == "__main__":
 
     # success = valves.write("13CO", 1.0)
 
-    # success = valves.write("irCell", 5.0)
+    # success = valves.write("irCell", 1.0)
 
     # success = valves.write("CO2", 1.0)
 

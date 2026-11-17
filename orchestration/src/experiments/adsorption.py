@@ -94,6 +94,9 @@ class AdsorptionExperiment:
 
         if pump_type is not None:
             self.gas = self.gas_controller.evacuate_cell(pump_type)
+            self.gas_2 = None
+            self.p_mfld_2 = None
+            self.p_cell_calc_2 = None
             if hold_time == 0:
                 time.sleep(60)
 
@@ -143,6 +146,9 @@ class AdsorptionExperiment:
         if target_temp > current_temp:
             # Heating needed — evac first to avoid baking gas
             self.gas = self.gas_controller.evacuate_cell(pump_type)
+            self.gas_2 = None
+            self.p_mfld_2 = None
+            self.p_cell_calc_2 = None
             t_cell, rate, duration = self.heat_cell(
                 target_temp, hold_time, ramp_rate
             )
@@ -150,6 +156,9 @@ class AdsorptionExperiment:
             # Cooling or same — adjust temp first, then evac
             t_cell, rate, _ = self.heat_cell(target_temp, 0, ramp_rate)
             self.gas = self.gas_controller.evacuate_cell(pump_type)
+            self.gas_2 = None
+            self.p_mfld_2 = None
+            self.p_cell_calc_2 = None
             _, _, duration = self.heat_cell(target_temp, hold_time, 0)
 
         self.dt, self.p_mfld, p_cell = self.gas_controller.read_pressure()
