@@ -62,11 +62,11 @@ actuators:
     irCell: [act7-8, ao0]
     O2: [act7-8, ao1]
     TurboPump: [act9-10, ao0]
+    H2O: [act9-10, ao1]
 
   # Unused/placeholder channels currently represented as empty-string keys in code.
   # Kept here explicitly so channel occupancy is documented without key collisions.
   reserved_channels:
-    - [act9-10, ao1]
     - [act11-12, ao0]
     - [act11-12, ao1]
     - [act13-14, ao0]
