@@ -29,6 +29,29 @@ logger = logging.getLogger(__name__)
 DEFAULT_OUTPUT_DIR = Path(__file__).parent / "outputs"
 DEFAULT_CACHE_PATH = Path(__file__).parent / "experiment_cache.json"
 
+plt.rcParams.update({
+    "figure.dpi": 300,
+    "savefig.dpi": 300,
+    "font.size": 9,
+    "axes.labelsize": 9,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 9,
+    "lines.linewidth": 2.0,
+    "axes.linewidth": 1.0,
+    "xtick.major.width": 0.5,
+    "ytick.major.width": 0.5,
+    "xtick.major.size": 2.5,
+    "ytick.major.size": 2.5,
+    "font.family": "sans-serif",
+})
+
+_PALETTE = {
+    "measured": "#14504F",
+    "fitted": "#14504F",
+    "predicted": "#D94929",
+}
+
 
 def coupled_pfo_odes(
     t: float,
@@ -144,6 +167,13 @@ def generate_eda_plots(
             logger.warning("CSV not found: %s, skipping", csv_path)
             continue
 
+        kinetic_path = csv_path.with_name(
+            csv_path.name.replace("_CarbonylPeakArea.csv", "_CarbonylKineticParams.csv")
+        )
+        if not kinetic_path.exists():
+            logger.warning("Kinetic params CSV not found: %s, skipping", kinetic_path)
+            continue
+
         df = pd.read_csv(csv_path)
         monomer = df[df["Peak_Name"] == "monomer_sum"].copy()
         if monomer.empty:
@@ -153,18 +183,18 @@ def generate_eda_plots(
         time_actual = monomer["Time (s)"].values.astype(np.float64)
         q_actual = monomer["Cumulative_Peak_Area"].values
 
-        # Sort by time so line plots render cleanly (scatter is order-independent)
         sort_order = np.argsort(time_actual)
         time_actual = time_actual[sort_order]
         q_actual = q_actual[sort_order]
 
-        # Fitted params from CSV (last fully-populated row)
-        if not all(c in monomer.columns for c in TARGET_COLUMNS):
-            logger.warning("CSV %s missing target columns, skipping", csv_path)
+        kinetic_df = pd.read_csv(kinetic_path)
+        kinetic_monomer = kinetic_df[kinetic_df["Peak_Name"] == "monomer_sum"]
+        if not all(c in kinetic_monomer.columns for c in TARGET_COLUMNS):
+            logger.warning("Kinetic CSV %s missing target columns, skipping", kinetic_path)
             continue
-        fitted_row = monomer.dropna(subset=TARGET_COLUMNS)
+        fitted_row = kinetic_monomer.dropna(subset=TARGET_COLUMNS)
         if fitted_row.empty:
-            logger.warning("No fitted params in %s, skipping", csv_path)
+            logger.warning("No fitted params in %s, skipping", kinetic_path)
             continue
         fitted_row = fitted_row.iloc[-1]
         fitted_params = {col: float(fitted_row[col]) for col in TARGET_COLUMNS}
@@ -191,34 +221,39 @@ def generate_eda_plots(
         )
 
         # --- Plot ---
-        fig, ax = plt.subplots(figsize=(3.5, 2.5))
+        fig, ax = plt.subplots(figsize=(3.2, 2.26))
 
         ax.scatter(
             time_actual / 3600, q_actual,
-            s=8, alpha=0.6, label="Measured",
+            s=16, alpha=0.5, linewidths=0,
+            color=_PALETTE["measured"], label="Measured", zorder=2,
         )
 
         if fitted_result is not None:
             q_fitted, _ = fitted_result
             ax.plot(
                 time_actual / 3600, q_fitted,
-                alpha=0.6, label="Fitted",
+                color=_PALETTE["fitted"], linewidth=1.2,
+                label="Fitted", zorder=3,
             )
 
         if predicted_result is not None:
             q_pred, _ = predicted_result
             ax.plot(
                 time_actual / 3600, q_pred,
-                alpha=0.6, label="Predicted",
+                color=_PALETTE["predicted"], linewidth=1.2,
+                label="Predicted", zorder=3,
             )
 
-        ax.set_xlabel("Time (h)")
-        ax.set_ylabel("Monomer Density (au)")
-        # ax.set_title(f"Test sample: {idx}")
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+        ax.set_xlabel("Time (h)", fontweight="bold")
+        ax.set_ylabel("Monomer Density (au)", fontweight="bold")
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+        ax.legend(frameon=True, edgecolor="#cccccc", fancybox=False)
+        ax.grid(True, alpha=0.15, linewidth=0.5)
+        ax.tick_params(direction="out")
 
-        plt.tight_layout()
+        fig.tight_layout(pad=0.3)
 
         safe_name = str(idx).replace("/", "_").replace("\\", "_")
         save_path = output_dir / f"eda_{safe_name}.tiff"
